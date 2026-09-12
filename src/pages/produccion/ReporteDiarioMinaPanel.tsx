@@ -49,12 +49,74 @@ interface ProcessedRow {
   diferencia: number;
 }
 
+const generateMockMinaRows = (mes: string): ProcessedRow[] => {
+  const maxDay = mes === '2026-09' ? 12 : 31;
+  const supervisorsDia = ['Carlos Morales', 'Rodrigo Fuentes', 'Mauricio Soto', 'Andrés Vega'];
+  const supervisorsNoche = ['Felipe Araya', 'Jorge Muñoz', 'Esteban Parra', 'Cristian Silva'];
+  
+  return Array.from({ length: maxDay }, (_, i) => {
+    const dia = i + 1;
+    const supDia = supervisorsDia[dia % supervisorsDia.length];
+    const supNoche = supervisorsNoche[dia % supervisorsNoche.length];
+    
+    const baseDia = 4100 + ((dia * 87) % 450);
+    const baseNoche = 3800 + ((dia * 63) % 400);
+    const prodCMC_dia = baseDia - ((dia * 13) % 50);
+    const prodCMC_noche = baseNoche - ((dia * 17) % 45);
+    
+    const totImperia = baseDia + baseNoche;
+    const totCMC = prodCMC_dia + prodCMC_noche;
+    
+    return {
+      dia,
+      supervisor: supDia,
+      supervisor_noche: supNoche,
+      
+      cantidad_caex_dia: 8,
+      caex_dia: 7.8,
+      operadores_dia: 8,
+      acopio_dia: Math.round(baseDia * 0.45),
+      caex_acopio_dia: 4,
+      planta_dia: Math.round(baseDia * 0.55),
+      caex_planta_dia: 4,
+      vueltas_dia: Math.round(baseDia / 95),
+      pases_cf_dia: 115 + (dia % 15),
+      pases_totales_dia: 180 + (dia % 20),
+      toneladas_caex_dia: baseDia,
+      equipo_cf_dia: `EX-40${(dia % 3) + 1}`,
+      produccion_dia: baseDia,
+      produccion_cmc_dia: prodCMC_dia,
+      traspasos_dia: (dia % 3),
+
+      cantidad_caex_noche: 7,
+      caex_noche: 7.0,
+      operadores_noche: 7,
+      acopio_noche: Math.round(baseNoche * 0.42),
+      caex_acopio_noche: 3,
+      planta_noche: Math.round(baseNoche * 0.58),
+      caex_planta_noche: 4,
+      vueltas_noche: Math.round(baseNoche / 95),
+      pases_cf_noche: 105 + (dia % 12),
+      pases_totales_noche: 165 + (dia % 18),
+      toneladas_caex_noche: baseNoche,
+      equipo_cf_noche: `EX-40${((dia + 1) % 3) + 1}`,
+      produccion_caex_noche: baseNoche,
+      produccion_noche: baseNoche,
+      traspasos_noche: (dia % 2),
+
+      total_imperia: totImperia,
+      total_cmc: totCMC,
+      diferencia: totImperia - totCMC
+    };
+  });
+};
+
 export default function ReporteDiarioMinaPanel() {
   const { currentCompany } = useCompany();
-  const [data, setData] = useState<ProcessedRow[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>('2026-09');
+  const [availableMonths, setAvailableMonths] = useState<string[]>(['2026-09', '2026-08', '2026-07']);
+  const [data, setData] = useState<ProcessedRow[]>(() => generateMockMinaRows('2026-09'));
   const [loading, setLoading] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
 
   useEffect(() => {
@@ -94,68 +156,6 @@ export default function ReporteDiarioMinaPanel() {
       setAvailableMonths(fallbackMonths);
       setSelectedMonth(fallbackMonths[0]);
     }
-  };
-
-  const generateMockMinaRows = (mes: string): ProcessedRow[] => {
-    const maxDay = mes === '2026-09' ? 12 : 31;
-    const supervisorsDia = ['Carlos Morales', 'Rodrigo Fuentes', 'Mauricio Soto', 'Andrés Vega'];
-    const supervisorsNoche = ['Felipe Araya', 'Jorge Muñoz', 'Esteban Parra', 'Cristian Silva'];
-    
-    return Array.from({ length: maxDay }, (_, i) => {
-      const dia = i + 1;
-      const supDia = supervisorsDia[dia % supervisorsDia.length];
-      const supNoche = supervisorsNoche[dia % supervisorsNoche.length];
-      
-      const baseDia = 4100 + ((dia * 87) % 450);
-      const baseNoche = 3800 + ((dia * 63) % 400);
-      const prodCMC_dia = baseDia - ((dia * 13) % 50);
-      const prodCMC_noche = baseNoche - ((dia * 17) % 45);
-      
-      const totImperia = baseDia + baseNoche;
-      const totCMC = prodCMC_dia + prodCMC_noche;
-      
-      return {
-        dia,
-        supervisor: supDia,
-        supervisor_noche: supNoche,
-        
-        cantidad_caex_dia: 8,
-        caex_dia: 7.8,
-        operadores_dia: 8,
-        acopio_dia: Math.round(baseDia * 0.45),
-        caex_acopio_dia: 4,
-        planta_dia: Math.round(baseDia * 0.55),
-        caex_planta_dia: 4,
-        vueltas_dia: Math.round(baseDia / 95),
-        pases_cf_dia: 115 + (dia % 15),
-        pases_totales_dia: 180 + (dia % 20),
-        toneladas_caex_dia: baseDia,
-        equipo_cf_dia: `EX-40${(dia % 3) + 1}`,
-        produccion_dia: baseDia,
-        produccion_cmc_dia: prodCMC_dia,
-        traspasos_dia: (dia % 3),
-
-        cantidad_caex_noche: 7,
-        caex_noche: 7.0,
-        operadores_noche: 7,
-        acopio_noche: Math.round(baseNoche * 0.42),
-        caex_acopio_noche: 3,
-        planta_noche: Math.round(baseNoche * 0.58),
-        caex_planta_noche: 4,
-        vueltas_noche: Math.round(baseNoche / 95),
-        pases_cf_noche: 105 + (dia % 12),
-        pases_totales_noche: 165 + (dia % 18),
-        toneladas_caex_noche: baseNoche,
-        equipo_cf_noche: `EX-40${((dia + 1) % 3) + 1}`,
-        produccion_caex_noche: baseNoche,
-        produccion_noche: baseNoche,
-        traspasos_noche: (dia % 2),
-
-        total_imperia: totImperia,
-        total_cmc: totCMC,
-        diferencia: totImperia - totCMC
-      };
-    });
   };
 
   const loadMonthData = async (mes: string) => {

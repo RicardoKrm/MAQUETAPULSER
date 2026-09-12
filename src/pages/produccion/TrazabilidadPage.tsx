@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import HistorialTrazabilidad from '../operaciones/produccion/HistorialTrazabilidad';
 import { Loader2 } from 'lucide-react';
+import { mockTrazabilidadUnified } from '../../lib/mockProduccion';
 
 export default function TrazabilidadPage() {
-  const [loading, setLoading] = useState(true);
-  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<any[]>(mockTrazabilidadUnified);
 
   useEffect(() => {
     fetchTrazabilidad();
@@ -67,9 +68,14 @@ export default function TrazabilidadPage() {
       // Sort by latest first
       unifiedHistory.sort((a, b) => b.timestamp - a.timestamp);
       
-      setHistory(unifiedHistory);
+      if (unifiedHistory.length === 0) {
+        setHistory(mockTrazabilidadUnified);
+      } else {
+        setHistory(unifiedHistory);
+      }
     } catch (error) {
       console.error(error);
+      setHistory(mockTrazabilidadUnified);
     } finally {
       setLoading(false);
     }

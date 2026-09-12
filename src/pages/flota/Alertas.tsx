@@ -7,12 +7,130 @@ import { calcularDatosPizarra, HitoSecuencia, VehiculoDB, generarSecuenciaParaPa
 import { useAppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
+const mockMantenimientosPendientesFallback = [
+  {
+    id: 'veh-01',
+    vehiculo: 'T-101 (KHLP-90)',
+    ultimaMantencion: '15/07/2026',
+    kmActual: '148.520',
+    pauta: 'PM-1 Inspección y Lubricación 140.000 KM',
+    kmPauta: '140.000',
+    kmFaltantes: '-8.520',
+    estado: 'Vencido',
+    numeroInterno: 'T-101'
+  },
+  {
+    id: 'veh-04',
+    vehiculo: 'T-104 (PRTZ-33)',
+    ultimaMantencion: '28/06/2026',
+    kmActual: '118.400',
+    pauta: 'PM-2 Mantenimiento Menor 110.000 KM',
+    kmPauta: '110.000',
+    kmFaltantes: '-8.400',
+    estado: 'Vencido',
+    numeroInterno: 'T-104'
+  },
+  {
+    id: 'veh-07',
+    vehiculo: 'T-107 (LKJH-12)',
+    ultimaMantencion: '05/08/2026',
+    kmActual: '89.600',
+    pauta: 'PM-1 Inspección 80.000 KM',
+    kmPauta: '80.000',
+    kmFaltantes: '-9.600',
+    estado: 'Vencido',
+    numeroInterno: 'T-107'
+  }
+];
+
+const mockOrdenesPendientesFallback = [
+  {
+    id: 'ot-01',
+    folio: 'OT-2026-088',
+    vehiculo: 'T-102 (BRTH-44)',
+    tipo: 'Correctiva',
+    prioridad: 'ALTA',
+    estado: 'EN_PROCESO',
+    fecha: '11/09/2026'
+  },
+  {
+    id: 'ot-02',
+    folio: 'OT-2026-089',
+    vehiculo: 'T-104 (PRTZ-33)',
+    tipo: 'Correctiva',
+    prioridad: 'CRITICA',
+    estado: 'ABIERTA',
+    fecha: '10/09/2026'
+  },
+  {
+    id: 'ot-03',
+    folio: 'OT-2026-085',
+    vehiculo: 'T-103 (JWRS-18)',
+    tipo: 'Preventiva',
+    prioridad: 'MEDIA',
+    estado: 'PROGRAMADA',
+    fecha: '08/09/2026'
+  },
+  {
+    id: 'ot-04',
+    folio: 'OT-2026-092',
+    vehiculo: 'T-106 (CCKJ-82)',
+    tipo: 'Correctiva Neumático',
+    prioridad: 'ALTA',
+    estado: 'EN_PROCESO',
+    fecha: '12/09/2026'
+  }
+];
+
+const mockRepuestosCriticosFallback = [
+  {
+    id: 'rep-01',
+    repuesto: 'Filtro de Aceite Scania R500',
+    numeroParte: 'SC-2195143',
+    calidad: 'Original',
+    stockActual: 2,
+    stockMinimo: 5
+  },
+  {
+    id: 'rep-02',
+    repuesto: 'Filtro Combustible Primario con Separador',
+    numeroParte: 'FIL-1R-0716',
+    calidad: 'OEM Caterpillar',
+    stockActual: 3,
+    stockMinimo: 8
+  },
+  {
+    id: 'rep-03',
+    repuesto: 'Pastillas de Freno Delanteras Knorr-Bremse',
+    numeroParte: 'KB-K000949',
+    calidad: 'OEM',
+    stockActual: 1,
+    stockMinimo: 4
+  },
+  {
+    id: 'rep-04',
+    repuesto: 'Neumático Michelin X Multiway 295/80 R22.5',
+    numeroParte: 'MICH-29580',
+    calidad: 'Premium',
+    stockActual: 2,
+    stockMinimo: 6
+  },
+  {
+    id: 'rep-05',
+    repuesto: 'Bomba de Agua Volvo FH16',
+    numeroParte: 'VO-21468471',
+    calidad: 'Original',
+    stockActual: 0,
+    stockMinimo: 2
+  }
+];
+
 export default function OperacionesAlertas() {
   const { currentCompany } = useCompany();
   const navigate = useNavigate();
-  const [mantenimientosPendientes, setMantenimientosPendientes] = useState<any[]>([]);
-  const [ordenesPendientes, setOrdenesPendientes] = useState<any[]>([]);
-  const [repuestosCriticos, setRepuestosCriticos] = useState<any[]>([]);
+  const [mantenimientosPendientes, setMantenimientosPendientes] = useState<any[]>(mockMantenimientosPendientesFallback);
+  const [ordenesPendientes, setOrdenesPendientes] = useState<any[]>(mockOrdenesPendientesFallback);
+  const [repuestosCriticos, setRepuestosCriticos] = useState<any[]>(mockRepuestosCriticosFallback);
 
   useEffect(() => {
     if (!currentCompany?.id) return;
@@ -200,88 +318,6 @@ export default function OperacionesAlertas() {
 
     fetchData();
   }, [currentCompany?.id]);
-
-const mockMantenimientosPendientesFallback = [
-  {
-    id: 'veh-01',
-    vehiculo: 'T-101 (KHLP-90)',
-    ultimaMantencion: '15/07/2026',
-    kmActual: '148.520',
-    pauta: 'Pauta 140.000 KM - Scania R500',
-    kmPauta: '140.000',
-    kmFaltantes: '-8.520',
-    estado: 'Vencido',
-    numeroInterno: 'T-101'
-  },
-  {
-    id: 'veh-04',
-    vehiculo: 'T-104 (PRTZ-33)',
-    ultimaMantencion: '28/06/2026',
-    kmActual: '118.400',
-    pauta: 'Pauta 110.000 KM - Scania G450',
-    kmPauta: '110.000',
-    kmFaltantes: '-8.400',
-    estado: 'Vencido',
-    numeroInterno: 'T-104'
-  }
-];
-
-const mockOrdenesPendientesFallback = [
-  {
-    id: 'ot-01',
-    folio: 'OT-0088',
-    vehiculo: 'T-102 (BRTH-44)',
-    tipo: 'Correctiva',
-    prioridad: 'ALTA',
-    estado: 'EN PROCESO',
-    fecha: '11/09/2026'
-  },
-  {
-    id: 'ot-02',
-    folio: 'OT-0089',
-    vehiculo: 'T-104 (PRTZ-33)',
-    tipo: 'Correctiva',
-    prioridad: 'CRITICA',
-    estado: 'ABIERTA',
-    fecha: '10/09/2026'
-  },
-  {
-    id: 'ot-03',
-    folio: 'OT-0085',
-    vehiculo: 'T-103 (JWRS-18)',
-    tipo: 'Preventiva',
-    prioridad: 'MEDIA',
-    estado: 'PROGRAMADA',
-    fecha: '08/09/2026'
-  }
-];
-
-const mockRepuestosCriticosFallback = [
-  {
-    id: 'rep-01',
-    repuesto: 'Filtro de Aceite Scania R500',
-    numeroParte: 'SC-2195143',
-    calidad: 'Original',
-    stockActual: 2,
-    stockMinimo: 5
-  },
-  {
-    id: 'rep-03',
-    repuesto: 'Pastillas de Freno Delanteras Knorr-Bremse',
-    numeroParte: 'KB-K000949',
-    calidad: 'OEM',
-    stockActual: 1,
-    stockMinimo: 4
-  },
-  {
-    id: 'rep-05',
-    repuesto: 'Bomba de Agua Volvo FH16',
-    numeroParte: 'VO-21468471',
-    calidad: 'Original',
-    stockActual: 0,
-    stockMinimo: 2
-  }
-];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

@@ -9,6 +9,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import { mockResumenMensualMina } from '../../../lib/mockProduccion';
 
 interface ProcessedRow {
   dia: number;
@@ -24,8 +25,8 @@ interface ProcessedRow {
 
 export default function ReporteYAnaliticaMina() {
   const { currentCompany } = useCompany();
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ProcessedRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ProcessedRow[]>(mockResumenMensualMina as any);
 
   // Filters
   const [filtroMes, setFiltroMes] = useState<string>('');
@@ -61,7 +62,7 @@ export default function ReporteYAnaliticaMina() {
         console.error("Error fetching data:", error);
       }
       
-      if (records) {
+      if (records && records.length > 0) {
         console.log("Records fetched:", records.length);
         const loaded: ProcessedRow[] = records.map(r => ({
           dia: r.dia,
@@ -75,9 +76,12 @@ export default function ReporteYAnaliticaMina() {
           diferencia: Number(r.diferencia) || 0,
         }));
         setData(loaded);
+      } else {
+        setData(mockResumenMensualMina as any);
       }
     } catch (err) {
       console.error("Error:", err);
+      setData(mockResumenMensualMina as any);
     } finally {
       setLoading(false);
     }

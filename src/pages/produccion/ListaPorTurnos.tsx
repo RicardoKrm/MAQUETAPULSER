@@ -3,6 +3,8 @@ import { Card } from '../../components/ui/Card';
 import { Loader2, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
+import { mockProduccionTransporte } from '../../lib/mockProduccion';
+
 interface Trabajador {
   id: string;
   nombre: string;
@@ -23,9 +25,9 @@ interface TurnoInfo {
 export default function ListaPorTurnos() {
   const [turnos, setTurnos] = useState<TurnoInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rawData, setRawData] = useState<any[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [rawData, setRawData] = useState<any[]>(mockProduccionTransporte);
+  const [selectedMonth, setSelectedMonth] = useState<string>('2026-09');
+  const [availableMonths, setAvailableMonths] = useState<string[]>(['2026-09', '2026-08', '2026-07']);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,13 +36,7 @@ export default function ListaPorTurnos() {
           .from('produccion_registro_diario')
           .select('*');
 
-        if (error) {
-          console.error("Error fetching data:", error);
-          setLoading(false);
-          return;
-        }
-        
-        const rows = data || [];
+        const rows = (!error && data && data.length > 0) ? data : mockProduccionTransporte;
         setRawData(rows);
 
         const months = new Set<string>();
@@ -56,6 +52,7 @@ export default function ListaPorTurnos() {
         }
       } catch (err) {
         console.error("Unexpected error:", err);
+        setRawData(mockProduccionTransporte);
       } finally {
         setLoading(false);
       }

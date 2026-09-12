@@ -15,6 +15,7 @@ import { Modal } from '../../components/ui/Modal';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import Swal from 'sweetalert2';
+import { mockSannyData } from '../../lib/mockProduccion';
 
 // Utility for parsing the excel rows
 interface ExcelRow {
@@ -51,10 +52,10 @@ interface DailySummary {
 
 export default function ControlSanny() {
   const { currentCompany } = useCompany();
-  const [data, setData] = useState<TruckData>({ s6: [], s7: [] });
+  const [data, setData] = useState<TruckData>(mockSannyData as any);
   const [activeTab, setActiveTab] = useState<'resumen' | 'diario'>('resumen');
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-09-12');
+  const [selectedMonth, setSelectedMonth] = useState<string>('2026-09');
   const [loading, setLoading] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -104,9 +105,14 @@ export default function ControlSanny() {
         else if (row.equipo === 's7') s7Trips.push(trip);
       });
 
-      setData({ s6: s6Trips, s7: s7Trips });
+      if (s6Trips.length === 0 && s7Trips.length === 0) {
+        setData(mockSannyData as any);
+      } else {
+        setData({ s6: s6Trips, s7: s7Trips });
+      }
     } catch (err: any) {
       console.error('Error fetching sanny trips', err);
+      setData(mockSannyData as any);
     } finally {
       setLoading(false);
     }

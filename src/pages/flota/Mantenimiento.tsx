@@ -15,10 +15,55 @@ import Swal from 'sweetalert2';
 import { CrearOTModal } from '../../components/flota/CrearOTModal';
 import { CrearVehiculoModal } from '../../components/flota/CrearVehiculoModal';
 import { Modal } from '../../components/ui/Modal';
-import { calcularDatosPizarra, FilaPizarraMantenimiento, generarSecuenciaParaPauta, HitoSecuencia } from '../../lib/mantenimientoLogica';
+import { calcularDatosPizarra, FilaPizarraMantenimiento, generarSecuenciaParaPauta, HitoSecuencia, PautaEstructura } from '../../lib/mantenimientoLogica';
 import { useAppContext } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { mockVehiculosDB } from '../../lib/mockData';
+
+const generateMockSecuencia = (kmInterv: number, kmActual: number): HitoSecuencia[] => {
+  const defaultPautas: PautaEstructura[] = [
+    { id: 'paut-1', nombre: 'PM-1 Inspección y Lubricación', kilometraje_inicial: kmInterv, intervalo_1: kmInterv * 2 },
+    { id: 'paut-2', nombre: 'PM-2 Mantenimiento Menor', kilometraje_inicial: kmInterv * 2, intervalo_1: kmInterv * 4 },
+    { id: 'paut-3', nombre: 'PM-3 Mantenimiento Mayor', kilometraje_inicial: kmInterv * 4, intervalo_1: kmInterv * 8 },
+    { id: 'paut-4', nombre: 'PM-4 Overhaul Componentes', kilometraje_inicial: kmInterv * 8, intervalo_1: kmInterv * 10 }
+  ];
+  let seq: HitoSecuencia[] = [];
+  defaultPautas.forEach(p => {
+    seq = [...seq, ...generarSecuenciaParaPauta(p, kmActual)];
+  });
+  seq.sort((a, b) => a.iteracion_km - b.iteracion_km);
+  const seen = new Set<number>();
+  return seq.filter(s => {
+    if (seen.has(s.iteracion_km)) return false;
+    seen.add(s.iteracion_km);
+    return true;
+  });
+};
+
+const initialPizarraData: FilaPizarraMantenimiento[] = (mockVehiculosDB as any[]).map(v => {
+  const kmActual = v.kilometraje_actual || 0;
+  const kmInterv = v.intervalo_km || 10000;
+  const kmUlt = v.km_ultima_mantencion || Math.max(0, kmActual - 8500);
+  const pautasSecuencia = generateMockSecuencia(kmInterv, kmActual);
+
+  return calcularDatosPizarra({
+    id: v.id,
+    numeroInterno: v.numero_interno?.toString() || '',
+    patente: v.patente || '',
+    kilometrajeActual: kmActual,
+    fechaActualizacionKm: new Date('2026-09-12T08:00:00Z'),
+    intervaloMantencionKm: kmInterv,
+    kmPromedioDia: v.km_promedio_dia || 185,
+    kmUltimaMantencion: kmUlt,
+    fechaUltimaMantencion: new Date('2026-08-15T00:00:00Z'),
+    tipoUltimaPauta: 'PM-1',
+    pautasSecuencia,
+    marca: v.marca || '',
+    modelo: v.modelo || '',
+    ano: v.anio || 2023,
+    detalles: v.detalles || {}
+  } as any);
+}).sort((a, b) => String(a.numeroInterno).localeCompare(String(b.numeroInterno), undefined, { numeric: true }));
 
 export default function PizarraMantenimiento() {
   const { currentCompany } = useCompany();
@@ -101,17 +146,19 @@ export default function PizarraMantenimiento() {
   const [filtroUltMantDesde, setFiltroUltMantDesde] = useState('');
   const [filtroUltMantHasta, setFiltroUltMantHasta] = useState('');
 
-  const [dataFlota, setDataFlota] = useState<FilaPizarraMantenimiento[]>([]);
+  const [dataFlota, setDataFlota] = useState<FilaPizarraMantenimiento[]>(initialPizarraData);
 
   const fetchVehiculos = async () => {
-    if (!currentCompany?.id) return;
     try {
-      const { data: vehiculosData, error: vehiculosError } = await supabase.from('vehiculo').select('*').eq('empresa_id', currentCompany.id);
-      const { data: pautasData } = await supabase.from('mantenimiento_pauta').select('*, modelo:mantenimiento_modelo_vehiculo(nombre)').eq('empresa_id', currentCompany.id);
-
-      if (vehiculosError) throw vehiculosError;
+      let vehiculosData = null;
+      let pautasData = null;
+      if (currentCompany?.id) {
+        const { data: vData } = await supabase.from('vehiculo').select('*').eq('empresa_id', currentCompany.id);
+        const { data: pData } = await supabase.from('mantenimiento_pauta').select('*, modelo:mantenimiento_modelo_vehiculo(nombre)').eq('empresa_id', currentCompany.id);
+        vehiculosData = vData;
+        pautasData = pData;
+      }
       
-      console.log("FETCHED VEHICULOS DB:", vehiculosData);
       const rawVehiculos = (vehiculosData && vehiculosData.length > 0) ? vehiculosData : (mockVehiculosDB as any);
       if (rawVehiculos) {
         const vehiculosDb = rawVehiculos.map((v: any) => {
@@ -126,7 +173,7 @@ export default function PizarraMantenimiento() {
             const rawInterval = v.intervalo_km !== undefined ? v.intervalo_km : (detalles.intervalo_km !== undefined ? detalles.intervalo_km : 10000);
             const kmInterv = typeof rawInterval === 'number' ? rawInterval : parseFloat(String(rawInterval).replace(/[^0-9.-]+/g, '')) || 10000;
             
-            const pautasSecuenciaStr = v.tipo_ultimo_mant || v.tipo_ult_pauta || detalles.tipo_ultimo_mant || detalles.tipo_ult_pauta || '';
+            const pautasSecuenciaStr = v.tipo_ultimo_mant || v.tipo_ult_pauta || detalles.tipo_ultimo_mant || detalles.tipo_ult_pauta || 'PM-1';
             const fechaUltMant = v.fecha_ultima_mantencion || v.fecha_ult_mantencion || detalles.fecha_ultima_mantencion || null;
 
             let pautasSecuencia: HitoSecuencia[] = [];
@@ -154,7 +201,6 @@ export default function PizarraMantenimiento() {
               // 4. Sort sequence mathematically
               pautasSecuencia.sort((a, b) => a.iteracion_km - b.iteracion_km);
               
-              // 5. Remove duplicates by iteracion_km (keeping the first one, might want to be careful with which one, but prompt says "conserva solo uno")
               const uniqueKms = new Set();
               pautasSecuencia = pautasSecuencia.filter(item => {
                    if (!uniqueKms.has(item.iteracion_km)) {
@@ -165,23 +211,27 @@ export default function PizarraMantenimiento() {
               });
             }
 
+            if (pautasSecuencia.length === 0) {
+              pautasSecuencia = generateMockSecuencia(kmInterv, kmsActuales);
+            }
+
             return {
               id: v.id,
               numeroInterno: v.numero_interno?.toString() || '',
               patente: v.patente || '',
               kilometrajeActual: kmsActuales,
-              fechaActualizacionKm: v.updated_at ? new Date(v.updated_at) : new Date(),
+              fechaActualizacionKm: v.updated_at ? new Date(v.updated_at) : new Date('2026-09-12T08:00:00Z'),
               intervaloMantencionKm: kmInterv,
-              kmPromedioDia: v.km_promedio_dia || detalles.kmPromedioDia || 0,
+              kmPromedioDia: v.km_promedio_dia || detalles.kmPromedioDia || 185,
               kmUltimaMantencion: kmUltMant,
-              fechaUltimaMantencion: fechaUltMant ? new Date(fechaUltMant) : null,
+              fechaUltimaMantencion: fechaUltMant ? new Date(fechaUltMant) : new Date('2026-08-15T00:00:00Z'),
               tipoUltimaPauta: pautasSecuenciaStr,
               pautasSecuencia,
               
               // Technical specifications mapping
               marca: v.marca || detalles.marca || '',
               modelo: v.modelo || detalles.modelo || '',
-              ano: v.anio || v.ano || detalles.ano || detalles.anio || '',
+              ano: v.anio || v.ano || detalles.ano || detalles.anio || 2023,
               chasis: v.chasis || detalles.chasis || '',
               motor: v.motor || detalles.motor || '',
               norma: v.norma_euro || v.norma || detalles.norma_euro || detalles.norma || '',
@@ -202,24 +252,7 @@ export default function PizarraMantenimiento() {
         }
     } catch (err) {
       console.error('Error fetching vehiculos for Pizarra:', err);
-      const pizarraData = (mockVehiculosDB as any[]).map(v => calcularDatosPizarra({
-        id: v.id,
-        numeroInterno: v.numero_interno?.toString() || '',
-        patente: v.patente || '',
-        kilometrajeActual: v.kilometraje_actual || 0,
-        fechaActualizacionKm: new Date('2026-09-12'),
-        intervaloMantencionKm: v.intervalo_km || 10000,
-        kmPromedioDia: v.km_promedio_dia || 180,
-        kmUltimaMantencion: v.km_ultima_mantencion || 0,
-        fechaUltimaMantencion: new Date('2026-08-20'),
-        tipoUltimaPauta: 'PM-1',
-        pautasSecuencia: [],
-        marca: v.marca || '',
-        modelo: v.modelo || '',
-        ano: v.anio || 2023,
-        detalles: v.detalles || {}
-      } as any));
-      setDataFlota(pizarraData);
+      setDataFlota(initialPizarraData);
       return mockVehiculosDB;
     }
   };

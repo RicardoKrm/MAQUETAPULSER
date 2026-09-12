@@ -3,6 +3,7 @@ import { PenTool, Send, CheckCircle2, TrendingUp, X, Filter, Calendar as Calenda
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { GlobalStats } from '../../../contexts/ProduccionContext';
 import { supabase } from '../../../lib/supabase';
+import { mockProduccionTransporte } from '../../../lib/mockProduccion';
 
 interface Props {
   onReporteProduccion: (ext: number, mol: number, stock: number, fecha: string, hora: string) => void;
@@ -35,12 +36,12 @@ export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransp
   const [transSuceso, setTransSuceso] = useState('Normal');
 
   // Filtros
-  const [dateRange, setDateRange] = useState<{ start: string, end: string }>({ start: '', end: '' });
+  const [dateRange, setDateRange] = useState<{ start: string, end: string }>({ start: '2026-07-01', end: '2026-09-12' });
   const [plazo, setPlazo] = useState<string>('todos');
   const [choferFiltro, setChoferFiltro] = useState<string>('todos');
 
   // Chart data
-  const [rawData, setRawData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<any[]>(mockProduccionTransporte);
   const [chartDataChofer, setChartDataChofer] = useState<any[]>([]);
   const [chartDataCamion, setChartDataCamion] = useState<any[]>([]);
   const [top5ChoferesPromedio, setTop5ChoferesPromedio] = useState<any[]>([]);
@@ -105,10 +106,14 @@ export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransp
         .from('produccion_registro_diario')
         .select('*');
         
-      if (error || !data) return;
-      setRawData(data);
+      if (!error && data && data.length > 0) {
+        setRawData(data);
+      } else {
+        setRawData(mockProduccionTransporte);
+      }
     } catch (err) {
       console.error(err);
+      setRawData(mockProduccionTransporte);
     }
   };
 

@@ -6,19 +6,19 @@ import ConfiguracionMetas from '../operaciones/produccion/ConfiguracionMetas';
 import { GlobalStats, MetasObjetivos, useProduccion } from '../../contexts/ProduccionContext';
 
 export default function DashboardProduccion() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { metas, setMetas } = useProduccion();
   
   const [stats, setStats] = useState<GlobalStats>({
-    rajoTotal: 0,
-    millingTotal: 0,
-    stockpile: 0,
-    transported: 0,
-    transporteTotal: 0,
-    dispatchesCount: 0,
-    arrivedCount: 0,
-    inTransitCount: 0,
-    alertsCount: 0,
+    rajoTotal: 4250,
+    millingTotal: 51000,
+    stockpile: 2800,
+    transported: 3980,
+    transporteTotal: 48200,
+    dispatchesCount: 42,
+    arrivedCount: 38,
+    inTransitCount: 4,
+    alertsCount: 1,
   });
 
   useEffect(() => {
