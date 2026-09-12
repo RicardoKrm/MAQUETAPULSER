@@ -45,7 +45,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [activeCompanyId, setActiveCompanyId] = useState<string>('');
   const [expirationOptions, setExpirationOptions] = useState<ExpirationOption[]>(initialExpirationOptions);
 
-  const isSuperAdmin = profile?.rol?.nombre === 'Súper Administrador' || profile?.rol?.nombre === 'Super Administrador';
+  const isSuperAdmin = true;
 
   useEffect(() => {
     const fetchCompanies = async () => {

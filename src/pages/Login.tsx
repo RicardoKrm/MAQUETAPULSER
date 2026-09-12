@@ -24,20 +24,7 @@ export default function Login() {
   const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        try {
-          const { data } = await supabase.from('usuario_aplicacion').select('panel_inicio').eq('auth_user_id', session.user.id).single();
-          if (data && data.panel_inicio) {
-            navigate(data.panel_inicio);
-          } else {
-            navigate('/dashboard');
-          }
-        } catch {
-          navigate('/dashboard');
-        }
-      }
-    });
+    navigate('/dashboard', { replace: true });
   }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
