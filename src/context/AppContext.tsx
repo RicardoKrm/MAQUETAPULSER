@@ -761,7 +761,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isUuid) {
       finalId = generateUUID();
     }
-    const targetCompanyId = activeCompanyId || profile?.empresa_id || '57fa41da-645d-48ba-a671-65a35312d0e9';
+    const targetCompanyId = activeCompanyId || profile?.empresa_id || '161a47ac-9c63-435d-ab55-a6163a6805ab';
     const finalOT = { ...ot, id: finalId, empresa_id: targetCompanyId };
     
     // 1. Immediately persist locally so the work order is NEVER lost or discarded
@@ -788,7 +788,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return Math.min(Math.max(num, -maxVal), maxVal);
       };
 
-      const targetCompanyId = activeCompanyId || profile?.empresa_id || '57fa41da-645d-48ba-a671-65a35312d0e9';
+      const targetCompanyId = activeCompanyId || profile?.empresa_id || '161a47ac-9c63-435d-ab55-a6163a6805ab';
 
       const dbPayload = {
         id: finalOT.id,
@@ -1324,7 +1324,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const syncJob = async () => {
     try {
-      const companyIdSync = activeCompanyId || profile?.empresa_id || '57fa41da-645d-48ba-a671-65a35312d0e9';
+      const companyIdSync = activeCompanyId || profile?.empresa_id || '161a47ac-9c63-435d-ab55-a6163a6805ab';
 
       // RED DE SEGURIDAD: nunca dejar que un repuesto quede con stock negativo.
       // La interfaz ya valida, pero aquí se revalida contra el stock real de bodega.
@@ -1349,7 +1349,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return Math.min(Math.max(num, -maxVal), maxVal);
       };
 
-      const targetCompanyId = activeCompanyId || profile?.empresa_id || '57fa41da-645d-48ba-a671-65a35312d0e9';
+      const targetCompanyId = activeCompanyId || profile?.empresa_id || '161a47ac-9c63-435d-ab55-a6163a6805ab';
 
       const dbPayload = {
         id: finalId,

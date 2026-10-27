@@ -35,7 +35,7 @@ import { supabase, logActividad } from "../lib/supabase";
 import Swal from "sweetalert2";
 
 export default function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -414,22 +414,16 @@ export default function Layout() {
 
   // Filter navigation based on user permissions
   const filteredNavigation = React.useMemo(() => {
-    // Determine the role name based on the authenticated profile
-    // If Supabase profile exists but has no role, it shouldn't default to Super Admin
     let roleName = profile ? profile.rol?.nombre : currentUser?.cargo;
-
-    // If no role at all, they shouldn't see full nav, just empty or basic
-    if (!roleName) return [];
-
     const perms = profile?.rol?.permisos || [];
 
-    // Super Admins can see everything by default EXCEPT 'Crear Servicio' (based on configuration)
-    if (
-      [
-        "Súper Administrador",
-        "Super Administrador",
-      ].includes(roleName)
-    ) {
+    // En Maqueta Demo o para Administradores / Super Administradores, mostrar navegación completa
+    const isFullAccess = 
+      !roleName || 
+      ["Súper Administrador", "Super Administrador", "Administrador"].includes(roleName) ||
+      (typeof perms === 'object' && perms !== null && !Array.isArray(perms) && (perms as any).all === true);
+
+    if (isFullAccess) {
       return navigation.map((item) => {
         if (item.submodules) {
           return {

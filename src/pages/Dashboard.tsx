@@ -510,7 +510,11 @@ export default function Dashboard() {
         const vId = String(ot.vehiculoId || ot.vehiculo_id || '');
         if (vId) m.vehiculosConOt.add(vId);
 
-        const cost = (Number(ot.costoManoObraTareas) || 0) + (Number(ot.costoInsumos) || 0) + (Number(ot.costoManoObraHH) || 0);
+        const manoObra = Number(ot.costoManoObraTareas ?? ot.costo_mano_obra_tareas ?? 0);
+        const insumos = Number(ot.costoInsumos ?? ot.costo_insumos ?? 0);
+        const hh = Number(ot.costoManoObraHH ?? ot.costo_mano_obra_hh ?? 0);
+        const tot = Number(ot.costoTotal ?? ot.costo_total ?? 0);
+        const cost = tot > 0 ? tot : (manoObra + insumos + hh);
         if (ot.tipo?.includes('PREVENTIVA')) {
            m.prev += cost;
         } else {
@@ -565,7 +569,11 @@ export default function Dashboard() {
 
     let gastoTotalPeriodo = 0;
     otsEmpresa.forEach((ot: any) => {
-      gastoTotalPeriodo += (Number(ot.costoManoObraTareas) || 0) + (Number(ot.costoInsumos) || 0) + (Number(ot.costoManoObraHH) || 0);
+      const mo = Number(ot.costoManoObraTareas ?? ot.costo_mano_obra_tareas ?? 0);
+      const ins = Number(ot.costoInsumos ?? ot.costo_insumos ?? 0);
+      const hh = Number(ot.costoManoObraHH ?? ot.costo_mano_obra_hh ?? 0);
+      const tot = Number(ot.costoTotal ?? ot.costo_total ?? 0);
+      gastoTotalPeriodo += tot > 0 ? tot : (mo + ins + hh);
     });
     const gastoTotalMesActual = gastoTotalPeriodo;
 

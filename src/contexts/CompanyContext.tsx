@@ -41,7 +41,10 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [activeCompanyId, setActiveCompanyId] = useState<string>('');
+  const [activeCompanyId, setActiveCompanyId] = useState<string>(() => {
+    const saved = localStorage.getItem('superAdminTenantId');
+    return (saved && saved !== '57fa41da-645d-48ba-a671-65a35312d0e9') ? saved : '161a47ac-9c63-435d-ab55-a6163a6805ab';
+  });
   const [expirationOptions, setExpirationOptions] = useState<ExpirationOption[]>(initialExpirationOptions);
 
   const isSuperAdmin = profile?.rol?.nombre === 'Súper Administrador' || profile?.rol?.nombre === 'Super Administrador';

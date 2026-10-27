@@ -64,22 +64,22 @@ export const createMockSession = (email: string, nombre?: string, panelInicio: s
   const profile: AuthProfile = {
     id: `prof-${userId}`,
     auth_user_id: userId,
-    empresa_id: '57fa41da-645d-48ba-a671-65a35312d0e9',
+    empresa_id: '161a47ac-9c63-435d-ab55-a6163a6805ab',
     rol_id: 'rol-admin',
     nombre: formattedName,
     rut: '12.345.678-9',
     email: email,
     estado: 'ACTIVO',
-    cargo: 'Administrador General',
+    cargo: 'Director General',
     panel_inicio: panelInicio,
     rol: {
-      nombre: 'Administrador',
+      nombre: 'Súper Administrador',
       tipo: 'ADMIN',
       permisos: { all: true }
     },
     empresa: {
-      nombre: 'Imperia',
-      rut: '76.785.260-6'
+      nombre: 'Gaval Demo TMS',
+      rut: '00000000-0'
     }
   };
 
