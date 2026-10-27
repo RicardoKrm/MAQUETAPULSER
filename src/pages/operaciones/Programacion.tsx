@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar as CalendarIcon, Download, Filter, Search, GripVertical, Clock, ChevronLeft, ChevronRight, Plus, ArrowRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Download, Filter, Search, GripVertical, Clock, ChevronLeft, ChevronRight, Plus, ArrowRight, Truck, Activity, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { Modal } from '../../components/ui/Modal';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
+import MonitoreoAricaDetenciones from './MonitoreoAricaDetenciones';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -60,6 +61,7 @@ export default function Programacion() {
   const { activeCompanyId, currentCompany } = useCompany();
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const [mainTab, setMainTab] = useState<'CALENDARIO' | 'MONITOREO'>('CALENDARIO');
   const [viewMode, setViewMode] = useState<'Día' | 'Semana' | 'Mes' | 'Tabla'>('Semana');
   const [currentDate, setCurrentDate] = useState<Date>(INIT_DATE);
   const [draggedItem, setDraggedItem] = useState<any>(null);
@@ -183,8 +185,8 @@ export default function Programacion() {
           if (p.realTimeStr) {
               const d = new Date(p.realTimeStr);
               if (!isNaN(d.getTime())) {
-                exactHour = d.getHours();
-                exactMinute = d.getMinutes();
+                exactHour = d.getHours(); // <-- Cambiado a hora local
+                exactMinute = d.getMinutes(); // <-- Cambiado a minutos locales
               }
           }
 
@@ -214,153 +216,6 @@ export default function Programacion() {
           colorClass
         };
         }));
-      }
-
-      // Check if fallback needed for blocks
-      if (!resProg.data || resProg.data.length === 0) {
-        const curMonday = getStartOfWeek(currentDate);
-        const dStr = (offsetDays: number) => formatDateString(addDays(curMonday, offsetDays));
-        
-        const mockBlocks = [
-          {
-            id: 'prog-01',
-            codigo: 'SRV-8821',
-            dateStr: dStr(0),
-            hour: 8,
-            minute: 0,
-            duration: 4,
-            tipo: 'Transporte Concentrado Cobre',
-            origen: 'Faena Cordillera - Los Pelambres',
-            destino: 'Puerto Punta Chungo, Los Vilos',
-            estado: 'TERMINADO',
-            estadoRaw: 'Realizado',
-            timeStr: '8:00 AM',
-            conductorName: 'Juan Pérez Soto',
-            vehiculoPatente: 'KHLP-90',
-            empresa_id: currentCompany?.id || 'emp-01',
-            conductor_id: 'colab-01',
-            vehiculo_id: 'veh-01',
-            notas: 'Entrega con guía de despacho #8821',
-            colorClass: 'bg-slate-100 border-slate-300 text-slate-800 dark:bg-slate-700/50 dark:border-slate-600 dark:text-slate-300'
-          },
-          {
-            id: 'prog-02',
-            codigo: 'SRV-8824',
-            dateStr: dStr(1),
-            hour: 9,
-            minute: 30,
-            duration: 3,
-            tipo: 'Flete de Reactivos Químicos',
-            origen: 'Planta Polpaico - Til Til',
-            destino: 'Codelco División Andina',
-            estado: 'TERMINADO',
-            estadoRaw: 'Realizado',
-            timeStr: '9:30 AM',
-            conductorName: 'Carlos Morales',
-            vehiculoPatente: 'BRTH-44',
-            empresa_id: currentCompany?.id || 'emp-01',
-            conductor_id: 'colab-02',
-            vehiculo_id: 'veh-02',
-            notas: 'Hoja de seguridad DS 298 a bordo',
-            colorClass: 'bg-slate-100 border-slate-300 text-slate-800 dark:bg-slate-700/50 dark:border-slate-600 dark:text-slate-300'
-          },
-          {
-            id: 'prog-03',
-            codigo: 'SRV-8830',
-            dateStr: dStr(3),
-            hour: 10,
-            minute: 0,
-            duration: 4,
-            tipo: 'Traslado Maquinaria Pesada',
-            origen: 'Base Operacional Los Andes',
-            destino: 'Faena Los Bronces (Anglo American)',
-            estado: 'TERMINADO',
-            estadoRaw: 'Realizado',
-            timeStr: '10:00 AM',
-            conductorName: 'Diego Castillo',
-            vehiculoPatente: 'PRTZ-33',
-            empresa_id: currentCompany?.id || 'emp-01',
-            conductor_id: 'colab-03',
-            vehiculo_id: 'veh-04',
-            notas: 'Cama baja con escolta autorizada',
-            colorClass: 'bg-slate-100 border-slate-300 text-slate-800 dark:bg-slate-700/50 dark:border-slate-600 dark:text-slate-300'
-          },
-          {
-            id: 'prog-04',
-            codigo: 'SRV-8835',
-            dateStr: dStr(5),
-            hour: 8,
-            minute: 30,
-            duration: 5,
-            tipo: 'Transporte Concentrado Cobre Prioritario',
-            origen: 'Faena Cordillera - Mauro',
-            destino: 'Puerto Punta Chungo, Los Vilos',
-            estado: 'EN PROCESO',
-            estadoRaw: 'En Curso',
-            timeStr: '8:30 AM',
-            conductorName: 'Juan Pérez Soto',
-            vehiculoPatente: 'KHLP-90',
-            empresa_id: currentCompany?.id || 'emp-01',
-            conductor_id: 'colab-01',
-            vehiculo_id: 'veh-01',
-            notas: 'Turno en ruta - Monitoreo GPS activo',
-            colorClass: 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300'
-          },
-          {
-            id: 'prog-05',
-            codigo: 'SRV-8836',
-            dateStr: dStr(5),
-            hour: 11,
-            minute: 0,
-            duration: 3,
-            tipo: 'Distribución de Repuestos y Filtros',
-            origen: 'Bodega Central Los Andes',
-            destino: 'Taller Faena Andina',
-            estado: 'RESERVADO',
-            estadoRaw: 'Asignado',
-            timeStr: '11:00 AM',
-            conductorName: 'Andrés Vega',
-            vehiculoPatente: 'JWRS-18',
-            empresa_id: currentCompany?.id || 'emp-01',
-            conductor_id: 'colab-04',
-            vehiculo_id: 'veh-03',
-            notas: 'Despacho programado post mantención',
-            colorClass: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-300'
-          }
-        ];
-        setScheduled(mockBlocks);
-
-        setPendings([
-          {
-            id: 'pend-01',
-            tipo: 'Retorno Cal y Reactivos',
-            origen: 'Polpaico - Til Til',
-            destino: 'Faena Los Bronces',
-            conductorName: 'Carlos Morales',
-            vehiculoPatente: 'BRTH-44',
-            empresa_id: currentCompany?.id || 'emp-01',
-            bgColor: 'bg-white dark:bg-slate-800'
-          },
-          {
-            id: 'pend-02',
-            tipo: 'Carga General Insumos Mineros',
-            origen: 'Quilicura - Santiago',
-            destino: 'Mauro - Los Pelambres',
-            conductorName: null,
-            vehiculoPatente: null,
-            empresa_id: currentCompany?.id || 'emp-01',
-            bgColor: 'bg-white dark:bg-slate-800'
-          }
-        ]);
-
-        const fallbackDrivers = [
-          { id: 'colab-01', nombre: 'Juan Pérez Soto', estado: 'ACTIVO', rol: 'Conductor Alto Tonelaje' },
-          { id: 'colab-02', nombre: 'Carlos Morales', estado: 'ACTIVO', rol: 'Conductor Cama Baja' },
-          { id: 'colab-03', nombre: 'Diego Castillo', estado: 'ACTIVO', rol: 'Conductor Aljibe' },
-          { id: 'colab-04', nombre: 'Andrés Vega', estado: 'ACTIVO', rol: 'Conductor Escolta' }
-        ];
-        setDbConductores(fallbackDrivers);
-        setConductores(fallbackDrivers.map((c: any) => ({ ...c, vehiculo: 'Asignado', selected: true })));
       }
     } catch(e) {
       console.error(e);
@@ -704,10 +559,64 @@ export default function Programacion() {
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] -mt-6 -mx-6 flex bg-white dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200">
+    <div className="h-[calc(100vh-4rem)] -mt-6 -mx-6 flex flex-col bg-white dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200">
       
-      {/* Left Sidebar (Google Calendar Style) */}
-      <div className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0">
+      {/* Top Selector de Modo Operacional */}
+      <div className="bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 px-6 py-2.5 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMainTab('CALENDARIO')}
+            className={cn(
+              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+              mainTab === 'CALENDARIO'
+                ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            )}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            <span>📅 Programación & Calendario</span>
+          </button>
+
+          <button
+            onClick={() => setMainTab('MONITOREO')}
+            className={cn(
+              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 relative",
+              mainTab === 'MONITOREO'
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 border border-blue-500"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            )}
+          >
+            <Truck className="w-4 h-4" />
+            <span>🛰️ Monitoreo & Auditoría de Paradas</span>
+            {currentCompany?.name && (
+              <span className={cn(
+                "text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                mainTab === 'MONITOREO' ? "bg-blue-700 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              )}>
+                {currentCompany.name}
+              </span>
+            )}
+          </button>
+        </div>
+
+        <div className="hidden md:flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            Telemetría GPS en Vivo
+          </span>
+          <span>•</span>
+          <span className="font-semibold text-slate-700 dark:text-slate-300">
+            Cliente: {currentCompany?.name || 'Cliente Activo'}
+          </span>
+        </div>
+      </div>
+
+      {mainTab === 'MONITOREO' ? (
+        <MonitoreoAricaDetenciones />
+      ) : (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar (Google Calendar Style) */}
+          <div className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0">
          <div className="p-4 pt-6">
             <button onClick={() => setIsNewModalOpen(true)} className="w-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full py-2 pr-4 pl-3 flex items-center justify-start transition-colors">
               <Plus className="w-6 h-6 mr-2 text-blue-600 dark:text-blue-500" />
@@ -1434,6 +1343,8 @@ export default function Programacion() {
             <button onClick={() => setDayDetailsModal({ ...dayDetailsModal, isOpen: false })} className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cerrar</button>
          </div>
       </Modal>
+        </div>
+      )}
     </div>
   );
 }

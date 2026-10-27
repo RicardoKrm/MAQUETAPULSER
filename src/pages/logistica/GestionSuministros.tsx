@@ -2,20 +2,21 @@ import React, { useState } from 'react';
 import { 
   Package, History, Smartphone, Boxes, Plus, Download, 
   Search, Pencil, Trash2, AlertTriangle, AlertCircle, ArrowLeft, ArrowRightLeft, CheckCircle,
-  FileText as Edit
+  FileText as Edit, ShoppingCart, Wrench
 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { useAppContext } from '../../context/AppContext';
 import { useCompany } from '../../contexts/CompanyContext';
 import { supabase } from '../../lib/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { exportToExcel } from '../../lib/excelExport';
 import Swal from 'sweetalert2';
 
 // Interfaces to maintain TypeScript types
 interface Insumo {
-  id: number;
+  id: string | number;
   nombre: string;
   sku: string;
   proveedor: string;
@@ -121,7 +122,9 @@ export default function GestionSuministros() {
       let rData = await fetchAllRows(rQuery);
 
       if (rData && rData.length > 0) {
-        setSumInsumosData(rData.map((r: any) => {
+        // Excluir repuestos dados de baja / ocultos por defecto (idéntico a Pulser Antiguo)
+        const activos = rData.filter((r: any) => r.detalles?.ocultar !== true && r.estado !== 'OCULTO');
+        setSumInsumosData(activos.map((r: any) => {
           const parsedPrecio = parseFloat(r.precio) || 0;
           const parsedStock = parseInt(r.stock) || 0;
           return {
@@ -405,7 +408,23 @@ export default function GestionSuministros() {
     }
   };
 
-  const [activeView, setActiveView] = useState<'inventario' | 'auditoria' | 'validaciones' | 'solicitudesOT'>('inventario');
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const requestedView = searchParams.get('view') as any;
+
+  const [activeView, setActiveView] = useState<'inventario' | 'auditoria' | 'validaciones' | 'solicitudesOT' | 'compras'>(
+    requestedView === 'compras' ? 'compras' : 'inventario'
+  );
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('view') === 'compras') {
+      setActiveView('compras');
+    }
+  }, [location.search]);
+
+  const [comprasPlan, setComprasPlan] = useState<any[]>([]);
+
   const [entriesPerPage, setEntriesPerPage] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
   const [auditoriaData, setAuditoriaData] = React.useState<any[]>([]);
@@ -426,18 +445,51 @@ export default function GestionSuministros() {
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [selectedRepuestoDetalle, setSelectedRepuestoDetalle] = useState<Insumo | null>(null);
   const [repuestoMovimientos, setRepuestoMovimientos] = useState<any[]>([]);
+  const [modalTab, setModalTab] = useState<'ots' | 'kardex'>('ots');
+  const [repuestoOtHistorial, setRepuestoOtHistorial] = useState<any[]>([]);
+  const [loadingOtHistorial, setLoadingOtHistorial] = useState<boolean>(false);
 
   React.useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedBodega, selectedUbicacion, selectedCalidad, selectedCategoria, selectedProveedor, filterBajoStock, filterSinMov]);
 
   React.useEffect(() => {
+    if (activeView === 'compras') {
+      const itemsCriticos = sumInsumosData.filter(i => Number(i.stock) < Number(i.min));
+      setComprasPlan(itemsCriticos.map(i => {
+        let faltante = Number(i.min) - Number(i.stock);
+        let sugerido = faltante > 0 ? faltante + Math.ceil(Number(i.min) * 0.5) : 0;
+        if (sugerido === 0 && Number(i.min) === 0) sugerido = 10;
+        return {
+          ...i,
+          cantidadComprar: sugerido
+        };
+      }));
+    }
+  }, [activeView, sumInsumosData]);
+
+  React.useEffect(() => {
      if (selectedRepuestoDetalle) {
+        setModalTab('ots');
+        setLoadingOtHistorial(true);
+        // Cargar movimientos de kardex interno
         supabase.from('logistica_movimientos').select('*').eq('repuesto_id', selectedRepuestoDetalle.id).order('created_at', { ascending: false }).then(({ data, error }) => {
            if (!error && data) setRepuestoMovimientos(data);
         });
+        // Cargar trazabilidad de consumo en Órdenes de Trabajo históricas
+        supabase.from('detalle_insumo_ot')
+          .select('*, orden_de_trabajo:orden_id(id, folio, tipo, estado, fecha_creacion, vehiculo:vehiculo_id(patente, numero_interno))')
+          .eq('repuesto_id', selectedRepuestoDetalle.id)
+          .order('created_at', { ascending: false })
+          .then(({ data, error }) => {
+             if (!error && data) {
+               setRepuestoOtHistorial(data);
+             }
+             setLoadingOtHistorial(false);
+          });
      } else {
         setRepuestoMovimientos([]);
+        setRepuestoOtHistorial([]);
      }
   }, [selectedRepuestoDetalle]);
   
@@ -1191,6 +1243,142 @@ export default function GestionSuministros() {
     Swal.fire("Entregado", "El repuesto ha sido marcado como entregado a Taller.", "success");
   };
 
+  
+  if (activeView === 'compras') {
+    const itemsCriticos = sumInsumosData.filter(i => Number(i.stock) < Number(i.min));
+
+    const handleCantidadChange = (id: string, newVal: number) => {
+      setComprasPlan(prev => prev.map(p => p.id === id ? { ...p, cantidadComprar: Math.max(0, newVal) } : p));
+    };
+
+    const costoTotalOrden = comprasPlan.reduce((acc, curr) => acc + (curr.cantidadComprar * (Number(curr.precio) || 0)), 0);
+
+    const exportOC = () => {
+      const exportData = comprasPlan.map(i => {
+        const faltante = Number(i.min) - Number(i.stock);
+        return {
+          'SKU / Código': i.sku || '',
+          'Repuesto': i.nombre || '',
+          'Bodega': i.bodegaNombre || 'Principal',
+          'Stock Actual': i.stock,
+          'Stock Mínimo': i.min,
+          'Faltante': faltante > 0 ? faltante : 0,
+          'Precio Unitario': Number(i.precio) || 0,
+          'Cantidad a Comprar': i.cantidadComprar,
+          'Subtotal Estimado': i.cantidadComprar * (Number(i.precio) || 0)
+        };
+      });
+      exportToExcel(exportData, 'Orden_de_Compra_Sugerida', 'Orden de Compra');
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center p-6 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-500/10 p-2 rounded-lg">
+                <ShoppingCart className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Generador Automático de O.C.</h1>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 uppercase font-medium">
+              Punto de Reorden · Cálculo Financiero
+            </div>
+          </div>
+          <Button variant="secondary" className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm" onClick={() => setActiveView('inventario')}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            VOLVER AL INVENTARIO
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
+            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Ítems en Quiebre (Stock Crítico)</h3>
+            <p className="text-3xl font-bold text-rose-600 dark:text-rose-400 mt-2">{itemsCriticos.length}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
+            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Ítems a Comprar</h3>
+            <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 mt-2">{comprasPlan.reduce((a,b)=>a+b.cantidadComprar,0)} uds</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-emerald-200 dark:border-emerald-900/50 shadow-sm bg-emerald-50/50 dark:bg-emerald-900/10">
+            <h3 className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Valor Estimado O.C.</h3>
+            <p className="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mt-2">
+              $ {costoTotalOrden.toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+            <h3 className="font-bold text-slate-800 dark:text-white">Plan de Abastecimiento Sugerido</h3>
+            <Button onClick={exportOC} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              <Download className="w-4 h-4 mr-2" />
+              Exportar Orden (Excel)
+            </Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 uppercase font-bold">
+                <tr>
+                  <th className="px-4 py-4">SKU / Repuesto</th>
+                  <th className="px-4 py-4">Bodega</th>
+                  <th className="px-4 py-4 text-center">Stock Actual</th>
+                  <th className="px-4 py-4 text-center">Mínimo</th>
+                  <th className="px-4 py-4 text-center text-rose-500">Faltante</th>
+                  <th className="px-4 py-4 text-right">Precio Unitario</th>
+                  <th className="px-4 py-4 text-center bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300">Comprar (Uds)</th>
+                  <th className="px-4 py-4 text-right bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {comprasPlan.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                      <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                      <p className="text-lg font-medium text-slate-800 dark:text-slate-200">Inventario Saludable</p>
+                      <p>No hay repuestos bajo el stock mínimo paramétrico.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  comprasPlan.map(item => {
+                    const faltante = Number(item.min) - Number(item.stock);
+                    const subtotal = item.cantidadComprar * (Number(item.precio) || 0);
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-800 dark:text-white">{item.nombre}</div>
+                          <div className="text-xs text-slate-500">{item.sku}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{item.bodegaNombre || '-'}</td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-700 dark:text-slate-300">{item.stock}</td>
+                        <td className="px-4 py-3 text-center text-slate-500">{item.min}</td>
+                        <td className="px-4 py-3 text-center font-bold text-rose-500">-{faltante > 0 ? faltante : 0}</td>
+                        <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">$ {(Number(item.precio) || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center bg-indigo-50/50 dark:bg-indigo-900/10">
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={item.cantidadComprar}
+                            onChange={(e) => handleCantidadChange(item.id, parseInt(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 text-center border border-indigo-200 dark:border-indigo-700 rounded-md bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/10">
+                          $ {subtotal.toLocaleString()}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
   if (activeView === 'solicitudesOT') {
     // Get all OT solicitudes
     const solicitudesOt = ordenesTrabajo.flatMap(ot => 
@@ -1335,6 +1523,10 @@ export default function GestionSuministros() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center font-medium" onClick={() => setActiveView('compras')}>
+            <ShoppingCart className="w-4 h-4 mr-1.5" />
+            Punto de Reorden
+          </Button>
           <Button className="bg-orange-500 hover:bg-orange-600 text-white shadow-sm" onClick={() => setActiveView('solicitudesOT')}>
             <Boxes className="w-4 h-4 mr-2" />
             Solicitudes de Taller
@@ -1727,66 +1919,186 @@ export default function GestionSuministros() {
                 </div>
               </div>
 
-              {/* Right Column: History */}
-              <div className="md:col-span-2 bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                    <History className="w-4 h-4 text-purple-500" />
-                    HISTORIAL DE MOVIMIENTOS
-                  </h3>
-                  <span className="text-xs bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-full font-medium text-slate-600 dark:text-slate-300">
-                    {repuestoMovimientos.length} REGISTROS
+              {/* Right Column: History & OT Traceability */}
+              <div className="md:col-span-2 bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col">
+                {/* Tabs */}
+                <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-4 gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('ots')}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        modalTab === 'ots'
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      TRAZABILIDAD EN OTs ({repuestoOtHistorial.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('kardex')}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        modalTab === 'kardex'
+                          ? "bg-purple-600 text-white shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      KARDEX / MOVIMIENTOS ({repuestoMovimientos.length})
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {modalTab === 'ots' 
+                      ? `${repuestoOtHistorial.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0)} unidades consumidas en OTs` 
+                      : `${repuestoMovimientos.length} registros en kardex`}
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                      <tr>
-                        <th className="py-2 pr-2 font-bold uppercase whitespace-nowrap">FECHA / HORA</th>
-                        <th className="py-2 px-2 font-bold uppercase">TIPO DE MOVIMIENTO</th>
-                        <th className="py-2 px-2 font-bold uppercase text-center">CANT.</th>
-                        <th className="py-2 px-2 font-bold uppercase">RESPONSABLE</th>
-                        <th className="py-2 px-2 font-bold uppercase">REFERENCIA</th>
-                        <th className="py-2 pl-2 font-bold uppercase w-1/3">NOTAS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700/50">
-                      {repuestoMovimientos.map((mov) => (
-                        <tr key={mov.id}>
-                          <td className="py-4 pr-2 font-medium whitespace-nowrap">
-                            <div className="text-slate-800 dark:text-slate-200">{new Date(mov.created_at).toLocaleDateString()}</div>
-                            <div className="text-slate-500 text-[10px]">{new Date(mov.created_at).toLocaleTimeString()}</div>
-                          </td>
-                          <td className="py-4 px-2">
-                            <span className={`px-2 py-1 rounded-md text-[10px] font-medium leading-tight inline-block
-                              ${mov.tipo === 'SALIDA' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 
-                                mov.tipo === 'ENTRADA' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
-                                mov.tipo === 'CORRECCIÓN_MANUAL' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' :
-                                'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                              {mov.tipo}
-                            </span>
-                          </td>
-                          <td className={`py-4 px-2 text-center font-bold ${mov.tipo === 'SALIDA' ? 'text-orange-500' : mov.tipo === 'ENTRADA' ? 'text-emerald-500' : mov.tipo === 'CORRECCIÓN_MANUAL' ? 'text-purple-500' : 'text-blue-500'}`}>
-                             {mov.cantidad > 0 ? '+' : ''}{mov.cantidad}
-                          </td>
-                          <td className="py-4 px-2 font-medium">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-5 h-5 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center shrink-0">
-                                👤
-                              </span>
-                              {mov.usuario_nombre || 'Sistema'}
-                            </div>
-                          </td>
-                          <td className="py-4 px-2 text-slate-400">{mov.referencia}</td>
-                          <td className="py-4 pl-2 text-[10px] font-medium italic text-slate-600 dark:text-slate-400 leading-relaxed">
-                            {mov.notas}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Content according to tab */}
+                {modalTab === 'ots' ? (
+                  <div className="overflow-x-auto flex-1">
+                    {loadingOtHistorial ? (
+                      <div className="flex items-center justify-center py-12 text-slate-400 text-xs">
+                        Cargando historial de órdenes de trabajo...
+                      </div>
+                    ) : repuestoOtHistorial.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                        <Wrench className="w-8 h-8 mb-2 opacity-40" />
+                        <p className="text-xs font-medium">No registra consumo en órdenes de trabajo históricas.</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-xs text-left">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                          <tr>
+                            <th className="py-2 pr-2 font-bold uppercase whitespace-nowrap">FOLIO OT</th>
+                            <th className="py-2 px-2 font-bold uppercase">FECHA</th>
+                            <th className="py-2 px-2 font-bold uppercase">VEHÍCULO</th>
+                            <th className="py-2 px-2 font-bold uppercase">TIPO / ESTADO</th>
+                            <th className="py-2 px-2 font-bold uppercase text-center">CANT.</th>
+                            <th className="py-2 px-2 font-bold uppercase text-right">COSTO UNIT.</th>
+                            <th className="py-2 pl-2 font-bold uppercase text-right">TOTAL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700/50">
+                          {repuestoOtHistorial.map((otItem) => {
+                            const ot = otItem.orden_de_trabajo || {};
+                            const veh = ot.vehiculo || {};
+                            const fecha = otItem.created_at || ot.fecha_creacion;
+                            return (
+                              <tr key={otItem.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
+                                <td className="py-3 pr-2 font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                  {ot.folio || 'S/F'}
+                                </td>
+                                <td className="py-3 px-2 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                  {fecha ? new Date(fecha).toLocaleDateString('es-CL') : '-'}
+                                </td>
+                                <td className="py-3 px-2 font-medium">
+                                  <div className="text-slate-900 dark:text-slate-100 font-bold">{veh.patente || 'Sin patente'}</div>
+                                  {veh.numero_interno && (
+                                    <div className="text-[10px] text-slate-500">N° {veh.numero_interno}</div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-2">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                      {ot.tipo || 'GENERAL'}
+                                    </span>
+                                    {ot.estado && (
+                                      <span className="text-[10px] text-slate-500 lowercase first-letter:uppercase">
+                                        {ot.estado}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-2 text-center font-bold text-slate-900 dark:text-slate-100">
+                                  {otItem.cantidad}
+                                </td>
+                                <td className="py-3 px-2 text-right font-medium text-slate-600 dark:text-slate-400">
+                                  {formatCurrency(otItem.costo_unitario_aplicado || 0)}
+                                </td>
+                                <td className="py-3 pl-2 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                                  {formatCurrency(otItem.costo_total || ((otItem.cantidad || 0) * (otItem.costo_unitario_aplicado || 0)))}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="border-t-2 border-slate-300 dark:border-slate-700 font-bold">
+                          <tr>
+                            <td colSpan={4} className="py-3 pr-2 text-right uppercase text-slate-500">Total Consumido:</td>
+                            <td className="py-3 px-2 text-center text-blue-600 dark:text-blue-400">
+                              {repuestoOtHistorial.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0)}
+                            </td>
+                            <td></td>
+                            <td className="py-3 pl-2 text-right text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(repuestoOtHistorial.reduce((acc, curr) => acc + (Number(curr.costo_total) || ((curr.cantidad || 0) * (curr.costo_unitario_aplicado || 0))), 0))}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto flex-1">
+                    {repuestoMovimientos.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                        <History className="w-8 h-8 mb-2 opacity-40" />
+                        <p className="text-xs font-medium">Sin movimientos registrados en kardex interno.</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-xs text-left">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                          <tr>
+                            <th className="py-2 pr-2 font-bold uppercase whitespace-nowrap">FECHA / HORA</th>
+                            <th className="py-2 px-2 font-bold uppercase">TIPO DE MOVIMIENTO</th>
+                            <th className="py-2 px-2 font-bold uppercase text-center">CANT.</th>
+                            <th className="py-2 px-2 font-bold uppercase">RESPONSABLE</th>
+                            <th className="py-2 px-2 font-bold uppercase">REFERENCIA</th>
+                            <th className="py-2 pl-2 font-bold uppercase w-1/3">NOTAS</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700/50">
+                          {repuestoMovimientos.map((mov) => (
+                            <tr key={mov.id}>
+                              <td className="py-4 pr-2 font-medium whitespace-nowrap">
+                                <div className="text-slate-800 dark:text-slate-200">{new Date(mov.created_at).toLocaleDateString()}</div>
+                                <div className="text-slate-500 text-[10px]">{new Date(mov.created_at).toLocaleTimeString()}</div>
+                              </td>
+                              <td className="py-4 px-2">
+                                <span className={`px-2 py-1 rounded-md text-[10px] font-medium leading-tight inline-block
+                                  ${mov.tipo === 'SALIDA' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 
+                                    mov.tipo === 'ENTRADA' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
+                                    mov.tipo === 'CORRECCIÓN_MANUAL' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' :
+                                    'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                                  {mov.tipo}
+                                </span>
+                              </td>
+                              <td className={`py-4 px-2 text-center font-bold ${mov.tipo === 'SALIDA' ? 'text-orange-500' : mov.tipo === 'ENTRADA' ? 'text-emerald-500' : mov.tipo === 'CORRECCIÓN_MANUAL' ? 'text-purple-500' : 'text-blue-500'}`}>
+                                 {mov.cantidad > 0 ? '+' : ''}{mov.cantidad}
+                              </td>
+                              <td className="py-4 px-2 font-medium">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-5 h-5 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center shrink-0">
+                                    👤
+                                  </span>
+                                  {mov.usuario_nombre || 'Sistema'}
+                                </div>
+                              </td>
+                              <td className="py-4 px-2 text-slate-400">{mov.referencia}</td>
+                              <td className="py-4 pl-2 text-[10px] font-medium italic text-slate-600 dark:text-slate-400 leading-relaxed">
+                                {mov.notas}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

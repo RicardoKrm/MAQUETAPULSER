@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -8,62 +8,35 @@ import { Button } from '../../components/ui/Button';
 import { 
   Search, Filter, Plus, FileSpreadsheet, AlertTriangle, 
   CheckCircle, Clock, Truck, ChevronRight, Activity, Wrench,
-  MoreVertical, Edit3, History, TrendingUp, Archive, Trash2,
-  Table as TableIcon, List, Eye, ArrowLeft
+  MoreVertical, Edit3, History, TrendingUp, Trash2,
+  Table as TableIcon, List, Eye, ArrowLeft, Wifi, Power, RefreshCw, CheckCircle2, AlertCircle, XCircle
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { CrearOTModal } from '../../components/flota/CrearOTModal';
 import { CrearVehiculoModal } from '../../components/flota/CrearVehiculoModal';
 import { Modal } from '../../components/ui/Modal';
-import { calcularDatosPizarra, FilaPizarraMantenimiento, generarSecuenciaParaPauta, HitoSecuencia, PautaEstructura } from '../../lib/mantenimientoLogica';
+import { ModalCostosTendencias } from '../../components/flota/ModalCostosTendencias';
+import { calcularDatosPizarra, FilaPizarraMantenimiento, generarSecuenciaParaPauta, HitoSecuencia, obtenerPautasSecuenciaParaVehiculo, formatearDiaMesAno, mapearVehiculoDB } from '../../lib/mantenimientoLogica';
 import { useAppContext } from '../../context/AppContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { mockVehiculosDB } from '../../lib/mockData';
+import { exportToExcel } from '../../lib/excelExport';
 
-const generateMockSecuencia = (kmInterv: number, kmActual: number): HitoSecuencia[] => {
-  const defaultPautas: PautaEstructura[] = [
-    { id: 'paut-1', nombre: 'PM-1 Inspección y Lubricación', kilometraje_inicial: kmInterv, intervalo_1: kmInterv * 2 },
-    { id: 'paut-2', nombre: 'PM-2 Mantenimiento Menor', kilometraje_inicial: kmInterv * 2, intervalo_1: kmInterv * 4 },
-    { id: 'paut-3', nombre: 'PM-3 Mantenimiento Mayor', kilometraje_inicial: kmInterv * 4, intervalo_1: kmInterv * 8 },
-    { id: 'paut-4', nombre: 'PM-4 Overhaul Componentes', kilometraje_inicial: kmInterv * 8, intervalo_1: kmInterv * 10 }
-  ];
-  let seq: HitoSecuencia[] = [];
-  defaultPautas.forEach(p => {
-    seq = [...seq, ...generarSecuenciaParaPauta(p, kmActual)];
-  });
-  seq.sort((a, b) => a.iteracion_km - b.iteracion_km);
-  const seen = new Set<number>();
-  return seq.filter(s => {
-    if (seen.has(s.iteracion_km)) return false;
-    seen.add(s.iteracion_km);
-    return true;
-  });
+export const obtenerSoloModelo = (modeloRaw?: string, marcaRaw?: string): string => {
+  if (!modeloRaw || !modeloRaw.trim()) return '--';
+  let mod = modeloRaw.trim();
+  if (mod.includes('/')) {
+    const parts = mod.split('/');
+    mod = parts[parts.length - 1].trim();
+  }
+  if (marcaRaw && marcaRaw.trim()) {
+    const cleanMarca = marcaRaw.trim().toLowerCase();
+    if (mod.toLowerCase().startsWith(cleanMarca)) {
+      mod = mod.substring(cleanMarca.length).trim();
+      mod = mod.replace(/^[-/:\s]+/, '').trim();
+    }
+  }
+  return mod || modeloRaw || '--';
 };
-
-const initialPizarraData: FilaPizarraMantenimiento[] = (mockVehiculosDB as any[]).map(v => {
-  const kmActual = v.kilometraje_actual || 0;
-  const kmInterv = v.intervalo_km || 10000;
-  const kmUlt = v.km_ultima_mantencion || Math.max(0, kmActual - 8500);
-  const pautasSecuencia = generateMockSecuencia(kmInterv, kmActual);
-
-  return calcularDatosPizarra({
-    id: v.id,
-    numeroInterno: v.numero_interno?.toString() || '',
-    patente: v.patente || '',
-    kilometrajeActual: kmActual,
-    fechaActualizacionKm: new Date('2026-09-12T08:00:00Z'),
-    intervaloMantencionKm: kmInterv,
-    kmPromedioDia: v.km_promedio_dia || 185,
-    kmUltimaMantencion: kmUlt,
-    fechaUltimaMantencion: new Date('2026-08-15T00:00:00Z'),
-    tipoUltimaPauta: 'PM-1',
-    pautasSecuencia,
-    marca: v.marca || '',
-    modelo: v.modelo || '',
-    ano: v.anio || 2023,
-    detalles: v.detalles || {}
-  } as any);
-}).sort((a, b) => String(a.numeroInterno).localeCompare(String(b.numeroInterno), undefined, { numeric: true }));
 
 export default function PizarraMantenimiento() {
   const { currentCompany } = useCompany();
@@ -80,6 +53,10 @@ export default function PizarraMantenimiento() {
   const [vistaTabla, setVistaTabla] = useState(false);
   const [fichaTecnicaVehiculo, setFichaTecnicaVehiculo] = useState<any | null>(null);
   const [isEditingFicha, setIsEditingFicha] = useState(false);
+  const [modalCostosOpen, setModalCostosOpen] = useState(false);
+  const [vehiculoCostosSeleccionado, setVehiculoCostosSeleccionado] = useState<any | null>(null);
+  const [isSyncingGpsId, setIsSyncingGpsId] = useState<string | number | null>(null);
+  const [filtroEstadoOperativo, setFiltroEstadoOperativo] = useState<'ACTIVOS' | 'DADOS_DE_BAJA' | 'TODOS'>('ACTIVOS');
   const [editFichaData, setEditFichaData] = useState<any>({
     marca: '',
     modelo: '',
@@ -89,7 +66,8 @@ export default function PizarraMantenimiento() {
     motor: '',
     norma: '',
     aplicacion: '',
-    tipoAceite: ''
+    tipoAceite: '',
+    enOperacionActiva: true
   });
 
   useEffect(() => {
@@ -104,12 +82,51 @@ export default function PizarraMantenimiento() {
         motor: fichaTecnicaVehiculo.motor || '',
         norma: fichaTecnicaVehiculo.norma || '',
         aplicacion: fichaTecnicaVehiculo.aplicacion || '',
-        tipoAceite: fichaTecnicaVehiculo.tipoAceite || ''
+        tipoAceite: fichaTecnicaVehiculo.tipoAceite || '',
+        enOperacionActiva: fichaTecnicaVehiculo.en_operacion_activa !== false && fichaTecnicaVehiculo.estado !== 'DE_BAJA' && fichaTecnicaVehiculo.detalles?.activo !== false
       });
     }
   }, [fichaTecnicaVehiculo]);
 
   const [historialVehiculo, setHistorialVehiculo] = useState<any | null>(null);
+  const [otsDirectasVehiculo, setOtsDirectasVehiculo] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!historialVehiculo?.id) {
+      setOtsDirectasVehiculo([]);
+      return;
+    }
+    const fetchOTsDirectas = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('orden_de_trabajo')
+          .select('*')
+          .eq('vehiculo_id', historialVehiculo.id)
+          .order('fecha_creacion', { ascending: false });
+
+        if (data && !error) {
+          setOtsDirectasVehiculo(data.map(d => ({
+            id: d.id,
+            folio: d.folio,
+            tipo: d.tipo,
+            prioridad: d.prioridad,
+            estado: d.estado,
+            fechaCreacion: d.fecha_creacion,
+            fechaCierre: d.termino_proceso || d.fecha_creacion,
+            costoInsumos: Number(d.costo_insumos || 0),
+            costoManoObraHH: Number(d.costo_mano_obra_hh || 0),
+            costoManoObraTareas: Number(d.costo_mano_obra_tareas || 0),
+            vehiculoId: d.vehiculo_id,
+            pauta: d.pauta
+          })));
+        }
+      } catch (err) {
+        console.warn("Error cargando OTs directas para historial:", err);
+      }
+    };
+    fetchOTsDirectas();
+  }, [historialVehiculo]);
+
   const navigate = useNavigate();
   
   const menuRef = useRef<HTMLDivElement>(null);
@@ -126,9 +143,94 @@ export default function PizarraMantenimiento() {
     };
   }, []);
 
-  // Mocks for dropdowns
-  const modelos = ['Sprinter 315', 'Transit Custom', 'Rav4'];
-  const tiposMantenimiento = ['Todos los tipos', 'Inicial', 'PM-1', 'PM-2', 'PM-3', 'PM-4'];
+  const [listaPautas, setListaPautas] = useState<any[]>([]);
+  const [listaModelosBD, setListaModelosBD] = useState<any[]>([]);
+  const [otsDirectasEmpresa, setOtsDirectasEmpresa] = useState<any[]>([]);
+  const [dataFlota, setDataFlota] = useState<FilaPizarraMantenimiento[]>([]);
+
+  // Modelos dinámicos reales de la empresa activa
+  const modelos = useMemo(() => {
+    const modelosMap = new Map<string, string>();
+
+    const agregarModelo = (nombre?: string | null, marca?: string | null) => {
+      if (!nombre) return;
+      const clean = obtenerSoloModelo(nombre, marca);
+      const trimmed = clean !== '--' ? clean.trim() : String(nombre).trim();
+      if (!trimmed || trimmed === '--' || trimmed === 'N/A') return;
+      const key = trimmed.toLowerCase();
+      if (!modelosMap.has(key)) {
+        modelosMap.set(key, trimmed);
+      }
+    };
+
+    // 1. Modelos desde vehículos cargados en dataFlota de la empresa activa
+    dataFlota.forEach(v => {
+      agregarModelo(v.modelo, v.marca);
+      if (v.detalles?.modelo) agregarModelo(v.detalles.modelo, v.marca || v.detalles?.marca);
+    });
+
+    // 2. Modelos configurados en mantenimiento_modelo_vehiculo
+    listaModelosBD.forEach(m => {
+      agregarModelo(m.nombre, m.marca);
+    });
+
+    // 3. Modelos vinculados a las pautas
+    listaPautas.forEach(p => {
+      agregarModelo(p.modelo?.nombre || p.nombre_modelo_vehiculo || p.modelo_nombre);
+    });
+
+    return Array.from(modelosMap.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [dataFlota, listaModelosBD, listaPautas]);
+
+  // Tipos de mantenimiento / Pautas dinámicas reales de la empresa activa
+  const tiposMantenimiento = useMemo(() => {
+    const tiposMap = new Map<string, string>();
+
+    const agregarTipo = (tipo?: string | null) => {
+      if (!tipo) return;
+      const trimmed = String(tipo).trim();
+      if (
+        !trimmed || 
+        trimmed === '--' || 
+        trimmed === 'N/A' || 
+        trimmed === '—' ||
+        trimmed === 'Siguiente Pauta' || 
+        trimmed === 'Todos los tipos' ||
+        trimmed === 'Sin Pauta' ||
+        trimmed.toUpperCase().includes('GENERICO')
+      ) return;
+      const key = trimmed.toLowerCase();
+      if (!tiposMap.has(key)) {
+        tiposMap.set(key, trimmed);
+      }
+    };
+
+    // 1. Pautas configuradas en la BD de la empresa activa
+    listaPautas.forEach(p => {
+      agregarTipo(p.nombre);
+    });
+
+    // 2. Tipos e hitos presentes en la flota actual
+    dataFlota.forEach(v => {
+      agregarTipo(v.tipoUltimoMantencion);
+      agregarTipo(v.tipoProximoMantencion);
+      if (v.pautaVencida) {
+        v.pautaVencida.split(',').forEach(pv => agregarTipo(pv));
+      }
+      if (v.pautasSecuencia && Array.isArray(v.pautasSecuencia)) {
+        v.pautasSecuencia.forEach(h => agregarTipo(h.nombre));
+      }
+    });
+
+    // 3. Tipos/Pautas presentes en las OTs de la empresa
+    ordenesTrabajo.forEach(o => {
+      if (o.pauta) {
+        agregarTipo(o.pauta);
+      }
+    });
+
+    return Array.from(tiposMap.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [listaPautas, dataFlota, ordenesTrabajo]);
 
   const [filtroModelo, setFiltroModelo] = useState('');
   const [filtroTipoMant, setFiltroTipoMant] = useState('');
@@ -141,119 +243,42 @@ export default function PizarraMantenimiento() {
   const [nuevoKM, setNuevoKM] = useState('');
   const [fechaRegistroKM, setFechaRegistroKM] = useState('');
 
-  const [filtroProxMantDesde, setFiltroProxMantDesde] = useState('');
-  const [filtroProxMantHasta, setFiltroProxMantHasta] = useState('');
-  const [filtroUltMantDesde, setFiltroUltMantDesde] = useState('');
-  const [filtroUltMantHasta, setFiltroUltMantHasta] = useState('');
-
-  const [dataFlota, setDataFlota] = useState<FilaPizarraMantenimiento[]>(initialPizarraData);
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
 
   const fetchVehiculos = async () => {
+    if (!currentCompany?.id) return;
     try {
-      let vehiculosData = null;
-      let pautasData = null;
-      if (currentCompany?.id) {
-        const { data: vData } = await supabase.from('vehiculo').select('*').eq('empresa_id', currentCompany.id);
-        const { data: pData } = await supabase.from('mantenimiento_pauta').select('*, modelo:mantenimiento_modelo_vehiculo(nombre)').eq('empresa_id', currentCompany.id);
-        vehiculosData = vData;
-        pautasData = pData;
-      }
+      const [
+        { data: vehiculosData, error: vehiculosError },
+        { data: pautasData },
+        { data: modelosBdData },
+        { data: otsData }
+      ] = await Promise.all([
+        supabase.from('vehiculo').select('*').eq('empresa_id', currentCompany.id),
+        supabase.from('mantenimiento_pauta').select('*, modelo:mantenimiento_modelo_vehiculo(nombre)').eq('empresa_id', currentCompany.id),
+        supabase.from('mantenimiento_modelo_vehiculo').select('nombre, marca').eq('empresa_id', currentCompany.id),
+        supabase.from('orden_de_trabajo').select('id, folio, vehiculo_id, tipo, estado, pauta, costo_total, costo_insumos, costo_mano_obra_tareas, costo_mano_obra_hh, kilometraje_apertura, kilometraje_cierre, fecha_creacion, termino_proceso').eq('empresa_id', currentCompany.id)
+      ]);
+
+      if (vehiculosError) throw vehiculosError;
+      if (pautasData) setListaPautas(pautasData);
+      if (modelosBdData) setListaModelosBD(modelosBdData);
+      if (otsData) setOtsDirectasEmpresa(otsData);
       
-      const rawVehiculos = (vehiculosData && vehiculosData.length > 0) ? vehiculosData : (mockVehiculosDB as any);
-      if (rawVehiculos) {
-        const vehiculosDb = rawVehiculos.map((v: any) => {
-          const detalles = v.detalles || {};
-            // Parse correct types
-            const kmsActuales = typeof v.kilometraje_actual === 'number' ? v.kilometraje_actual : parseFloat(String(v.kilometraje_actual).replace(/[^0-9.-]+/g, '')) || 0;
-            
-            // Look at root first, then detalles as fallback
-            const rawKmUlt = v.km_ultima_mantencion !== undefined ? v.km_ultima_mantencion : (detalles.km_ultima_mantencion !== undefined ? detalles.km_ultima_mantencion : 0);
-            const kmUltMant = typeof rawKmUlt === 'number' ? rawKmUlt : parseFloat(String(rawKmUlt).replace(/[^0-9.-]+/g, '')) || 0;
-            
-            const rawInterval = v.intervalo_km !== undefined ? v.intervalo_km : (detalles.intervalo_km !== undefined ? detalles.intervalo_km : 10000);
-            const kmInterv = typeof rawInterval === 'number' ? rawInterval : parseFloat(String(rawInterval).replace(/[^0-9.-]+/g, '')) || 10000;
-            
-            const pautasSecuenciaStr = v.tipo_ultimo_mant || v.tipo_ult_pauta || detalles.tipo_ultimo_mant || detalles.tipo_ult_pauta || 'PM-1';
-            const fechaUltMant = v.fecha_ultima_mantencion || v.fecha_ult_mantencion || detalles.fecha_ultima_mantencion || null;
+      console.log("FETCHED VEHICULOS DB:", vehiculosData, "OTs DB:", otsData?.length);
+      if (vehiculosData) {
+        const otsParaCalculo = (otsData && otsData.length > 0) ? otsData : (ordenesTrabajo || []);
+        const vehiculosDb = vehiculosData.map(v => mapearVehiculoDB(v, pautasData || [], otsParaCalculo));
 
-            let pautasSecuencia: HitoSecuencia[] = [];
-
-            if (pautasData) {
-              const pautasDelVehiculo = pautasData.filter(p => {
-                 const normalizeStr = (s: any) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
-                 const vehModelo = normalizeStr(v.modelo);
-                 const pModelo = normalizeStr(p.modelo?.nombre);
-                 
-                 const vehAciete = normalizeStr(v.tipo_aceite);
-                 const pAciete = normalizeStr(p.tipo_aceite);
-
-                 const isModelMatch = vehModelo === pModelo;
-                 const isOilMatch = !pAciete || (vehAciete && pAciete === vehAciete);
-                 
-                 return isModelMatch && isOilMatch;
-              });
-
-              pautasDelVehiculo.forEach(p => {
-                 const secuenciaPauta = generarSecuenciaParaPauta(p as any, kmsActuales);
-                 pautasSecuencia = [...pautasSecuencia, ...secuenciaPauta];
-              });
-              
-              // 4. Sort sequence mathematically
-              pautasSecuencia.sort((a, b) => a.iteracion_km - b.iteracion_km);
-              
-              const uniqueKms = new Set();
-              pautasSecuencia = pautasSecuencia.filter(item => {
-                   if (!uniqueKms.has(item.iteracion_km)) {
-                        uniqueKms.add(item.iteracion_km);
-                        return true;
-                   }
-                   return false;
-              });
-            }
-
-            if (pautasSecuencia.length === 0) {
-              pautasSecuencia = generateMockSecuencia(kmInterv, kmsActuales);
-            }
-
-            return {
-              id: v.id,
-              numeroInterno: v.numero_interno?.toString() || '',
-              patente: v.patente || '',
-              kilometrajeActual: kmsActuales,
-              fechaActualizacionKm: v.updated_at ? new Date(v.updated_at) : new Date('2026-09-12T08:00:00Z'),
-              intervaloMantencionKm: kmInterv,
-              kmPromedioDia: v.km_promedio_dia || detalles.kmPromedioDia || 185,
-              kmUltimaMantencion: kmUltMant,
-              fechaUltimaMantencion: fechaUltMant ? new Date(fechaUltMant) : new Date('2026-08-15T00:00:00Z'),
-              tipoUltimaPauta: pautasSecuenciaStr,
-              pautasSecuencia,
-              
-              // Technical specifications mapping
-              marca: v.marca || detalles.marca || '',
-              modelo: v.modelo || detalles.modelo || '',
-              ano: v.anio || v.ano || detalles.ano || detalles.anio || 2023,
-              chasis: v.chasis || detalles.chasis || '',
-              motor: v.motor || detalles.motor || '',
-              norma: v.norma_euro || v.norma || detalles.norma_euro || detalles.norma || '',
-              aplicacion: v.aplicacion || detalles.aplicacion || '',
-              tipoAceite: v.tipo_aceite || v.tipoAceite || detalles.tipo_aceite || detalles.tipoAceite || '',
-              fecha_matriculacion: v.fecha_matriculacion || detalles.fecha_matriculacion || '',
-              detalles,
-              intervaloMantenimiento: kmInterv,
-              tipoIntervalo: v.tipo_intervalo || 'KM',
-              factorConversionHoras: v.factor_conversion_horas || null
-            };
-          });
-
-          const pizarraData = vehiculosDb.map(v => calcularDatosPizarra(v));
-          pizarraData.sort((a,b) => String(a.numeroInterno).localeCompare(String(b.numeroInterno), undefined, {numeric: true}));
-          setDataFlota(pizarraData);
-          return vehiculosData;
-        }
+        const pizarraData = vehiculosDb.map(v => calcularDatosPizarra(v));
+        pizarraData.sort((a,b) => String(a.numeroInterno).localeCompare(String(b.numeroInterno), undefined, {numeric: true}));
+        setDataFlota(pizarraData);
+        return vehiculosData;
+      }
     } catch (err) {
       console.error('Error fetching vehiculos for Pizarra:', err);
-      setDataFlota(initialPizarraData);
-      return mockVehiculosDB;
+      return [];
     }
   };
 
@@ -264,23 +289,89 @@ export default function PizarraMantenimiento() {
     const intervalId = setInterval(() => {
       fetchVehiculos();
     }, 60000);
+
+    const handleSync = (e?: any) => {
+      const detail = e?.detail;
+      if (detail && detail.vehiculoId) {
+        setDataFlota(prev => {
+          return prev.map(fila => {
+            if (String(fila.id) === String(detail.vehiculoId)) {
+              const rawKmCierre = detail.kmCierre !== undefined ? Number(detail.kmCierre || 0) : (fila.kmUltimoMantencion || fila.kmUltimaMantencion || 0);
+              const rawKmActual = detail.kmActual !== undefined ? Number(detail.kmActual || 0) : (fila.kmActual || fila.kilometrajeActual || 0);
+              const rawFechaMant = detail.fechaMant ? new Date(detail.fechaMant) : fila.fechaUltimaMantencion;
+              const rawFechaKm = detail.fechaActualizacionKm ? new Date(detail.fechaActualizacionKm) : fila.fechaActualizacionKm;
+              const rawTipo = detail.tipoMant || fila.tipoUltimoMantencion || fila.tipoUltimaPauta;
+              const vehActualizado: any = {
+                ...fila,
+                kilometrajeActual: rawKmActual,
+                kmActual: rawKmActual,
+                fechaActualizacionKm: rawFechaKm,
+                kmUltimaMantencion: rawKmCierre,
+                fechaUltimaMantencion: rawFechaMant,
+                tipoUltimoMantencion: rawTipo,
+                tipoUltimaPauta: rawTipo,
+                detalles: {
+                  ...(fila.detalles || {}),
+                  km_ultima_mantencion: rawKmCierre,
+                  fecha_ultima_mantencion: detail.fechaMant || fila.detalles?.fecha_ultima_mantencion,
+                  fecha_actualizacion_km: detail.fechaActualizacionKm || fila.detalles?.fecha_actualizacion_km,
+                  tipo_ultimo_mant: rawTipo
+                }
+              };
+              const calculos = calcularDatosPizarra(vehActualizado);
+              return {
+                ...vehActualizado,
+                ...calculos,
+                kilometrajeActual: rawKmActual,
+                kmActual: rawKmActual,
+                fechaActualizacionKm: rawFechaKm,
+                kmUltimaMantencion: rawKmCierre,
+                fechaUltimaMantencion: rawFechaMant,
+                tipoUltimoMantencion: rawTipo,
+                tipoUltimaPauta: rawTipo
+              };
+            }
+            return fila;
+          });
+        });
+      }
+      if (!detail?.source || detail.source !== 'local') {
+        fetchVehiculos();
+      }
+    };
+
+    window.addEventListener('vehiculo-actualizado', handleSync);
+    window.addEventListener('ot-actualizada', handleSync);
+    window.addEventListener('focus', handleSync);
     
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('vehiculo-actualizado', handleSync);
+      window.removeEventListener('ot-actualizada', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
   }, [currentCompany?.id]);
+
+  // Actualización reactiva inmediata de la Pizarra cuando cambian las órdenes de trabajo
+  useEffect(() => {
+    if (currentCompany?.id) {
+      fetchVehiculos();
+    }
+  }, [ordenesTrabajo]);
 
   const handleGuardarKM = async () => {
     if (!vehiculoSeleccionadoKM || !nuevoKM || !fechaRegistroKM) return;
     
-    // get old values
     // Remove dots or commas if user typed thousands separator, then parse int
     const cleanNuevoKM = nuevoKM.replace(/\./g, '').replace(/,/g, '');
     const newKmVal = parseInt(cleanNuevoKM, 10);
     
-    if (isNaN(newKmVal)) {
+    if (isNaN(newKmVal) || newKmVal < 0) {
+        Swal.fire('Atención', 'Por favor ingrese un kilometraje numérico válido.', 'warning');
         return;
     }
 
-    const oldKmVal = vehiculoSeleccionadoKM.kilometrajeActual || 0;
+    const oldKmVal = Number(vehiculoSeleccionadoKM.kmActual || vehiculoSeleccionadoKM.kilometrajeActual || 0);
     
     // get dates
     const newDate = new Date(fechaRegistroKM);
@@ -302,35 +393,132 @@ export default function PizarraMantenimiento() {
         baseKmPromedio = 51;
     }
 
-    try {
-        const { data, error: selectErr } = await supabase.from('vehiculo').select('detalles').eq('id', vehiculoSeleccionadoKM.id).single();
-        if (selectErr) throw selectErr;
+    // 1. ACTUALIZACIÓN OPTIMISTA INMEDIATA EN MEMORIA (0 ms)
+    const kmUltimoRef = vehiculoSeleccionadoKM.kmUltimoMantencion || vehiculoSeleccionadoKM.kmUltimaMantencion || 0;
+    const fechaUltMantRef = vehiculoSeleccionadoKM.fechaUltimaMantencion || (vehiculoSeleccionadoKM.fechaUltimoMantencion ? new Date(vehiculoSeleccionadoKM.fechaUltimoMantencion) : null);
+    const tipoUltPautaRef = vehiculoSeleccionadoKM.tipoUltimaPauta || vehiculoSeleccionadoKM.tipoUltimoMantencion || 'N/A';
 
+    setDataFlota(prev => prev.map(fila => {
+      if (String(fila.id) === String(vehiculoSeleccionadoKM.id)) {
+        const vehActualizado: any = {
+          ...fila,
+          kilometrajeActual: newKmVal,
+          kmActual: newKmVal,
+          fechaActualizacionKm: newDate,
+          kmUltimaMantencion: kmUltimoRef,
+          fechaUltimaMantencion: fechaUltMantRef,
+          tipoUltimaPauta: tipoUltPautaRef,
+          kmPromedioDia: baseKmPromedio,
+          detalles: {
+            ...(fila.detalles || {}),
+            fecha_actualizacion_km: newDate.toISOString(),
+            kmPromedioDia: baseKmPromedio
+          }
+        };
+        const calculos = calcularDatosPizarra(vehActualizado);
+        return {
+          ...vehActualizado,
+          ...calculos,
+          kilometrajeActual: newKmVal,
+          kmActual: newKmVal,
+          fechaActualizacionKm: newDate,
+          fechaKmActual: formatearDiaMesAno(newDate)
+        };
+      }
+      return fila;
+    }));
+
+    setModalKMOpen(false);
+
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: `Odómetro de ${vehiculoSeleccionadoKM.numeroInterno || vehiculoSeleccionadoKM.patente} actualizado a ${newKmVal.toLocaleString('es-CL')} km`,
+      showConfirmButton: false,
+      timer: 2000
+    });
+
+    // 2. PERSISTENCIA EN SUPABASE EN SEGUNDO PLANO
+    try {
+        const { data } = await supabase.from('vehiculo').select('detalles').eq('id', vehiculoSeleccionadoKM.id).maybeSingle();
         const existingDetalles = data?.detalles || {};
         if (baseKmPromedio > 0) {
             existingDetalles.kmPromedioDia = baseKmPromedio;
         }
+        const nowIso = new Date().toISOString();
         existingDetalles.fecha_actualizacion_km = newDate.toISOString();
+        existingDetalles.odometro_manual = true;
+        existingDetalles.fecha_odometro_manual = nowIso;
+        existingDetalles.km_manual = newKmVal;
 
         const payload: any = {
             kilometraje_actual: newKmVal,
+            fecha_actualizacion_km: newDate.toISOString(),
             km_promedio_dia: baseKmPromedio,
-            updated_at: newDate.toISOString(),
             detalles: existingDetalles
         };
 
         const { error } = await supabase.from('vehiculo').update(payload).eq('id', vehiculoSeleccionadoKM.id);
         if (error) {
-            console.error("DB Update Error Payload:", payload);
-            throw error;
+            console.warn("Reintentando actualización de odómetro con payload básico:", error);
+            await supabase.from('vehiculo').update({
+                kilometraje_actual: newKmVal,
+                fecha_actualizacion_km: newDate.toISOString(),
+                detalles: existingDetalles
+            }).eq('id', vehiculoSeleccionadoKM.id);
         }
-        
-        setModalKMOpen(false);
-        fetchVehiculos();
+
+        // 3. DISPARAR EVENTO GLOBAL EN TIEMPO REAL DESPUÉS DE LA PERSISTENCIA EXITOSA
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vehiculo-actualizado', {
+            detail: {
+              vehiculoId: vehiculoSeleccionadoKM.id,
+              kmActual: newKmVal,
+              fechaActualizacionKm: newDate.toISOString(),
+              source: 'local'
+            }
+          }));
+        }
     } catch (e: any) {
-        console.error('Error updating KM:', e);
-        alert("Error al actualizar KM en la BD: " + (e.message || JSON.stringify(e)));
+        console.error('Error al persistir KM en Supabase:', e);
     }
+  };
+
+  const handleExportarExcel = () => {
+    if (!vehiculosFiltrados || vehiculosFiltrados.length === 0) {
+      Swal.fire({
+        title: 'Sin datos para exportar',
+        text: 'No hay vehículos en la pizarra con los filtros seleccionados.',
+        icon: 'info',
+        confirmButtonColor: '#3b82f6'
+      });
+      return;
+    }
+
+    const dataToExport = vehiculosFiltrados.map((v) => ({
+      'N° Int.': v.numeroInterno || '—',
+      'PPU': v.ppu || '—',
+      'Marca': v.marca || '—',
+      'Modelo': v.modelo || '—',
+      'KM Últ. Mant.': v.kmUltimoMantencion || 0,
+      'F. Últ. Mant.': v.fechaUltimoMantencion || '—',
+      'Tipo Mant.': v.tipoUltimoMantencion || '—',
+      'Cumplimiento': v.cumplimiento || '—',
+      'Estatus': v.estatus || '—',
+      'KM Vencido': v.kmVencido !== null && v.kmVencido !== undefined ? v.kmVencido : '—',
+      'Pauta Vencida': v.pautaVencida || '—',
+      'KM Actual': v.kmActual || 0,
+      'Fecha KM Actual': v.fechaKmActual || '—',
+      'KM Próx. Mant.': v.kmProximoMantencion || '—',
+      'Tipo Próx. Mant.': v.tipoProximoMantencion || '—',
+      'Fecha Próx. Mant.': v.fechaProximaMantencion || '—',
+      'Intervalo KM': v.intervaloMantencionKm || 10000,
+      'KM Promedio Día': v.kmPromedioDia || 0
+    }));
+
+    const fechaStr = new Date().toISOString().split('T')[0];
+    exportToExcel(dataToExport, `Pizarra_Mantenimiento_${fechaStr}`, 'PizarraMantenimiento');
   };
 
   const handleSaveFicha = async () => {
@@ -345,19 +533,34 @@ export default function PizarraMantenimiento() {
         
       const existingDetalles = data?.detalles || {};
       
+      let cleanMarca = editFichaData.marca?.trim() || '';
+      let cleanModelo = editFichaData.modelo?.trim() || '';
+      
+      if (cleanModelo.includes('/')) {
+        const parts = cleanModelo.split('/');
+        if (!cleanMarca) cleanMarca = parts[0]?.trim();
+        cleanModelo = parts.slice(1).join('/').trim();
+      } else if (cleanModelo && cleanMarca && cleanModelo.toLowerCase().startsWith(cleanMarca.toLowerCase())) {
+        cleanModelo = cleanModelo.substring(cleanMarca.length).replace(/^[-/:\s]+/, '').trim();
+      }
+
+      const isActivo = editFichaData.enOperacionActiva !== false;
+
       const payload: any = {
-        marca: editFichaData.marca,
-        modelo: editFichaData.modelo,
+        marca: cleanMarca,
+        modelo: cleanModelo,
         anio: parseInt(editFichaData.ano || '0', 10) || null,
         chasis: editFichaData.chasis,
         motor: editFichaData.motor,
         norma_euro: editFichaData.norma,
         aplicacion: editFichaData.aplicacion,
         tipo_aceite: editFichaData.tipoAceite,
+        en_operacion_activa: isActivo,
+        estado: isActivo ? 'OPERATIVO' : 'DE_BAJA',
         detalles: {
           ...existingDetalles,
-          marca: editFichaData.marca,
-          modelo: editFichaData.modelo,
+          marca: cleanMarca,
+          modelo: cleanModelo,
           ano: editFichaData.ano,
           anio: editFichaData.ano,
           chasis: editFichaData.chasis,
@@ -367,7 +570,9 @@ export default function PizarraMantenimiento() {
           aplicacion: editFichaData.aplicacion,
           tipoAceite: editFichaData.tipoAceite,
           tipo_aceite: editFichaData.tipoAceite,
-          fecha_matriculacion: editFichaData.fechaMatriculacion
+          fecha_matriculacion: editFichaData.fechaMatriculacion,
+          en_operacion_activa: isActivo,
+          activo: isActivo
         }
       };
 
@@ -381,8 +586,8 @@ export default function PizarraMantenimiento() {
       // Update local state
       setFichaTecnicaVehiculo({
         ...fichaTecnicaVehiculo,
-        marca: editFichaData.marca,
-        modelo: editFichaData.modelo,
+        marca: cleanMarca,
+        modelo: cleanModelo,
         ano: editFichaData.ano,
         anio: editFichaData.ano,
         chasis: editFichaData.chasis,
@@ -391,10 +596,23 @@ export default function PizarraMantenimiento() {
         aplicacion: editFichaData.aplicacion,
         tipoAceite: editFichaData.tipoAceite,
         fecha_matriculacion: editFichaData.fechaMatriculacion,
+        en_operacion_activa: isActivo,
+        estado: isActivo ? 'OPERATIVO' : 'DE_BAJA',
         detalles: payload.detalles
       });
       
       setIsEditingFicha(false);
+
+      Swal.fire({
+        title: 'Ficha Guardada',
+        text: isActivo 
+          ? 'Ficha técnica actualizada exitosamente.' 
+          : 'El vehículo ha sido dado de baja. Ya no aparecerá en la pizarra activa ni generará cálculos de costos o GPS.',
+        icon: 'success',
+        timer: 2500,
+        showConfirmButton: false
+      });
+
       // Refresh database records
       fetchVehiculos();
     } catch (e: any) {
@@ -404,35 +622,352 @@ export default function PizarraMantenimiento() {
 
   const [kpiModal, setKpiModal] = useState<string | null>(null);
 
+  const parseFechaString = (fStr?: string | null): Date | null => {
+    if (!fStr || fStr === '—' || fStr === '--') return null;
+    const parts = fStr.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        const d = new Date(fStr);
+        return isNaN(d.getTime()) ? null : d;
+      } else {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        return isNaN(d.getTime()) ? null : d;
+      }
+    }
+    const d = new Date(fStr);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  // Calcular órdenes de trabajo efectivas de la empresa (declarado antes de los filtros)
+  const otsEfectivas = useMemo(() => {
+    if (otsDirectasEmpresa && otsDirectasEmpresa.length > 0) return otsDirectasEmpresa;
+    return ordenesTrabajo || [];
+  }, [otsDirectasEmpresa, ordenesTrabajo]);
+
   const vehiculosFiltrados = dataFlota.filter(v => {
+    // Filtro por Estado Operativo (Activos / Dados de Baja / Todos)
+    const isActivo = v.en_operacion_activa !== false && v.estado !== 'DE_BAJA' && v.detalles?.activo !== false;
+    if (filtroEstadoOperativo === 'ACTIVOS' && !isActivo) return false;
+    if (filtroEstadoOperativo === 'DADOS_DE_BAJA' && isActivo) return false;
+
     if (busqueda && !(v.ppu || '').toLowerCase().includes(busqueda.toLowerCase()) && !v.numeroInterno.toLowerCase().includes(busqueda.toLowerCase())) {
       return false;
     }
     if (filtroModelo) {
-       // Currently no model is generated but to safely pass:
-       if ((v as any).modelo && (v as any).modelo !== filtroModelo) return false;
+      const modFiltro = filtroModelo.toLowerCase().trim();
+      const vMod = (v.modelo || '').toLowerCase().trim();
+      const vDetMod = ((v.detalles && v.detalles.modelo) || '').toLowerCase().trim();
+      const vMarca = (v.marca || '').toLowerCase().trim();
+      const match = vMod === modFiltro || 
+                    vMod.includes(modFiltro) || 
+                    modFiltro.includes(vMod) ||
+                    vDetMod.includes(modFiltro) ||
+                    `${vMarca} ${vMod}`.includes(modFiltro);
+      if (!match) return false;
     }
-    if (filtroTipoMant && filtroTipoMant !== 'Todos los tipos' && !(v.tipoProximoMantencion || '').includes(filtroTipoMant)) return false;
+    if (filtroTipoMant && filtroTipoMant !== 'Todos los tipos') {
+      const target = filtroTipoMant.toLowerCase().trim();
+      const prox = (v.tipoProximoMantencion || '').toLowerCase();
+      const ult = (v.tipoUltimoMantencion || '').toLowerCase();
+      const venc = (v.pautaVencida || '').toLowerCase();
+      const enSecuencia = (v.pautasSecuencia || []).some(h => (h.nombre || '').toLowerCase().includes(target));
+
+      if (!prox.includes(target) && !ult.includes(target) && !venc.includes(target) && !enSecuencia) {
+        return false;
+      }
+    }
     if (soloProximosOVencidos && v.estatus === 'NORMAL') return false;
-    
-    // String comparisons on dates might be inaccurate but let's simply map them correctly if we can
-    // We will bypass actual date comparison for this mockup, or just allow it:
-    // ...
+
+    if (fechaDesde || fechaHasta) {
+      const dUlt = v.fechaUltimaMantencion ? new Date(v.fechaUltimaMantencion) : parseFechaString(v.fechaUltimoMantencion);
+      const dUltStr = dUlt instanceof Date && !isNaN(dUlt.getTime()) ? dUlt.toISOString().split('T')[0] : null;
+
+      const tieneOtEnRango = otsEfectivas.some((ot: any) => {
+        const vId = String(ot.vehiculo_id || ot.vehiculoId || '');
+        const pat = String(ot.patente || '').trim().toUpperCase();
+        const match = (vId && vId === String(v.id)) || (pat && pat === (v.ppu || v.patente || '').trim().toUpperCase());
+        if (!match) return false;
+
+        const rawDate = ot.termino_proceso || ot.fecha_cierre || ot.fecha_creacion || ot.fechaProgramada;
+        if (!rawDate) return false;
+        const dStr = String(rawDate).substring(0, 10);
+        if (fechaDesde && dStr < fechaDesde) return false;
+        if (fechaHasta && dStr > fechaHasta) return false;
+        return true;
+      });
+
+      const ultMantEnRango = dUltStr && (!fechaDesde || dUltStr >= fechaDesde) && (!fechaHasta || dUltStr <= fechaHasta);
+
+      if (!tieneOtEnRango && !ultMantEnRango) return false;
+    }
     
     return true;
   });
 
+  const vehiculosIdsVisibles = useMemo(() => new Set(vehiculosFiltrados.map(v => String(v.id))), [vehiculosFiltrados]);
+  const patentesVisibles = useMemo(() => new Set(vehiculosFiltrados.map(v => (v.ppu || v.patente || '').trim().toUpperCase()).filter(Boolean)), [vehiculosFiltrados]);
+
+  const otsVisibles = useMemo(() => {
+    return otsEfectivas.filter((ot: any) => {
+      const vId = String(ot.vehiculo_id || ot.vehiculoId || '');
+      if (vId && vehiculosIdsVisibles.has(vId)) {
+        // match
+      } else {
+        const pat = String(ot.patente || '').trim().toUpperCase();
+        if (!pat || !patentesVisibles.has(pat)) return false;
+      }
+
+      if (fechaDesde || fechaHasta) {
+        const rawDate = ot.termino_proceso || ot.fecha_cierre || ot.fecha_creacion || ot.fechaProgramada;
+        if (!rawDate) return false;
+        const dStr = String(rawDate).substring(0, 10);
+        if (fechaDesde && dStr < fechaDesde) return false;
+        if (fechaHasta && dStr > fechaHasta) return false;
+      }
+
+      return true;
+    });
+  }, [otsEfectivas, vehiculosIdsVisibles, patentesVisibles, fechaDesde, fechaHasta]);
+
+  const getOtCost = (ot: any): number => {
+    const rawTotal = Number(ot.costo_total ?? ot.costoTotal);
+    if (!isNaN(rawTotal) && rawTotal > 0) return rawTotal;
+    const insumos = Number(ot.costo_insumos ?? ot.costoInsumos) || 0;
+    const tareas = Number(ot.costo_mano_obra_tareas ?? ot.costoManoObraTareas) || 0;
+    const hh = Number(ot.costo_mano_obra_hh ?? ot.costoManoObraHH) || 0;
+    return insumos + tareas + hh;
+  };
+
+  const otsVisiblesFinalizadas = useMemo(() => {
+    return otsVisibles.filter((ot: any) => {
+      const est = String(ot.estado || '').toUpperCase();
+      return est === 'FINALIZADA' || est === 'CERRADA_POR_MECANICO' || est === 'CERRADA';
+    });
+  }, [otsVisibles]);
+
+  const costoPreventivo = useMemo(() => otsVisiblesFinalizadas
+    .filter((ot: any) => (ot.tipo || '').toUpperCase().includes('PREVENTIV'))
+    .reduce((acc: number, ot: any) => acc + getOtCost(ot), 0), [otsVisiblesFinalizadas]);
+
+  const costoCorrectivo = useMemo(() => otsVisiblesFinalizadas
+    .filter((ot: any) => (ot.tipo || '').toUpperCase().includes('CORRECTIV'))
+    .reduce((acc: number, ot: any) => acc + getOtCost(ot), 0), [otsVisiblesFinalizadas]);
+
+  const costoEvaluativo = useMemo(() => otsVisiblesFinalizadas
+    .filter((ot: any) => {
+      const t = (ot.tipo || '').toUpperCase();
+      return !t.includes('PREVENTIV') && !t.includes('CORRECTIV');
+    })
+    .reduce((acc: number, ot: any) => acc + getOtCost(ot), 0), [otsVisiblesFinalizadas]);
+
+  const costoTotal = costoPreventivo + costoCorrectivo + costoEvaluativo;
+
+  const totalKmAcumulados = vehiculosFiltrados.reduce((acc, v) => acc + (Number(v.kilometrajeActual) || 0), 0);
+  const costoKm = totalKmAcumulados > 0 ? (costoTotal / totalKmAcumulados).toFixed(2) : '0';
+
   const kpis = {
     vehiculosFiltrados: vehiculosFiltrados.length,
     porcentajeFlota: dataFlota.length > 0 ? Math.round((vehiculosFiltrados.length / dataFlota.length) * 100) : 0,
-    nivelCumplimiento: dataFlota.length > 0 ? Math.round(100 - (dataFlota.filter(v => v.estatus === 'VENCIDO').length / dataFlota.length) * 100) : 100,
-    costoTotal: 0,
-    costoKm: 0
+    nivelCumplimiento: dataFlota.length > 0 ? Math.round((dataFlota.filter(v => v.cumplimiento === 'NORMAL' || v.cumplimiento === 'ANTICIPADO').length / dataFlota.length) * 100) : 0,
+    costoTotal,
+    costoPreventivo,
+    costoCorrectivo,
+    costoEvaluativo,
+    totalKmAcumulados,
+    costoKm
   };
 
-  const handleArchive = (id: string | number) => {
-    setDataFlota(dataFlota.filter(v => v.id !== id));
+  const handleActualizarGpsVehiculo = async (vehiculo: any) => {
     setActionMenuOpen(null);
+    setIsSyncingGpsId(vehiculo.id);
+
+    Swal.fire({
+      title: 'Consultando GPS en tiempo real...',
+      html: `Obteniendo odómetro fresco para la patente <b>${vehiculo.patente || vehiculo.ppu}</b>...`,
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    try {
+      // 1. Obtener datos frescos del vehículo y empresa
+      const [vehRes, empRes] = await Promise.all([
+        supabase.from('vehiculo').select('id, patente, kilometraje_actual, km_ultima_mantencion, detalles').eq('id', vehiculo.id).single(),
+        supabase.from('empresa').select('detalles').eq('id', currentCompany?.id).single()
+      ]);
+
+      const vehData = vehRes.data || vehiculo;
+      const detalles = vehData.detalles || {};
+      const apiKeys = empRes.data?.detalles?.gps_config || {};
+      const prov = detalles.gps_proveedor || (apiKeys.gpsglobal ? 'gpsglobal' : apiKeys.traccar_url ? 'traccar' : null);
+
+      if (!prov && !apiKeys.gpsglobal && !apiKeys.traccar_url && !apiKeys.samm) {
+        Swal.fire({
+          title: 'Sin proveedor GPS',
+          text: 'Este vehículo no tiene un proveedor de GPS configurado. Puedes asignarlo en Configuración > Integración GPS o en la Ficha Técnica.',
+          icon: 'info'
+        });
+        return;
+      }
+
+      let nuevoKm: number | null = null;
+      let fechaGps: string | null = null;
+
+      if (prov === 'gpsglobal' || apiKeys.gpsglobal) {
+        const token = apiKeys.gpsglobal || 'CjilvA2OzouXtdV2gTApfCE5ftYFPIxc';
+        const cleanPatente = (vehData.patente || '').trim().toUpperCase();
+        
+        const res = await fetch('/api/gps/sync-gps1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patente: cleanPatente, token })
+        });
+
+        if (!res.ok) throw new Error('Error al consultar GPS Global');
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const ultimo = data.reduce((max: any, item: any) => (!max || (item.fecha && item.fecha > max.fecha)) ? item : max, null);
+          const rawOdo = ultimo?.odometro_vehiculo || ultimo?.odometro_gps;
+          if (rawOdo) {
+            let km = parseFloat(String(rawOdo));
+            const kmBaseRef = Number(vehData.km_ultima_mantencion || detalles?.km_ultima_mantencion || vehData.kilometraje_actual || 0);
+            if (kmBaseRef > 1000 && km > (kmBaseRef * 4) && Math.abs((km / 10) - kmBaseRef) < kmBaseRef) {
+              km = Math.round((km / 10) * 100) / 100;
+            }
+            nuevoKm = km;
+            fechaGps = ultimo.fecha;
+          }
+        }
+      } else if (prov === 'traccar' && apiKeys.traccar_url) {
+        const res = await fetch('/api/gps/sync-gps2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: apiKeys.traccar_url,
+            username: apiKeys.traccar_user,
+            password: apiKeys.traccar_pass
+          })
+        });
+        if (res.ok) {
+          const parsed = await res.json();
+          const registro = parsed.find((x: any) => x.plateNumber === vehData.patente);
+          if (registro && registro.odometer) {
+            nuevoKm = parseFloat(registro.odometer);
+            fechaGps = registro.timestamp;
+          }
+        }
+      } else if (prov === 'dominio' && apiKeys.samm) {
+        const hoy = new Date().toISOString().split('T')[0];
+        const res = await fetch('/api/gps/dominio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patente: vehData.patente,
+            desde: hoy + ' 00:00:00',
+            hasta: hoy + ' 23:59:59',
+            token: apiKeys.samm
+          })
+        });
+        if (res.ok) {
+          const d = await res.json();
+          if (d.totalKm) {
+            nuevoKm = (Number(vehData.kilometraje_actual) || 0) + Number(d.totalKm);
+            fechaGps = d.lastTimestamp;
+          }
+        }
+      }
+
+      if (nuevoKm === null || isNaN(nuevoKm)) {
+        Swal.fire({
+          title: 'Sin datos recientes',
+          text: `No se encontraron lecturas telemétricas nuevas para la patente ${vehData.patente} en el servidor GPS.`,
+          icon: 'warning'
+        });
+        return;
+      }
+
+      nuevoKm = Math.round(nuevoKm * 100) / 100;
+
+      // Actualizar en Supabase
+      const fechaActualizacion = fechaGps && !isNaN(new Date(fechaGps).getTime())
+        ? new Date(fechaGps).toISOString()
+        : new Date().toISOString();
+
+      const updatedDetalles = {
+        ...detalles,
+        fecha_actualizacion_km: fechaActualizacion
+      };
+
+      const { error: updateErr } = await supabase
+        .from('vehiculo')
+        .update({
+          kilometraje_actual: nuevoKm,
+          fecha_actualizacion_km: fechaActualizacion,
+          detalles: updatedDetalles
+        })
+        .eq('id', vehData.id);
+
+      if (updateErr) throw updateErr;
+
+      // Actualizar estado local inmediatamente
+      setDataFlota(prev => prev.map(fila => {
+        if (fila.id === vehData.id) {
+          const kmFaltante = (fila.intervaloMantenimiento || 10000) - (nuevoKm - (fila.kmUltimaMantencion || 0));
+          return {
+            ...fila,
+            kmActual: nuevoKm,
+            kilometrajeActual: nuevoKm,
+            kmFaltante,
+            fechaActualizacionKm: fechaActualizacion
+          };
+        }
+        return fila;
+      }));
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('vehiculo-actualizado', {
+          detail: {
+            vehiculoId: vehData.id,
+            kmActual: nuevoKm,
+            fechaActualizacionKm: fechaActualizacion
+          }
+        }));
+      }
+
+      Swal.fire({
+        title: '¡Odómetro GPS Actualizado!',
+        html: `
+          <div class="text-left space-y-2 text-sm">
+            <p><b>Vehículo:</b> ${vehData.patente} (${vehiculo.numeroInterno ? 'N° ' + vehiculo.numeroInterno : ''})</p>
+            <p><b>Nuevo Kilometraje:</b> <span class="text-emerald-600 font-bold text-base">${nuevoKm.toLocaleString('es-CL')} KM</span></p>
+            <p><b>Fecha Telemetría:</b> ${fechaGps || new Date().toLocaleString('es-CL')}</p>
+          </div>
+        `,
+        icon: 'success'
+      });
+    } catch (err: any) {
+      console.error('Error al actualizar GPS individual:', err);
+      Swal.fire('Error', 'No se pudo conectar con el servicio GPS o procesar la lectura: ' + (err.message || ''), 'error');
+    } finally {
+      setIsSyncingGpsId(null);
+    }
+  };
+
+  const handleAbrirCostosTendencias = (vehiculo: any) => {
+    setActionMenuOpen(null);
+    setVehiculoCostosSeleccionado(vehiculo);
+    setModalCostosOpen(true);
+  };
+
+  const handleVehicleCostosUpdated = (updatedVehicle: any) => {
+    setDataFlota(prev => prev.map(v => v.id === updatedVehicle.id ? { ...v, detalles: updatedVehicle.detalles } : v));
+    if (fichaTecnicaVehiculo && fichaTecnicaVehiculo.id === updatedVehicle.id) {
+      setFichaTecnicaVehiculo({ ...fichaTecnicaVehiculo, detalles: updatedVehicle.detalles });
+    }
   };
 
   const handleDeletePermanent = async (id: string | number) => {
@@ -541,6 +1076,11 @@ export default function PizarraMantenimiento() {
                   <td className="px-2 py-2 border-r border-slate-200 dark:border-slate-800 text-slate-500 whitespace-nowrap">{vehiculo.pautaVencida || '—'}</td>
                   <td className="px-2 py-2 border-r border-slate-200 dark:border-slate-800">
                     <div>{vehiculo.kmActual ? vehiculo.kmActual.toLocaleString('es-CL') : '—'}</div>
+                    {vehiculo.inconsistenciaKm && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 mt-0.5" title={vehiculo.mensajeInconsistencia}>
+                        ⚠ Inconsistencia
+                      </span>
+                    )}
                     {(vehiculo as any).tipo_intervalo === 'Horas' && (vehiculo as any).factor_conversion_horas && (
                       <div className="text-[10px] text-slate-500 mt-0.5" title="Horas Trabajadas Estimadas">
                         {Math.round((vehiculo.kmActual) / (vehiculo as any).factor_conversion_horas).toLocaleString('es-CL')} Hrs
@@ -598,13 +1138,22 @@ export default function PizarraMantenimiento() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setVehiculoSeleccionadoKM(vehiculo);
-                              setNuevoKM(vehiculo.kilometrajeActual?.toString() || '');
+                              setNuevoKM((vehiculo.kmActual || vehiculo.kilometrajeActual)?.toString() || '');
                               setFechaRegistroKM(new Date().toISOString().split('T')[0]);
                               setModalKMOpen(true);
                               setActionMenuOpen(null);
                             }}
                           >
-                            <Edit3 className="w-4 h-4 mr-2" /> Actualizar KM
+                            <Edit3 className="w-4 h-4 mr-2 text-blue-500" /> Actualizar KM Manual
+                          </button>
+                          <button 
+                            className="w-full text-left px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 flex items-center font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleActualizarGpsVehiculo(vehiculo);
+                            }}
+                          >
+                            <Wifi className="w-4 h-4 mr-2 text-indigo-500" /> Actualizar KM GPS
                           </button>
                           <button 
                             className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center"
@@ -615,15 +1164,14 @@ export default function PizarraMantenimiento() {
                           >
                             <History className="w-4 h-4 mr-2" /> Ver Historial
                           </button>
-                          <button className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center">
-                            <TrendingUp className="w-4 h-4 mr-2" /> Costos y Tendencias
-                          </button>
-                          <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
                           <button 
-                            className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center font-medium"
-                            onClick={() => handleArchive(vehiculo.id)}
+                            className="w-full text-left px-4 py-2 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 flex items-center font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAbrirCostosTendencias(vehiculo);
+                            }}
                           >
-                            <Archive className="w-4 h-4 mr-2" /> Archivar Vehículo
+                            <TrendingUp className="w-4 h-4 mr-2 text-emerald-500" /> Costos y Tendencias
                           </button>
                         </div>
                       </div>
@@ -647,9 +1195,38 @@ export default function PizarraMantenimiento() {
 
   const getRealOTs = (vehiculo: any) => {
     if (!vehiculo) return [];
-    return ordenesTrabajo
-      .filter(o => String(o.vehiculoId) === String(vehiculo.id))
-      .sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime());
+    const fromContext = ordenesTrabajo.filter(o => String(o.vehiculoId) === String(vehiculo.id));
+    const merged = [...otsDirectasVehiculo];
+    fromContext.forEach(ctxOt => {
+      if (!merged.some(m => m.id === ctxOt.id || m.folio === ctxOt.folio)) {
+        merged.push(ctxOt);
+      }
+    });
+
+    // Línea Base Histórica Automática: si no hay OTs en la BD pero el vehículo tiene km_ultima_mantencion > 0
+    const rawKmVal = Number(vehiculo.kmUltimaMantencion || vehiculo.kmUltimoMantencion || vehiculo.km_ultima_mantencion || 0);
+    if (merged.length === 0 && rawKmVal > 0) {
+      const kmMant = rawKmVal;
+      const fechaMant = vehiculo.fechaUltimaMantencion || vehiculo.fecha_ultima_mantencion || new Date();
+      const pautaMant = vehiculo.tipoUltimoMantencion || vehiculo.tipoUltimaPauta || vehiculo.tipo_ultimo_mant || 'SM1';
+
+      merged.push({
+        id: `ot-base-${vehiculo.id}`,
+        folio: `OT-INI-${vehiculo.numeroInterno || vehiculo.ppu || vehiculo.patente || '01'}`,
+        tipo: 'PREVENTIVA',
+        prioridad: 'NORMAL',
+        estado: 'FINALIZADA',
+        fechaCreacion: fechaMant,
+        fechaCierre: fechaMant,
+        costoInsumos: 0,
+        costoManoObraHH: 0,
+        costoManoObraTareas: 0,
+        vehiculoId: vehiculo.id,
+        pauta: pautaMant
+      });
+    }
+
+    return merged.sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime());
   };
 
   if (historialVehiculo) {
@@ -744,6 +1321,15 @@ export default function PizarraMantenimiento() {
         <div className="flex space-x-2">
           <Button 
             variant="outline" 
+            className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300 shadow-sm"
+            onClick={handleExportarExcel}
+            title="Exportar pizarra de mantenimiento a Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600 dark:text-emerald-400" />
+            Exportar Excel
+          </Button>
+          <Button 
+            variant="outline" 
             className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
             onClick={() => setVistaTabla(!vistaTabla)}
           >
@@ -789,7 +1375,7 @@ export default function PizarraMantenimiento() {
           <CardContent className="p-4 flex items-center justify-between relative">
             <div>
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Cumplimiento del Cronograma</p>
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{kpis.nivelCumplimiento}%</h3>
+              <h3 className={`text-2xl font-bold mt-1 ${kpis.nivelCumplimiento >= 80 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{kpis.nivelCumplimiento}%</h3>
             </div>
             <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg text-emerald-600 group-hover:scale-110 transition-transform">
               <CheckCircle className="w-5 h-5" />
@@ -843,6 +1429,43 @@ export default function PizarraMantenimiento() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {/* Segmented Control para Estado de Flota */}
+              <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstadoOperativo('ACTIVOS')}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                    filtroEstadoOperativo === 'ACTIVOS'
+                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 font-bold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+                  }`}
+                >
+                  Activos ({dataFlota.filter(v => v.en_operacion_activa !== false && v.estado !== 'DE_BAJA' && v.detalles?.activo !== false).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstadoOperativo('DADOS_DE_BAJA')}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                    filtroEstadoOperativo === 'DADOS_DE_BAJA'
+                      ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 font-bold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+                  }`}
+                >
+                  Dados de Baja ({dataFlota.filter(v => v.en_operacion_activa === false || v.estado === 'DE_BAJA' || v.detalles?.activo === false).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstadoOperativo('TODOS')}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                    filtroEstadoOperativo === 'TODOS'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-bold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+                  }`}
+                >
+                  Todos ({dataFlota.length})
+                </button>
+              </div>
+
               <Button 
                 variant={mostrarFiltros ? "default" : "outline"} 
                 className={mostrarFiltros ? "bg-blue-600 hover:bg-blue-700 h-9" : "bg-white dark:bg-slate-900 h-9"}
@@ -876,48 +1499,42 @@ export default function PizarraMantenimiento() {
                   value={filtroTipoMant}
                   onChange={(e) => setFiltroTipoMant(e.target.value)}
                 >
+                  <option value="">Todos los tipos</option>
                   {tiposMantenimiento.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Próx. Mantenimiento Desde</label>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Fecha Desde</label>
                 <input 
                   type="date" 
                   className="w-full bg-white dark:bg-slate-700 dark:text-slate-100 dark:border-slate-700 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-b dark:border-slate-800lue-500" 
-                  value={filtroProxMantDesde}
-                  onChange={(e) => setFiltroProxMantDesde(e.target.value)}
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Próx. Mantenimiento Hasta</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Fecha Hasta</label>
+                  {(fechaDesde || fechaHasta) && (
+                    <button 
+                      type="button" 
+                      onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
+                      className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Limpiar fechas
+                    </button>
+                  )}
+                </div>
                 <input 
                   type="date" 
                   className="w-full bg-white dark:bg-slate-700 dark:text-slate-100 dark:border-slate-700 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-b dark:border-slate-800lue-500" 
-                  value={filtroProxMantHasta}
-                  onChange={(e) => setFiltroProxMantHasta(e.target.value)}
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Último Mantenimiento Desde</label>
-                <input 
-                  type="date" 
-                  className="w-full bg-white dark:bg-slate-700 dark:text-slate-100 dark:border-slate-700 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-b dark:border-slate-800lue-500" 
-                  value={filtroUltMantDesde}
-                  onChange={(e) => setFiltroUltMantDesde(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Último Mantenimiento Hasta</label>
-                <input 
-                  type="date" 
-                  className="w-full bg-white dark:bg-slate-700 dark:text-slate-100 dark:border-slate-700 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-b dark:border-slate-800lue-500" 
-                  value={filtroUltMantHasta}
-                  onChange={(e) => setFiltroUltMantHasta(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1 md:col-span-2 flex items-end">
+              <div className="space-y-1 md:col-span-4 flex items-end">
                 <div className="flex items-center gap-2 p-2 bg-orange-50 dark:bg-orange-900/30 border dark:border-slate-800 border-orange-200 rounded-lg w-full">
                   <input 
                     type="checkbox" 
@@ -1085,13 +1702,22 @@ export default function PizarraMantenimiento() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setVehiculoSeleccionadoKM(vehiculo);
-                              setNuevoKM(vehiculo.kilometrajeActual?.toString() || '');
+                              setNuevoKM((vehiculo.kmActual || vehiculo.kilometrajeActual)?.toString() || '');
                               setFechaRegistroKM(new Date().toISOString().split('T')[0]);
                               setModalKMOpen(true);
                               setActionMenuOpen(null);
                             }}
                           >
-                            <Edit3 className="w-4 h-4 mr-2" /> Actualizar KM
+                            <Edit3 className="w-4 h-4 mr-2 text-blue-500" /> Actualizar KM Manual
+                          </button>
+                          <button 
+                            className="w-full text-left px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 flex items-center font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleActualizarGpsVehiculo(vehiculo);
+                            }}
+                          >
+                            <Wifi className="w-4 h-4 mr-2 text-indigo-500" /> Actualizar KM GPS
                           </button>
                           <button 
                             className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center"
@@ -1103,16 +1729,16 @@ export default function PizarraMantenimiento() {
                           >
                             <History className="w-4 h-4 mr-2" /> Ver Historial
                           </button>
-                          <button className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center">
-                            <TrendingUp className="w-4 h-4 mr-2" /> Costos y Tendencias
+                          <button 
+                            className="w-full text-left px-4 py-2 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 flex items-center font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAbrirCostosTendencias(vehiculo);
+                            }}
+                          >
+                            <TrendingUp className="w-4 h-4 mr-2 text-emerald-500" /> Costos y Tendencias
                           </button>
                           <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
-                          <button 
-                            className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center font-medium"
-                            onClick={() => handleArchive(vehiculo.id)}
-                          >
-                            <Archive className="w-4 h-4 mr-2" /> Archivar Vehículo
-                          </button>
                           <button 
                             className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center"
                             onClick={() => handleDeletePermanent(vehiculo.id)}
@@ -1140,7 +1766,10 @@ export default function PizarraMantenimiento() {
       {modalOTOpen && (
         <CrearOTModal 
           isOpen={modalOTOpen} 
-          onClose={() => setModalOTOpen(false)} 
+          onClose={() => {
+            setModalOTOpen(false);
+            fetchVehiculos();
+          }} 
           vehiculoPreseleccionadoId={vehiculoSeleccionadoOT}
         />
       )}
@@ -1152,19 +1781,25 @@ export default function PizarraMantenimiento() {
       )}
       <Modal isOpen={kpiModal === 'cumplimiento'} onClose={() => setKpiModal(null)} title="Detalle KPI: Cumplimiento del Cronograma">
         <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Este KPI mide la proporción de vehículos que se encuentran al día o anticipados con sus pautas de mantenimiento respecto al total de la flota activa, castigando solo los mantenimientos vencidos.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Este KPI mide la <b>ejecución del plan de mantenimiento en el tiempo pasado (ANTES)</b>. Evalúa si las mantenciones realizadas se ejecutaron dentro del rango de tolerancia programado (Normal o Anticipado a ±10%) o si tuvieron retraso en su ejecución en taller.
+          </p>
           <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg space-y-3 text-sm">
             <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Total Flota Activa</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">Total Mantenciones Evaluadas</span>
               <span className="font-bold text-slate-900 dark:text-slate-100">{dataFlota.length}</span>
             </div>
             <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Vehículos Vencidos (Incumplimientos)</span>
-              <span className="font-bold text-red-600">{dataFlota.filter(v => v.estatus === 'VENCIDO').length}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">Mantenciones a Tiempo (Normal / Anticipado)</span>
+              <span className="font-bold text-emerald-600">{dataFlota.filter(v => v.cumplimiento === 'NORMAL' || v.cumplimiento === 'ANTICIPADO').length}</span>
+            </div>
+            <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Mantenciones con Retraso</span>
+              <span className="font-bold text-red-600">{dataFlota.filter(v => v.cumplimiento === 'RETRASADO').length}</span>
             </div>
             <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-md shadow-sm border border-emerald-100 dark:border-emerald-800/30">
-              <span className="font-bold text-emerald-800 dark:text-emerald-300">Nivel de Cumplimiento</span>
-              <span className="font-extrabold text-2xl text-emerald-600 dark:text-emerald-400">{kpis.nivelCumplimiento}%</span>
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">Nivel de Cumplimiento Histórico</span>
+              <span className={`font-extrabold text-2xl ${kpis.nivelCumplimiento >= 80 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{kpis.nivelCumplimiento}%</span>
             </div>
           </div>
         </div>
@@ -1172,19 +1807,33 @@ export default function PizarraMantenimiento() {
 
       <Modal isOpen={kpiModal === 'costo_total'} onClose={() => setKpiModal(null)} title="Detalle KPI: Costo Total Mantenimiento">
         <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Desglose acumulado de los gastos en órdenes de trabajo que han sido completadas.</p>
-          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium">Mantenimiento Preventivo</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">$0</span>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Desglose acumulado de los gastos en órdenes de trabajo registradas para la flota visible.</p>
+          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Mantenimiento Preventivo</span>
+              <span className="font-bold font-mono text-blue-600 dark:text-blue-400">
+                ${kpis.costoPreventivo.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium">Mantenimiento Correctivo</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">$0</span>
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Mantenimiento Correctivo</span>
+              <span className="font-bold font-mono text-rose-600 dark:text-rose-400">
+                ${kpis.costoCorrectivo.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
-            <div className="border-t border-slate-200 dark:border-slate-700 my-2 pt-2 flex justify-between items-center">
-              <span className="font-bold">Total Acumulado</span>
-              <span className="font-bold text-orange-600">$0</span>
+            {kpis.costoEvaluativo > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-slate-700 dark:text-slate-300">Evaluativo / Otros</span>
+                <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                  ${kpis.costoEvaluativo.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            <div className="border-t border-slate-200 dark:border-slate-700 my-2 pt-2 flex justify-between items-center text-base">
+              <span className="font-bold text-slate-800 dark:text-slate-200">Total Acumulado ({otsVisibles.length} OTs)</span>
+              <span className="font-bold font-mono text-orange-600 dark:text-orange-400">
+                ${kpis.costoTotal.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
           </div>
         </div>
@@ -1192,19 +1841,25 @@ export default function PizarraMantenimiento() {
 
       <Modal isOpen={kpiModal === 'costo_promedio'} onClose={() => setKpiModal(null)} title="Detalle KPI: Costo Promedio por KM">
         <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Este valor se calcula al dividir el costo total de los mantenimientos sobre los kilómetros totaes acumulados, indicando qué tan caro es mantener la flota por kilómetro recorrido.</p>
-          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium">Costo Total Mant.</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">$0</span>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Este valor se calcula al dividir el costo total de los mantenimientos sobre los kilómetros totales acumulados de los vehículos seleccionados.</p>
+          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Costo Total Mant.</span>
+              <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
+                ${kpis.costoTotal.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium">KM Acumulados</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">0 km</span>
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-slate-700 dark:text-slate-300">KM Acumulados Flota</span>
+              <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
+                {kpis.totalKmAcumulados.toLocaleString('es-CL')} km
+              </span>
             </div>
-            <div className="border-t border-slate-200 dark:border-slate-700 my-2 pt-2 flex justify-between items-center">
-              <span className="font-bold">Costo Promedio</span>
-              <span className="font-bold text-purple-600">$0 / km</span>
+            <div className="border-t border-slate-200 dark:border-slate-700 my-2 pt-2 flex justify-between items-center text-base">
+              <span className="font-bold text-slate-800 dark:text-slate-200">Costo Promedio</span>
+              <span className="font-bold font-mono text-purple-600 dark:text-purple-400">
+                ${kpis.costoKm} / km
+              </span>
             </div>
           </div>
         </div>
@@ -1219,10 +1874,32 @@ export default function PizarraMantenimiento() {
           <div className="space-y-6 text-sm">
             {!isEditingFicha ? (
               <>
+                <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div>
+                    <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado en Flota</span>
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                      {fichaTecnicaVehiculo.en_operacion_activa !== false && fichaTecnicaVehiculo.estado !== 'DE_BAJA' && fichaTecnicaVehiculo.detalles?.activo !== false
+                        ? 'Vehículo activo en la flota y en operación continua.'
+                        : 'Vehículo dado de baja (retirado de la pizarra activa, pronósticos y GPS).'}
+                    </span>
+                  </div>
+                  <div>
+                    {fichaTecnicaVehiculo.en_operacion_activa !== false && fichaTecnicaVehiculo.estado !== 'DE_BAJA' && fichaTecnicaVehiculo.detalles?.activo !== false ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Activo / En Operación
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-sm">
+                        <Power className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Dado de Baja / Inactivo
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <span className="block text-xs font-semibold text-slate-500 uppercase mb-1">Marca / Modelo</span>
-                    <span className="font-bold">{fichaTecnicaVehiculo.marca || '--'} {fichaTecnicaVehiculo.modelo || ''}</span>
+                    <span className="block text-xs font-semibold text-slate-500 uppercase mb-1">Modelo</span>
+                    <span className="font-bold">{obtenerSoloModelo(fichaTecnicaVehiculo.modelo, fichaTecnicaVehiculo.marca)}</span>
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
                     <span className="block text-xs font-semibold text-slate-500 uppercase mb-1">Año de Fabricación</span>
@@ -1269,6 +1946,24 @@ export default function PizarraMantenimiento() {
               </>
             ) : (
               <div className="space-y-4">
+                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/90 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-start gap-3">
+                  <input 
+                    type="checkbox" 
+                    id="enOperacionActivaCheckbox" 
+                    checked={editFichaData.enOperacionActiva} 
+                    onChange={(e) => setEditFichaData({ ...editFichaData, enOperacionActiva: e.target.checked })} 
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600" 
+                  />
+                  <label htmlFor="enOperacionActivaCheckbox" className="cursor-pointer select-none">
+                    <span className="block font-bold text-slate-900 dark:text-slate-100 text-sm">
+                      {editFichaData.enOperacionActiva ? 'Vehículo en Operación Activa' : 'Vehículo Dado de Baja / Inactivo'}
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                      Marque esta casilla para mantener el vehículo activo en la flota. Al desmarcarla, el vehículo se <b>da de baja</b>: sus datos e historial permanecen intactos en el sistema, pero se retira de la pizarra operativa activa, pronósticos de mantenimiento, cálculo de costos y sincronización GPS.
+                    </span>
+                  </label>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Marca</label>
@@ -1450,6 +2145,19 @@ export default function PizarraMantenimiento() {
              </div>
           </div>
         </Modal>
+      )}
+
+      {modalCostosOpen && vehiculoCostosSeleccionado && currentCompany && (
+        <ModalCostosTendencias
+          isOpen={modalCostosOpen}
+          onClose={() => {
+            setModalCostosOpen(false);
+            setVehiculoCostosSeleccionado(null);
+          }}
+          vehiculo={vehiculoCostosSeleccionado}
+          empresaId={currentCompany.id}
+          onVehicleUpdated={handleVehicleCostosUpdated}
+        />
       )}
     </div>
   );

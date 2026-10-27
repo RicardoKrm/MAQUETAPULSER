@@ -3,40 +3,18 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Shield, Plus, Search, Filter, History, Box } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
-import { mockEppSSO } from '../../lib/mockSeguridad';
 
-const tallasMap: Record<string, string> = {
-  'EPP-01': '42 (Calzado)',
-  'EPP-02': 'L (Chaleco)',
-  'EPP-03': 'Talla 9 (Guantes)',
-  'EPP-04': 'Universal',
-  'EPP-05': 'Universal SNR 28dB',
-  'EPP-06': 'Mediano (M)'
-};
-
-const mockEpp = mockEppSSO.map(item => ({
-  id: item.id,
-  trabajador: item.trabajador,
-  epp: item.elemento,
-  talla: tallasMap[item.id] || 'Estándar',
-  fecha: item.fechaEntrega,
-  estado: item.estado
-}));
+const mockEpp: any[] = [];
 
 const EppSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredEpp = mockEpp.filter(item =>
-    item.trabajador.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.epp.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de EPP</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Control de entregas, stock e historial de Elementos de Protección Personal (Julio - Septiembre 2026).</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Control de entregas, stock e historial de Elementos de Protección Personal.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="flex items-center gap-2">
@@ -54,25 +32,25 @@ const EppSSO = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Entregas del Mes</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">26</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Items en Stock Crítico</p>
-            <p className="text-2xl font-bold text-orange-500 mt-1">1</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Trabajadores sin EPP Completo</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
+            <p className="text-2xl font-bold text-orange-500 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Costo Estimado Mes</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">$1.850.000</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
       </div>
@@ -109,7 +87,7 @@ const EppSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredEpp.map((item) => (
+                {mockEpp.map((item) => (
                   <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300 font-medium">{item.trabajador}</td>
                     <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">

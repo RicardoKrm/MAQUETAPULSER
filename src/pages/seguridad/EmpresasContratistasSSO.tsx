@@ -2,32 +2,18 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Plus, Search, Filter, Briefcase, Building2, ChevronRight, Activity, Users, Shield } from 'lucide-react';
-import { mockContratistasSSO } from '../../lib/mockSeguridad';
 
-const mockContratistas = mockContratistasSSO.map(c => ({
-  id: c.id,
-  nombre: c.razonSocial,
-  rut: c.rut,
-  rubro: c.servicio,
-  dotacion: c.dotacion,
-  cumplimiento: c.cumplimientoDocumental,
-  estado: c.estado === 'Habilitado' ? 'Activo' : 'Observación'
-}));
+const mockContratistas: any[] = [];
 
 const ContratistasSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredContratistas = mockContratistas.filter(c =>
-    c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.rut.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Empresas Contratistas</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Gestión y control de empresas colaboradoras (Julio - Septiembre 2026).</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Gestión y control de empresas colaboradoras.</p>
         </div>
         <Button className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
@@ -44,7 +30,7 @@ const ContratistasSSO = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Empresas</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">3</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">0</p>
               </div>
             </div>
           </CardContent>
@@ -57,7 +43,7 @@ const ContratistasSSO = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Cumplimiento Global</p>
-                <p className="text-2xl font-bold text-green-600">95.5%</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">0</p>
               </div>
             </div>
           </CardContent>
@@ -70,7 +56,7 @@ const ContratistasSSO = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Dotación Contratista</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">48</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">0</p>
               </div>
             </div>
           </CardContent>
@@ -97,7 +83,7 @@ const ContratistasSSO = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredContratistas.map(empresa => (
+            {mockContratistas.map(empresa => (
               <Card key={empresa.id} className="border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
                 <CardContent className="p-5">
                   <div className="flex justify-between items-start mb-4">

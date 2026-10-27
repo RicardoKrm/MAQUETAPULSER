@@ -4,68 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Search, Filter, Book, CheckCircle2, AlertTriangle, FileText, Download } from 'lucide-react';
 
-const mockNormativas = [
-  {
-    id: 'NORM-01',
-    norma: 'DS 594',
-    requisito: 'Art. 36 y 37',
-    obligacion: 'Condiciones sanitarias básicas, dotación de extintores vigentes y vías de escape despejadas.',
-    evidencia: 'Planillas de inspección mensual y mantención certificada',
-    frecuencia: 'Mensual',
-    responsable: 'Patricia Vergara (SSO)',
-    estado: 'Cumple'
-  },
-  {
-    id: 'NORM-02',
-    norma: 'DS 132',
-    requisito: 'Art. 41 - 47',
-    obligacion: 'Reglamento de Seguridad Minera: Licencias internas y mantención de frenos/dirección en camiones.',
-    evidencia: 'Pautas de mantención y bitácoras de turno firmadas',
-    frecuencia: 'Por turno / Semanal',
-    responsable: 'Jorge Lagos (Jefe Taller)',
-    estado: 'Cumple'
-  },
-  {
-    id: 'NORM-03',
-    norma: 'Ley 16.744',
-    requisito: 'Art. 66',
-    obligacion: 'Constitución y funcionamiento regular del Comité Paritario de Higiene y Seguridad (CPHS).',
-    evidencia: 'Actas de reuniones mensuales firmadas',
-    frecuencia: 'Mensual',
-    responsable: 'Comité Paritario',
-    estado: 'Cumple'
-  },
-  {
-    id: 'NORM-04',
-    norma: 'DS 40',
-    requisito: 'Art. 21',
-    obligacion: 'Obligación de Informar los Riesgos Laborales (ODI / DAS) a todo el personal nuevo y transferido.',
-    evidencia: 'Registros de firma ODI en carpeta personal',
-    frecuencia: 'Al ingreso / Anual',
-    responsable: 'Patricia Vergara (SSO)',
-    estado: 'Cumple'
-  },
-  {
-    id: 'NORM-05',
-    norma: 'DS 298',
-    requisito: 'Art. 15',
-    obligacion: 'Transporte de Cargas Peligrosas: Hojas de datos de seguridad (HDS) y kit de emergencia a bordo.',
-    evidencia: 'Checklist pre-uso de cabina y hoja HDS en guantera',
-    frecuencia: 'Por viaje',
-    responsable: 'Rodrigo Castillo / Conductores',
-    estado: 'Observación'
-  }
-];
+const mockNormativas: any[] = [];
 
 const CumplimientoNormativoSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredNormativas = mockNormativas.filter(n =>
-    n.norma.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    n.requisito.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    n.obligacion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    n.responsable.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
@@ -81,7 +23,7 @@ const CumplimientoNormativoSSO = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cumplimiento Normativo</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Matriz legal y seguimiento de obligaciones reglamentarias (Julio - Septiembre 2026).</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Matriz legal y seguimiento de obligaciones reglamentarias.</p>
         </div>
         <Button variant="outline" className="flex items-center gap-2">
           <Download className="w-4 h-4" />
@@ -93,25 +35,25 @@ const CumplimientoNormativoSSO = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Obligaciones</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">5</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Cumplimiento Legal</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">98.5%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Brechas Detectadas (No Cumple)</p>
             <p className="text-2xl font-bold text-green-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Brechas Detectadas (No Cumple)</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">0</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">En Observación</p>
-            <p className="text-2xl font-bold text-orange-500 mt-1">1</p>
+            <p className="text-2xl font-bold text-orange-500 mt-1">0</p>
           </CardContent>
         </Card>
       </div>
@@ -149,7 +91,7 @@ const CumplimientoNormativoSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredNormativas.map((item) => (
+                {mockNormativas.map((item) => (
                   <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-indigo-600 dark:text-indigo-400">
                       <div className="flex items-center gap-1">

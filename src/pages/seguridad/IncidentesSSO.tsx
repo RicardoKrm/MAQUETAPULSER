@@ -4,41 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Search, Filter, AlertCircle, FileSearch, ShieldAlert } from 'lucide-react';
 
-const mockIncidentes = [
-  {
-    id: 'INC-2026-01',
-    flashRef: 'FLS-2026-01',
-    fecha: '16/07/2026',
-    tipo: 'Cuasi-Accidente (Near Miss)',
-    nivel: 'Bajo',
-    etapa: 'Cerrado'
-  },
-  {
-    id: 'INC-2026-02',
-    flashRef: 'FLS-2026-02',
-    fecha: '19/08/2026',
-    tipo: 'Daño Material Menor en Ruta',
-    nivel: 'Bajo',
-    etapa: 'Cerrado'
-  },
-  {
-    id: 'INC-2026-03',
-    flashRef: 'FLS-2026-03',
-    fecha: '05/09/2026',
-    tipo: 'Derrame Menor de Aceite Hidráulico',
-    nivel: 'Medio',
-    etapa: 'Cerrado'
-  }
-];
+const mockIncidentes: any[] = [];
 
 const IncidentesSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredIncidentes = mockIncidentes.filter(i =>
-    i.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    i.flashRef.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    i.tipo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getNivelBadge = (nivel: string) => {
     switch (nivel) {
@@ -60,7 +29,7 @@ const IncidentesSSO = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Incidentes y Accidentes</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Investigación de causas raíz, medidas correctivas y gestión integral de eventos (Julio - Septiembre 2026).</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Investigación de causas raíz, medidas correctivas y gestión integral de eventos.</p>
         </div>
       </div>
 
@@ -68,25 +37,25 @@ const IncidentesSSO = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Accidentes CTP (Año)</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Accidentes STP (Año)</p>
-            <p className="text-2xl font-bold text-orange-500 mt-1">1</p>
+            <p className="text-2xl font-bold text-orange-500 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Cuasi Accidentes (Año)</p>
-            <p className="text-2xl font-bold text-blue-600 mt-1">2</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Días Perdidos Totales</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
       </div>
@@ -124,7 +93,7 @@ const IncidentesSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredIncidentes.map((incidente) => (
+                {mockIncidentes.map((incidente) => (
                   <tr key={incidente.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-300">
                       <div className="flex items-center gap-2">

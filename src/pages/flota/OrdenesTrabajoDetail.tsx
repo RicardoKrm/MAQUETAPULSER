@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -15,10 +15,14 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { usePermissions } from '../../hooks/usePermissions';
 import { FormularioInspeccion } from './GestionNeumaticos';
+import { OrdenDeTrabajo } from '../../types';
+import { calculateShiftCutoff, cleanObservaciones, extractOtMeta } from '../../lib/shiftUtils';
 
 export default function OrdenesTrabajoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+    const location = useLocation();
+    const fromPizarra = location.state?.fromPizarra;
   const { ordenesTrabajo, vehiculos, kitsRepuesto, tareasEstandar, repuestos, personal, pautas, actualizarOrdenTrabajo, agregarTareaEstandar } = useAppContext();
   const { profile } = useAuth();
   const { activeCompanyId } = useCompany();
@@ -69,15 +73,239 @@ export default function OrdenesTrabajoDetail() {
 
   const [personalTemporal, setPersonalTemporal] = useState('');
 
-  const ot = ordenesTrabajo.find(o => o.id === id || o.folio === id);
+  const otFromContext = ordenesTrabajo.find(o => o.id === id || o.folio === id);
+  const [asyncOt, setAsyncOt] = useState<OrdenDeTrabajo | null>(null);
+  const [loadingOt, setLoadingOt] = useState(!otFromContext && !asyncOt);
+  const ot = (asyncOt && (asyncOt.id === id || asyncOt.folio === id)) ? asyncOt : otFromContext;
+
+  useEffect(() => {
+    if (!id) {
+      setLoadingOt(false);
+      return;
+    }
+
+    let isMounted = true;
+    if (!otFromContext && !asyncOt) {
+      setLoadingOt(true);
+    }
+
+    const loadMissingOt = async () => {
+      // 1. Caso ID de Línea Base virtual: "ot-base-..."
+      if (id.startsWith('ot-base-')) {
+        const vehId = id.replace('ot-base-', '');
+        let veh = vehiculos.find(v => String(v.id) === String(vehId));
+        if (!veh) {
+          const { data } = await supabase.from('vehiculo').select('*').eq('id', vehId).maybeSingle();
+          if (data) {
+            veh = {
+              id: data.id,
+              patente: data.patente || data.numero_interno || 'Sin Patente',
+              modelo: data.modelo || '',
+              marca: data.marca || '',
+              ano: data.anio || '',
+              vin: data.vin || data.chasis || '',
+              kmUltimaMantencion: data.km_ultima_mantencion || 0,
+              tipoUltimoMant: data.tipo_ultimo_mant || ''
+            } as any;
+          }
+        }
+
+        if (veh && isMounted) {
+          const rawKm = Number((veh as any).kmUltimaMantencion || (veh as any).km_ultima_mantencion || 0);
+          const rawFecha = (veh as any).fechaUltimaMantencion || (veh as any).fecha_ultima_mantencion || new Date().toISOString();
+          const pautaNombre = (veh as any).tipoUltimoMant || (veh as any).tipoUltimaPauta || (veh as any).tipo_ultimo_mant || 'SM1';
+
+          const baselineOt: OrdenDeTrabajo = {
+            id: id,
+            folio: `OT-INI-${(veh as any).numeroInterno || (veh as any).numero_interno || veh.patente || '01'}`,
+            empresa_id: activeCompanyId || '',
+            empresaId: activeCompanyId || '',
+            vehiculoId: veh.id,
+            tipo: 'PREVENTIVA',
+            estado: 'FINALIZADA',
+            prioridad: 'MEDIA',
+            kilometrajeApertura: rawKm,
+            kilometrajeCierre: rawKm,
+            fechaCreacion: typeof rawFecha === 'string' ? rawFecha : new Date(rawFecha).toISOString(),
+            fechaProgramada: typeof rawFecha === 'string' ? rawFecha : new Date(rawFecha).toISOString(),
+            inicio_proceso: typeof rawFecha === 'string' ? rawFecha : new Date(rawFecha).toISOString(),
+            termino_proceso: typeof rawFecha === 'string' ? rawFecha : new Date(rawFecha).toISOString(),
+            pauta: pautaNombre,
+            observacionInicial: `Línea Base: Mantención registrada a los ${rawKm.toLocaleString('es-CL')} km.`,
+            observaciones: 'Orden de trabajo inicial generada automáticamente para trazabilidad y línea base histórica.',
+            costoInsumos: 0,
+            costoManoObraHH: 0,
+            costoManoObraTareas: 0,
+            tiempoTrabajadoSegundos: 0,
+            tareasRealizadas: [],
+            insumos: [],
+            historial: [],
+            solicitudes: []
+          };
+          setAsyncOt(baselineOt);
+        }
+        if (isMounted) setLoadingOt(false);
+        return;
+      }
+
+      // 2. Caso normal: consultar directamente a Supabase
+      try {
+        const { data: row } = await supabase
+          .from('orden_de_trabajo')
+          .select('*')
+          .or(`id.eq.${id},folio.eq.${id}`)
+          .maybeSingle();
+
+        if (row && isMounted) {
+          const [tareasRes, insumosRes, histRes, solRes] = await Promise.all([
+            supabase.from('ot_tareas_realizadas').select('*').eq('orden_id', row.id),
+            supabase.from('detalle_insumo_ot').select('*').eq('orden_id', row.id),
+            supabase.from('historial_ot').select('*').eq('orden_id', row.id).order('created_at', { ascending: true }),
+            supabase.from('solicitud_repuesto_ot').select('*').eq('orden_id', row.id).order('created_at', { ascending: true })
+          ]);
+
+          const mappedTareas = (tareasRes.data || []).map((t: any) => ({
+            id: t.id,
+            orden_id: t.orden_id,
+            tarea_estandar_id: t.tarea_estandar_id,
+            tiempo_real_minutos: Number(t.tiempo_real_minutos || 0),
+            costo_real: Number(t.costo_real || 0),
+            tarea_estandar: t.tarea_estandar || {
+              id: t.tarea_estandar_id,
+              descripcion: 'Tarea',
+              costoManoObra: Number(t.costo_real || 0)
+            }
+          }));
+
+          const mappedInsumos = (insumosRes.data || []).map((i: any) => {
+            const catalogRep = repuestos.find(r => r.id === i.repuesto_id);
+            const repObj = i.repuesto || (catalogRep ? {
+              id: catalogRep.id,
+              sku: catalogRep.sku,
+              nombre: catalogRep.nombre,
+              stock_actual: catalogRep.stock_actual,
+              costo_unitario: catalogRep.costo_unitario
+            } : {
+              id: i.repuesto_id,
+              nombre: 'Repuesto/Insumo',
+              costo_unitario: Number(i.costo_unitario_aplicado || 0)
+            });
+            return {
+              id: i.id,
+              orden_id: i.orden_id,
+              repuesto_id: i.repuesto_id,
+              cantidad: Number(i.cantidad || 0),
+              costo_unitario_aplicado: Number(i.costo_unitario_aplicado || i.costo_unitario || 0),
+              costo_total: Number(i.costo_total || (Number(i.cantidad || 0) * Number(i.costo_unitario_aplicado || 0)) || 0),
+              repuesto: repObj
+            };
+          });
+
+          const sumInsumos = mappedInsumos.reduce((acc: number, item: any) => acc + (Number(item.costo_total) || 0), 0);
+          const sumTareas = mappedTareas.reduce((acc: number, item: any) => acc + (Number(item.costo_real) || 0), 0);
+
+          const finalCostoInsumos = mappedInsumos.length > 0 ? sumInsumos : Number(row.costo_insumos || 0);
+          const finalCostoManoObraTareas = mappedTareas.length > 0 ? sumTareas : Number(row.costo_mano_obra_tareas || 0);
+
+          const loadedOt: OrdenDeTrabajo = {
+            id: row.id,
+            folio: row.folio,
+            empresa_id: row.empresa_id,
+            empresaId: row.empresa_id,
+            vehiculoId: row.vehiculo_id,
+            tecnicoResponsable: row.tecnico_responsable || undefined,
+            responsable_id: row.responsable_id || undefined,
+            tecnico_tipo: row.tecnico_tipo || undefined,
+            externo_nombre: row.externo_nombre || undefined,
+            externo_especialidad: row.externo_especialidad || undefined,
+            externo_intervencion: row.externo_intervencion || undefined,
+            tipo: row.tipo as any,
+            estado: row.estado as any,
+            prioridad: row.prioridad as any,
+            inicio_proceso: row.inicio_proceso || undefined,
+            kilometrajeApertura: Number(row.kilometraje_apertura || 0),
+            kilometrajeCierre: row.kilometraje_cierre ? Number(row.kilometraje_cierre) : undefined,
+            fechaCreacion: row.fecha_creacion,
+            fechaProgramada: row.fecha_programada || undefined,
+            horaInicioProgramada: row.hora_inicio_programada || undefined,
+            horaTerminoProgramada: row.hora_termino_programada || undefined,
+            observacionInicial: row.observacion_inicial || undefined,
+            diagnosticoEvaluacion: row.diagnostico_evaluacion || undefined,
+            pauta: row.pauta || undefined,
+            pauta_mantenimiento_id: row.pauta_mantenimiento_id || undefined,
+            kitRepuestos: row.kit_repuestos || undefined,
+            tipoFalla: row.tipo_falla || undefined,
+            sintomas: row.sintomas || undefined,
+            inspeccionTrenMotriz: row.inspeccion_tren_motriz || undefined,
+            eje: row.eje || undefined,
+            presionNeumatico: row.presion_neumatico ? Number(row.presion_neumatico) : undefined,
+            personalOperativo: row.personal_operativo || undefined,
+            proveedor: row.proveedor || undefined,
+            empresaExterna: row.empresa_externa || undefined,
+            rutEmpresa: row.rut_empresa || undefined,
+            valorHH: row.valor_hh ? Number(row.valor_hh) : undefined,
+            presupuestoAprobado: row.presupuesto_aprobado ? Number(row.presupuesto_aprobado) : undefined,
+            observaciones: cleanObservaciones(row.observaciones) || undefined,
+            horasExtrasAutorizadas: extractOtMeta(row.observaciones).horasExtrasAutorizadas,
+            solicitudHorasExtras: extractOtMeta(row.observaciones).solicitudHorasExtras,
+            pausa_motivo: extractOtMeta(row.observaciones).pausa_motivo,
+            costoInsumos: finalCostoInsumos,
+            costoManoObraTareas: finalCostoManoObraTareas,
+            costoManoObraHH: Number(row.costo_mano_obra_hh || 0),
+            tiempoTrabajadoSegundos: Number(row.tiempo_trabajado_segundos || 0),
+            tareasRealizadas: mappedTareas,
+            insumos: mappedInsumos,
+            historial: (histRes.data || []).map((h: any) => ({
+              id: h.id,
+              orden_id: h.orden_id,
+              usuario_nombre: h.usuario_nombre || 'Sistema',
+              comentario: h.comentario || '',
+              created_at: h.created_at || new Date().toISOString()
+            })),
+            solicitudes: (solRes.data || []).map((s: any) => ({
+              id: s.id,
+              orden_id: s.orden_id,
+              repuesto_id: s.repuesto_id,
+              repuesto_nombre: s.repuesto_nombre,
+              cantidad: Number(s.cantidad || 0),
+              estado: s.estado || 'PENDIENTE',
+              fecha_solicitud: s.fecha_solicitud || s.created_at || new Date().toISOString(),
+              created_at: s.created_at || new Date().toISOString(),
+              usuario_nombre: s.usuario_nombre || 'Mecánico',
+              motivo_rechazo: s.motivo_rechazo || ''
+            }))
+          };
+
+          setAsyncOt(loadedOt);
+        }
+      } catch (err) {
+        console.warn("Aviso al consultar OT directamente en BD:", err);
+      } finally {
+        if (isMounted) setLoadingOt(false);
+      }
+    };
+
+    loadMissingOt();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, activeCompanyId, vehiculos, repuestos]);
 
   React.useEffect(() => {
     if (ot) {
       setSelectedTecnico(ot.tecnicoResponsable || '');
       setPersonalTemporal(ot.personalOperativo || '');
+      setNuevoEstado(ot.estado || 'ABIERTA');
+      setKmCierre(ot.kilometrajeCierre ? ot.kilometrajeCierre.toString() : '');
+      setSelectedTipoTecnico(ot.tecnico_tipo || 'INTERNO');
+      setExternoNombre(ot.externo_nombre || '');
+      setExternoEspecialidad(ot.externo_especialidad || '');
+      setExternoIntervencion(ot.externo_intervencion || '');
     }
   }, [ot]);
-  const vehiculo = vehiculos.find(v => v.id === ot?.vehiculoId);
+
+  const vehiculo = vehiculos.find(v => String(v.id) === String(ot?.vehiculoId));
 
   const filteredPautas = (pautas || []).filter(p => {
     if (!vehiculo?.modelo) return true;
@@ -87,17 +315,17 @@ export default function OrdenesTrabajoDetail() {
   });
 
   const [nuevoEstado, setNuevoEstado] = useState(ot?.estado || 'ABIERTA');
-    const [kmCierre, setKmCierre] = useState(ot?.kilometrajeCierre?.toString() || '');
-    const [isUpdatingDb, setIsUpdatingDb] = useState(false);
+  const [kmCierre, setKmCierre] = useState(ot?.kilometrajeCierre?.toString() || '');
+  const [isUpdatingDb, setIsUpdatingDb] = useState(false);
 
-    const [isPautaModalOpen, setIsPautaModalOpen] = useState(false);
-    const [infoView, setInfoView] = useState<'info' | 'costos'>('info');
-    
-    // External worker state
-    const [selectedTipoTecnico, setSelectedTipoTecnico] = useState<'INTERNO' | 'EXTERNO'>(ot?.tecnico_tipo || 'INTERNO');
-    const [externoNombre, setExternoNombre] = useState(ot?.externo_nombre || '');
-    const [externoEspecialidad, setExternoEspecialidad] = useState(ot?.externo_especialidad || '');
-    const [externoIntervencion, setExternoIntervencion] = useState(ot?.externo_intervencion || '');
+  const [isPautaModalOpen, setIsPautaModalOpen] = useState(false);
+  const [infoView, setInfoView] = useState<'info' | 'costos'>('info');
+  
+  // External worker state
+  const [selectedTipoTecnico, setSelectedTipoTecnico] = useState<'INTERNO' | 'EXTERNO'>(ot?.tecnico_tipo || 'INTERNO');
+  const [externoNombre, setExternoNombre] = useState(ot?.externo_nombre || '');
+  const [externoEspecialidad, setExternoEspecialidad] = useState(ot?.externo_especialidad || '');
+  const [externoIntervencion, setExternoIntervencion] = useState(ot?.externo_intervencion || '');
 
     const [isPausaModalOpen, setIsPausaModalOpen] = useState(false);
     const [tiposPausa, setTiposPausa] = useState<any[]>([]);
@@ -112,23 +340,201 @@ export default function OrdenesTrabajoDetail() {
     }, []);
 
     const [timerDisplay, setTimerDisplay] = useState(ot?.tiempoTrabajadoSegundos || 0);
+    const [isHorasExtrasModalOpen, setIsHorasExtrasModalOpen] = useState(false);
+    const [horasExtrasSeleccionadas, setHorasExtrasSeleccionadas] = useState<number>(1);
+    const [motivoHorasExtras, setMotivoHorasExtras] = useState('');
+    const autoPausedRef = useRef(false);
+
+    const isSupervisorOrAdmin = profile?.rol?.nombre === 'Súper Administrador' || 
+                               profile?.rol === 'ADMIN' || 
+                               profile?.rol === 'SUPERVISOR' || 
+                               (profile as any)?.isSupervisor || 
+                               (profile as any)?.rol?.nombre?.toLowerCase().includes('supervisor') ||
+                               (profile as any)?.rol?.nombre?.toLowerCase().includes('administrador');
+
+    const handleDetenerPorTerminoJornada = async (cutoffInfo: any) => {
+        if (!ot || ot.estado !== 'EN_PROCESO' || autoPausedRef.current) return;
+        autoPausedRef.current = true;
+        const newTotal = (ot.tiempoTrabajadoSegundos || 0) + cutoffInfo.cappedElapsedSeconds;
+        setTimerDisplay(newTotal);
+        const cutoffDateStr = cutoffInfo.cutoffTime.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+
+        try {
+            await actualizarOrdenTrabajo({
+                ...ot,
+                estado: 'PAUSADA',
+                pausa_motivo: 'OT detenida por término de jornada',
+                tiempoTrabajadoSegundos: newTotal,
+                historial: [
+                    ...ot.historial,
+                    {
+                        id: Math.random().toString(36).substr(2, 9),
+                        orden_id: ot.id,
+                        comentario: `OT detenida por término de jornada laboral (${cutoffDateStr} hrs${cutoffInfo.horasExtras > 0 ? ` incl. ${cutoffInfo.horasExtras}h extras autorizadas` : ''}). Cronómetro pausado automáticamente hasta el día siguiente.`,
+                        created_at: new Date().toISOString(),
+                        estado_nuevo: 'PAUSADA',
+                        usuario_nombre: 'Sistema (Fin de Jornada)'
+                    }
+                ]
+            });
+        } catch (e) {
+            console.error('Error al auto-pausar OT por término de jornada:', e);
+        }
+    };
 
     React.useEffect(() => {
         let interval: NodeJS.Timeout;
         if (ot?.estado === 'EN_PROCESO') {
-            interval = setInterval(() => {
+            autoPausedRef.current = false;
+            const checkTimer = () => {
                 if (ot?.inicio_proceso) {
-                    const elapsedTime = Math.floor((Date.now() - new Date(ot.inicio_proceso).getTime()) / 1000);
-                    setTimerDisplay((ot.tiempoTrabajadoSegundos || 0) + elapsedTime);
+                    const cutoffInfo = calculateShiftCutoff(ot.inicio_proceso, ot.horaTerminoProgramada, ot.horasExtrasAutorizadas);
+                    if (cutoffInfo && cutoffInfo.isPastCutoff) {
+                        setTimerDisplay((ot.tiempoTrabajadoSegundos || 0) + cutoffInfo.cappedElapsedSeconds);
+                        handleDetenerPorTerminoJornada(cutoffInfo);
+                    } else if (cutoffInfo) {
+                        setTimerDisplay((ot.tiempoTrabajadoSegundos || 0) + cutoffInfo.cappedElapsedSeconds);
+                    } else {
+                        const elapsedTime = Math.floor((Date.now() - new Date(ot.inicio_proceso).getTime()) / 1000);
+                        setTimerDisplay((ot.tiempoTrabajadoSegundos || 0) + elapsedTime);
+                    }
                 } else {
                     setTimerDisplay(prev => prev + 1);
                 }
-            }, 1000);
+            };
+
+            checkTimer();
+            interval = setInterval(checkTimer, 1000);
         } else {
             setTimerDisplay(ot?.tiempoTrabajadoSegundos || 0);
         }
         return () => clearInterval(interval);
-    }, [ot?.estado, ot?.tiempoTrabajadoSegundos, ot?.inicio_proceso]);
+    }, [ot?.estado, ot?.tiempoTrabajadoSegundos, ot?.inicio_proceso, ot?.horaTerminoProgramada, ot?.horasExtrasAutorizadas]);
+
+    const handleSolicitarHorasExtras = async () => {
+        if (!ot) return;
+        const maxPermitido = 2; // Art. 31 Código del Trabajo de Chile
+        const cantidad = Math.min(Math.max(horasExtrasSeleccionadas, 1), maxPermitido);
+
+        if (isSupervisorOrAdmin) {
+            await actualizarOrdenTrabajo({
+                ...ot,
+                horasExtrasAutorizadas: cantidad,
+                solicitudHorasExtras: {
+                    solicitadas: cantidad,
+                    motivo: motivoHorasExtras || 'Autorización directa por Supervisor',
+                    estado: 'APROBADA',
+                    solicitado_en: new Date().toISOString(),
+                    respondido_en: new Date().toISOString(),
+                    respondido_por: profile?.nombre || 'Supervisor'
+                },
+                historial: [
+                    ...ot.historial,
+                    {
+                        id: Math.random().toString(36).substr(2, 9),
+                        orden_id: ot.id,
+                        comentario: `Autorizadas ${cantidad} hora(s) extra(s) por ${profile?.nombre || 'Supervisor'} (Máx. 2h legales). Jornada extendida. Motivo: ${motivoHorasExtras || 'Continuidad de trabajos'}`,
+                        created_at: new Date().toISOString(),
+                        usuario_nombre: profile?.nombre || 'Supervisor'
+                    }
+                ]
+            });
+            Swal.fire({
+                title: 'Horas Extras Autorizadas',
+                text: `Se autorizaron ${cantidad} hora(s) extra(s). La jornada se extendió conforme al límite legal (máximo 2h diarias).`,
+                icon: 'success',
+                confirmButtonColor: '#10b981'
+            });
+        } else {
+            await actualizarOrdenTrabajo({
+                ...ot,
+                solicitudHorasExtras: {
+                    solicitadas: cantidad,
+                    motivo: motivoHorasExtras || 'Requerimiento de tiempo adicional para terminar tareas',
+                    estado: 'PENDIENTE',
+                    solicitado_en: new Date().toISOString(),
+                    solicitado_por: profile?.nombre || ot.tecnicoResponsable || 'Técnico'
+                },
+                historial: [
+                    ...ot.historial,
+                    {
+                        id: Math.random().toString(36).substr(2, 9),
+                        orden_id: ot.id,
+                        comentario: `Solicitud de ${cantidad} hora(s) extra(s) enviada al supervisor por ${profile?.nombre || 'Técnico'}. Motivo: ${motivoHorasExtras || 'Tareas pendientes'}`,
+                        created_at: new Date().toISOString(),
+                        usuario_nombre: profile?.nombre || 'Técnico'
+                    }
+                ]
+            });
+            Swal.fire({
+                title: 'Solicitud Enviada',
+                text: `Se ha enviado la solicitud de ${cantidad} hora(s) extra(s) al supervisor para su autorización (máx. 2h por ley).`,
+                icon: 'info',
+                confirmButtonColor: '#3b82f6'
+            });
+        }
+        setIsHorasExtrasModalOpen(false);
+        setMotivoHorasExtras('');
+    };
+
+    const handleResponderSolicitudHorasExtras = async (aprobar: boolean) => {
+        if (!ot || !ot.solicitudHorasExtras) return;
+        const solicitadas = ot.solicitudHorasExtras.solicitadas || 1;
+        if (aprobar) {
+            await actualizarOrdenTrabajo({
+                ...ot,
+                horasExtrasAutorizadas: solicitadas,
+                solicitudHorasExtras: {
+                    ...ot.solicitudHorasExtras,
+                    estado: 'APROBADA',
+                    respondido_en: new Date().toISOString(),
+                    respondido_por: profile?.nombre || 'Supervisor'
+                },
+                historial: [
+                    ...ot.historial,
+                    {
+                        id: Math.random().toString(36).substr(2, 9),
+                        orden_id: ot.id,
+                        comentario: `Solicitud de ${solicitadas} hora(s) extra(s) APROBADA por supervisor ${profile?.nombre || 'Supervisor'}.`,
+                        created_at: new Date().toISOString(),
+                        usuario_nombre: profile?.nombre || 'Supervisor'
+                    }
+                ]
+            });
+            Swal.fire({
+                title: 'Solicitud Aprobada',
+                text: `Se autorizaron las ${solicitadas} hora(s) extra(s) solicitadas.`,
+                icon: 'success',
+                confirmButtonColor: '#10b981'
+            });
+        } else {
+            await actualizarOrdenTrabajo({
+                ...ot,
+                solicitudHorasExtras: {
+                    ...ot.solicitudHorasExtras,
+                    estado: 'RECHAZADA',
+                    respondido_en: new Date().toISOString(),
+                    respondido_por: profile?.nombre || 'Supervisor'
+                },
+                historial: [
+                    ...ot.historial,
+                    {
+                        id: Math.random().toString(36).substr(2, 9),
+                        orden_id: ot.id,
+                        comentario: `Solicitud de horas extras RECHAZADA por supervisor ${profile?.nombre || 'Supervisor'}. El trabajo se detendrá al final de la jornada estándar.`,
+                        created_at: new Date().toISOString(),
+                        usuario_nombre: profile?.nombre || 'Supervisor'
+                    }
+                ]
+            });
+            Swal.fire({
+                title: 'Solicitud Rechazada',
+                text: 'La solicitud de horas extras ha sido rechazada. La OT se detendrá al término de la jornada.',
+                icon: 'warning',
+                confirmButtonColor: '#64748b'
+            });
+        }
+    };
 
     const handleActualizarEstadoRapido = async (estadoStr: string, pausaInfo?: { id: string, nombre: string }, kmForzado?: number) => {
         if (!ot) return;
@@ -136,7 +542,12 @@ export default function OrdenesTrabajoDetail() {
         const now = new Date().toISOString();
 
         if (estadoStr === 'EN_PROCESO') {
+            autoPausedRef.current = false;
             updates.inicio_proceso = now;
+            updates.pausa_motivo = undefined;
+            if (ot.pausa_motivo === 'OT detenida por término de jornada') {
+                updates.horasExtrasAutorizadas = 0;
+            }
         }
         if (estadoStr === 'PAUSADA' || estadoStr === 'FINALIZADA' || estadoStr === 'CERRADA_POR_MECANICO') {
             updates.tiempoTrabajadoSegundos = timerDisplay;
@@ -150,7 +561,7 @@ export default function OrdenesTrabajoDetail() {
                 if (estadoStr === 'CERRADA_POR_MECANICO') {
                     kmIngresado = window.prompt('Por favor ingrese el Kilometraje de Cierre actual del vehículo:');
                 } else {
-                    kmIngresado = kmCierre; // if called quickly, though UI shouldn't allow it without prompt
+                    kmIngresado = kmCierre;
                     if (!kmIngresado) kmIngresado = window.prompt('Por favor ingrese el Kilometraje de Cierre actual del vehículo:');
                 }
                 kmVal = Number(kmIngresado);
@@ -165,11 +576,16 @@ export default function OrdenesTrabajoDetail() {
                  return;
             }
             updates.kilometrajeCierre = kmVal;
-            // The Supabase trigger 'procesar_cierre_ot' will handle the Vehicle updating properly.
+            if (!ot.pauta || ot.pauta === 'Mantenimiento Preventivo') {
+                if (vehiculo?.tipoUltimoMant) updates.pauta = vehiculo.tipoUltimoMant;
+                else if (filteredPautas.length > 0) updates.pauta = filteredPautas[0].nombre;
+            }
         }
 
         let comentario = `Cambio de estado a ${estadoStr}`;
-        if (estadoStr === 'EN_PROCESO') comentario += ' (Trabajo Iniciado)';
+        if (estadoStr === 'EN_PROCESO') {
+            comentario += ot.pausa_motivo === 'OT detenida por término de jornada' ? ' (Reanudación de trabajos - Nueva Jornada)' : ' (Trabajo Iniciado)';
+        }
         if (estadoStr === 'PAUSADA' && pausaInfo) comentario += ` - Motivo: ${pausaInfo.nombre}`;
 
         setIsUpdatingDb(true);
@@ -231,6 +647,15 @@ export default function OrdenesTrabajoDetail() {
         togglePanel('diagnostico');
     };
 
+    if (loadingOt) {
+      return (
+        <div className="flex flex-col items-center justify-center p-16 space-y-4">
+          <div className="w-8 h-8 border-4 border-cyan-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-medium">Cargando orden de trabajo...</p>
+        </div>
+      );
+    }
+
     if (!ot) return <div className="p-8 text-center text-slate-500 dark:text-slate-400">OT no encontrada</div>;
 
     const handleActualizarEstado = async () => {
@@ -271,8 +696,15 @@ export default function OrdenesTrabajoDetail() {
              return; // hand everything off to the rapid updater
         } else {
              if (!kmCierre || isNaN(kmVal) || kmVal <= 0) {
-                 alert('Debe ingresar un Kilometraje de Cierre válido para finalizar la OT.');
-                 return;
+                 const defaultKm = (ot.kilometrajeApertura && ot.kilometrajeApertura > 0) ? ot.kilometrajeApertura : Number(vehiculo?.kilometrajeActual || (vehiculo as any)?.kilometraje_actual || 0);
+                 const promptVal = window.prompt(`Por favor ingrese el Kilometraje de Cierre del vehículo al finalizar la OT (KM sugerido: ${defaultKm}):`, String(defaultKm || ''));
+                 if (promptVal && !isNaN(Number(promptVal)) && Number(promptVal) > 0) {
+                     kmVal = Number(promptVal);
+                     setKmCierre(promptVal);
+                 } else {
+                     alert('Debe ingresar un Kilometraje de Cierre válido para finalizar la OT.');
+                     return;
+                 }
              }
         }
 
@@ -283,12 +715,18 @@ export default function OrdenesTrabajoDetail() {
 
         setIsUpdatingDb(true);
         try {
-            // Continuar con actualizacion en AppContext para UI y Backend
-            // Nota: Se delega a Supabase Trigger / Lógica central la transacción 
-            // de vehículo e inventario
             const now = new Date().toISOString();
+            
+            // Determinar la mejor pauta si está vacía
+            let pautaFinal = ot.pauta;
+            if (!pautaFinal || pautaFinal === 'Mantenimiento Preventivo') {
+                if (vehiculo?.tipoUltimoMant) pautaFinal = vehiculo.tipoUltimoMant;
+                else if (filteredPautas.length > 0) pautaFinal = filteredPautas[0].nombre;
+            }
+
             await actualizarOrdenTrabajo({
                 ...ot,
+                pauta: pautaFinal,
                 estado: nuevoEstado as any,
                 kilometrajeCierre: kmVal,
                 tiempoTrabajadoSegundos: (nuevoEstado === 'PAUSADA' || nuevoEstado === 'FINALIZADA' || nuevoEstado === 'CERRADA_POR_MECANICO') ? timerDisplay : ot.tiempoTrabajadoSegundos,
@@ -398,7 +836,7 @@ export default function OrdenesTrabajoDetail() {
       precioUnitario: 0
     }));
 
-    actualizarOrdenTrabajo({
+    const updatedOt: OrdenDeTrabajo = {
       ...ot,
       insumos: [...ot.insumos, ...nuevosInsumos],
       historial: [
@@ -411,13 +849,15 @@ export default function OrdenesTrabajoDetail() {
           usuario_nombre: profile?.nombre || 'General'
         }
       ]
-    });
+    };
+    setAsyncOt(updatedOt);
+    actualizarOrdenTrabajo(updatedOt);
     setSelectedKitToAdd('');
   };
 
   const agregarTarea = (tarea: any) => {
     if (!ot) return;
-    actualizarOrdenTrabajo({
+    const updatedOt: OrdenDeTrabajo = {
       ...ot,
       tareasRealizadas: [
         ...ot.tareasRealizadas,
@@ -441,7 +881,9 @@ export default function OrdenesTrabajoDetail() {
           usuario_nombre: profile?.nombre || 'General'
         }
       ]
-    });
+    };
+    setAsyncOt(updatedOt);
+    actualizarOrdenTrabajo(updatedOt);
     setIsTareaModalOpen(false);
     Swal.fire({
       title: 'Añadido',
@@ -454,17 +896,47 @@ export default function OrdenesTrabajoDetail() {
 
   const agregarInsumo = (repuesto: any, cantidadToUse: number = 1) => {
     if (!ot) return;
-    const existe = ot.insumos.find(i => i.repuesto?.nombre === repuesto.nombre);
+
+    // --- Validación de stock: sin stock suficiente NO se carga a la OT ni se rebaja la bodega ---
+    const stockDisponible = Number(repuesto.stock_actual) || 0;
+    if (stockDisponible <= 0) {
+      Swal.fire({
+        title: 'Sin stock',
+        html: `<b>${repuesto.nombre}</b> no tiene stock disponible en bodega (stock: ${stockDisponible}).<br/>No es posible cargarlo a la OT.`,
+        icon: 'error',
+        confirmButtonColor: '#dc2626'
+      });
+      return;
+    }
+    if (cantidadToUse > stockDisponible) {
+      Swal.fire({
+        title: 'Stock insuficiente',
+        html: `<b>${repuesto.nombre}</b>: solicitaste <b>${cantidadToUse}</b> pero solo hay <b>${stockDisponible}</b> disponibles en bodega.`,
+        icon: 'warning',
+        confirmButtonColor: '#d97706'
+      });
+      return;
+    }
+
+    const nuevoUuid = () =>
+      (typeof crypto !== 'undefined' && (crypto as any).randomUUID)
+        ? (crypto as any).randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); });
+
+    const mismoRepuesto = (i: any) =>
+      (repuesto.id && (i.repuesto?.id === repuesto.id || i.repuesto_id === repuesto.id)) ||
+      i.repuesto?.nombre === repuesto.nombre;
+    const existe = ot.insumos.find(mismoRepuesto);
     
     let nuevosInsumos: any[] = [];
     if (existe) {
       const nuevaCantidad = existe.cantidad + cantidadToUse;
-      nuevosInsumos = ot.insumos.map(i => i.repuesto?.nombre === repuesto.nombre ? { ...i, cantidad: nuevaCantidad, costo_total: nuevaCantidad * i.costo_unitario_aplicado } : i);
+      nuevosInsumos = ot.insumos.map(i => mismoRepuesto(i) ? { ...i, cantidad: nuevaCantidad, costo_total: nuevaCantidad * i.costo_unitario_aplicado } : i);
     } else {
       nuevosInsumos = [...ot.insumos, { 
-        id: Math.random().toString(36).substr(2, 9), 
+        id: nuevoUuid(), 
         orden_id: ot.id,
-        repuesto_id: repuesto.id || Math.random().toString(36).substr(2, 9),
+        repuesto_id: repuesto.id || nuevoUuid(),
         repuesto: repuesto,
         cantidad: cantidadToUse, 
         costo_unitario_aplicado: repuesto.costo_unitario || 0,
@@ -472,7 +944,7 @@ export default function OrdenesTrabajoDetail() {
       }];
     }
 
-    actualizarOrdenTrabajo({
+    const updatedOt: OrdenDeTrabajo = {
       ...ot,
       insumos: nuevosInsumos,
       costoInsumos: nuevosInsumos.reduce((sum, item) => sum + item.costo_total, 0),
@@ -486,7 +958,10 @@ export default function OrdenesTrabajoDetail() {
           usuario_nombre: profile?.nombre || 'Taller'
         }
       ]
-    });
+    };
+
+    setAsyncOt(updatedOt);
+    actualizarOrdenTrabajo(updatedOt);
     setIsInsumoModalOpen(false);
     setInsumoSearch('');
     setInsumoQuantities({});
@@ -502,7 +977,7 @@ export default function OrdenesTrabajoDetail() {
   const eliminarTarea = (tareaId: string) => {
     if (!ot) return;
     const tareaObj = ot.tareasRealizadas.find(t => t.id === tareaId);
-    actualizarOrdenTrabajo({
+    const updatedOt: OrdenDeTrabajo = {
       ...ot,
       tareasRealizadas: ot.tareasRealizadas.filter(t => t.id !== tareaId),
       costoManoObraTareas: ot.costoManoObraTareas - (tareaObj?.costo_real || 0),
@@ -516,14 +991,16 @@ export default function OrdenesTrabajoDetail() {
           usuario_nombre: profile?.nombre || 'General'
         }
       ]
-    });
+    };
+    setAsyncOt(updatedOt);
+    actualizarOrdenTrabajo(updatedOt);
   };
 
   const eliminarInsumo = (insumoId: string) => {
     if (!ot) return;
     const insumoObj = ot.insumos.find(i => i.id === insumoId);
     const nuevosInsumos = ot.insumos.filter(i => i.id !== insumoId);
-    actualizarOrdenTrabajo({
+    const updatedOt: OrdenDeTrabajo = {
       ...ot,
       insumos: nuevosInsumos,
       costoInsumos: nuevosInsumos.reduce((sum, item) => sum + item.costo_total, 0),
@@ -537,7 +1014,9 @@ export default function OrdenesTrabajoDetail() {
           usuario_nombre: profile?.nombre || 'General'
         }
       ]
-    });
+    };
+    setAsyncOt(updatedOt);
+    actualizarOrdenTrabajo(updatedOt);
   };
 
   const crearSolicitud = () => {
@@ -1182,10 +1661,80 @@ export default function OrdenesTrabajoDetail() {
         </div>
       )}
 
+      {/* Banner de OT detenida por término de jornada */}
+      {ot.pausa_motivo === 'OT detenida por término de jornada' && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-200 dark:bg-amber-900/60 rounded-full text-amber-700 dark:text-amber-300 shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-sm flex items-center gap-2">
+                OT detenida por término de jornada
+                <span className="text-[10px] bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-full font-bold uppercase">Límite de Turno</span>
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                El cronómetro se detuvo automáticamente al finalizar el turno legal para evitar acumulaciones fuera de horario. 
+                Al iniciar el nuevo turno de trabajo, presione <b>"Reanudar Trabajo (Nueva Jornada)"</b> para continuar registrando el tiempo real.
+              </p>
+            </div>
+          </div>
+          <Button onClick={() => handleActualizarEstadoRapido('EN_PROCESO')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shrink-0 shadow-sm">
+            Reanudar Trabajo (Nueva Jornada)
+          </Button>
+        </div>
+      )}
+
+      {/* Banner de Solicitud de Horas Extras Pendiente */}
+      {ot.solicitudHorasExtras?.estado === 'PENDIENTE' && (
+        <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-blue-900 dark:text-blue-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-200 dark:bg-blue-900/60 rounded-full text-blue-700 dark:text-blue-300 shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-sm">Solicitud de Extensión de Jornada (HH Extras) Pendiente</p>
+              <p className="text-xs text-blue-800 dark:text-blue-300 mt-0.5">
+                El técnico <b>{ot.solicitudHorasExtras.solicitado_por}</b> solicita <b>{ot.solicitudHorasExtras.solicitadas} hora(s) extra(s)</b> (Art. 31 Código del Trabajo: máx. 2h diarias).
+                <br />
+                <span className="italic">Motivo: "{ot.solicitudHorasExtras.motivo}"</span>
+              </p>
+            </div>
+          </div>
+          {isSupervisorOrAdmin ? (
+            <div className="flex gap-2 shrink-0">
+              <Button onClick={() => handleResponderSolicitudHorasExtras(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-3">
+                Aprobar HH Extras
+              </Button>
+              <Button onClick={() => handleResponderSolicitudHorasExtras(false)} variant="outline" className="border-red-400 text-red-600 hover:bg-red-50 text-xs py-1.5 px-3">
+                Rechazar
+              </Button>
+            </div>
+          ) : (
+            <span className="text-xs font-semibold bg-blue-200 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1.5 rounded-full shrink-0">
+              En revisión por Supervisor
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border dark:border-slate-800">
-        <Button variant="ghost" onClick={() => navigate('/flota/ordenes-trabajo')}><ArrowLeft className="w-4 h-4 mr-2" />Volver</Button>
+        <Button variant="ghost" onClick={() => navigate(fromPizarra ? '/flota/programacion' : '/flota/ordenes-trabajo')}><ArrowLeft className="w-4 h-4 mr-2" />Volver a la vista anterior</Button>
         <div className="flex flex-col items-center">
-            <h1 className="text-xl font-bold">OT #{ot.folio} <Badge className="ml-2 bg-green-600 text-white">{ot.estado.replace('_', ' ')}</Badge></h1>
+            <h1 className="text-xl font-bold flex items-center flex-wrap gap-2">
+              OT #{ot.folio} 
+              <Badge className="bg-green-600 text-white">{ot.estado.replace('_', ' ')}</Badge>
+              {ot.pausa_motivo === 'OT detenida por término de jornada' && (
+                <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-bold flex items-center gap-1 shadow-sm animate-pulse">
+                  <Clock className="w-3.5 h-3.5" /> OT detenida por término de jornada
+                </Badge>
+              )}
+              {ot.horasExtrasAutorizadas ? (
+                <Badge className="bg-blue-600 text-white font-medium text-xs">
+                  +{ot.horasExtrasAutorizadas}h Extras Autorizadas
+                </Badge>
+              ) : null}
+            </h1>
             <p className="text-xs text-slate-500 mt-1">
                 Responsable: <span className="font-semibold text-slate-700 dark:text-slate-300">{ot.tecnicoResponsable || 'N/A'}</span> 
                 {ot.personalOperativo && <span> | Apoyo: <span className="font-semibold text-slate-700 dark:text-slate-300">{ot.personalOperativo}</span></span>}
@@ -1197,7 +1746,15 @@ export default function OrdenesTrabajoDetail() {
                 <FileText className="w-4 h-4 mr-2" /> Realizar Inspección
               </Button>
             )}
-            <span className="flex items-center text-slate-600 dark:text-slate-400 mr-4"><Clock className="w-4 h-4 mr-1"/> {new Date(timerDisplay * 1000).toISOString().substr(11, 8)}</span>
+            <span className="flex items-center text-slate-600 dark:text-slate-400 mr-4 font-mono text-sm bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700" title="Horas acumuladas de trabajo real">
+              <Clock className="w-4 h-4 mr-1.5 text-cyan-600"/> 
+              {Math.floor(timerDisplay / 3600).toString().padStart(2, '0')}:{Math.floor((timerDisplay % 3600) / 60).toString().padStart(2, '0')}:{Math.floor(timerDisplay % 60).toString().padStart(2, '0')}
+            </span>
+
+            <Button onClick={() => setIsHorasExtrasModalOpen(true)} variant="outline" className="border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-semibold shadow-sm">
+              <Clock className="w-4 h-4 mr-1.5 text-amber-500" />
+              {ot.horasExtrasAutorizadas ? `HH Extras: +${ot.horasExtrasAutorizadas}h` : 'Solicitar HH Extras'}
+            </Button>
             
             <Button variant="outline" className="hidden lg:flex" onClick={() => handleExportarPDF(false)}><FileDown className="w-4 h-4 mr-2"/> Descargar OT</Button>
             <Button variant="outline" className="hidden lg:flex" onClick={() => handleExportarPDF(true)}><Printer className="w-4 h-4 mr-2"/> Imprimir OT</Button>
@@ -1205,7 +1762,7 @@ export default function OrdenesTrabajoDetail() {
 
             {ot.estado === 'PROGRAMADA' || ot.estado === 'ABIERTA' || ot.estado === 'PENDIENTE' || ot.estado === 'PAUSADA' ? (
               <Button onClick={() => handleActualizarEstadoRapido('EN_PROCESO')} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-bold">
-                 {ot.estado === 'PAUSADA' ? 'Reanudar Trabajo' : 'Iniciar Trabajo'}
+                 {ot.pausa_motivo === 'OT detenida por término de jornada' ? 'Reanudar Trabajo (Nueva Jornada)' : ot.estado === 'PAUSADA' ? 'Reanudar Trabajo' : 'Iniciar Trabajo'}
               </Button>
             ) : ot.estado === 'EN_PROCESO' ? (
               <>
@@ -1785,9 +2342,8 @@ export default function OrdenesTrabajoDetail() {
         onClose={() => setIsCrearTareaModalOpen(false)}
         onCrear={(nuevaTarea) => {
           if (agregarTareaEstandar) agregarTareaEstandar(nuevaTarea);
-          // And optionally select it or just close it. Let's just open the add tarea modal so the user can select it
+          agregarTarea(nuevaTarea);
           setIsCrearTareaModalOpen(false);
-          setIsTareaModalOpen(true);
         }}
       />
 
@@ -1803,16 +2359,30 @@ export default function OrdenesTrabajoDetail() {
             />
           </div>
           <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-            {filteredInsumos.slice(0, 50).length > 0 ? filteredInsumos.slice(0, 50).map(i => (
-               <div key={i.id} className="flex justify-between items-center p-3 border rounded-lg dark:border-slate-700">
+            {filteredInsumos.slice(0, 50).length > 0 ? filteredInsumos.slice(0, 50).map(i => {
+              const stockDisp = Number(i.stock_actual) || 0;
+              const cantSolicitada = insumoQuantities[i.id] ?? 1;
+              const sinStock = stockDisp <= 0;
+              const stockInsuficiente = !sinStock && cantSolicitada > stockDisp;
+              const bloqueado = sinStock || stockInsuficiente;
+              return (
+               <div key={i.id} className={`flex justify-between items-center p-3 border rounded-lg ${sinStock ? 'border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' : stockInsuficiente ? 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20' : 'dark:border-slate-700'}`}>
                   <div>
                     <p className="font-bold text-sm uppercase">{i.nombre}</p>
-                    <p className="text-xs text-slate-500">SKU: {i.sku} | Stock: <span className="text-emerald-500 font-semibold">{i.stock_actual} disponibles ✓</span></p>
+                    <p className="text-xs text-slate-500">SKU: {i.sku} | Stock:{' '}
+                      {sinStock ? (
+                        <span className="text-red-600 font-bold">0 — SIN STOCK ✗</span>
+                      ) : stockInsuficiente ? (
+                        <span className="text-amber-600 font-bold">{stockDisp} disponibles — stock insuficiente para {cantSolicitada} ⚠</span>
+                      ) : (
+                        <span className="text-emerald-500 font-semibold">{stockDisp} disponibles ✓</span>
+                      )}
+                    </p>
                   </div>
                   <div className="flex gap-2 items-center">
                     <input 
                       type="number" 
-                      value={insumoQuantities[i.id] ?? 1} 
+                      value={cantSolicitada} 
                       min={1} 
                       onChange={(e) => setInsumoQuantities({
                         ...insumoQuantities,
@@ -1820,10 +2390,11 @@ export default function OrdenesTrabajoDetail() {
                       })}
                       className="w-16 border rounded p-1 text-center text-sm dark:bg-slate-800 dark:border-slate-700" 
                     />
-                    <Button size="sm" className="bg-[#0cf]" onClick={() => agregarInsumo(i, insumoQuantities[i.id] ?? 1)}>Añadir</Button>
+                    <Button size="sm" disabled={bloqueado} className={bloqueado ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-[#0cf]'} onClick={() => agregarInsumo(i, cantSolicitada)}>Añadir</Button>
                   </div>
                </div>
-            )) : (
+              );
+            }) : (
               <p className="text-center text-slate-500 text-sm mt-8">Los resultados aparecerán aquí.</p>
             )}
           </div>
@@ -1835,6 +2406,78 @@ export default function OrdenesTrabajoDetail() {
 
       <Modal isOpen={isInspeccionModalOpen} onClose={() => setIsInspeccionModalOpen(false)} title="Pauta Inspección Técnica de Neumáticos" size="5xl">
         <FormularioInspeccion prefilledVehiculoId={ot.vehiculoId} onClose={() => setIsInspeccionModalOpen(false)} />
+      </Modal>
+
+      {/* Modal de Horas Extras y Extensión de Jornada */}
+      <Modal isOpen={isHorasExtrasModalOpen} onClose={() => setIsHorasExtrasModalOpen(false)} title="Extensión de Jornada (Horas Extras)">
+        <div className="space-y-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-600" /> Marco Legal - Art. 31 Código del Trabajo de Chile:
+            </p>
+            <p>
+              Las horas extraordinarias solo podrán pactarse para necesidades o situaciones temporales de la faena, hasta por un <b>máximo estricto de dos (2) horas por día</b>. Cualquier extensión superior a 2 horas diarias está prohibida por la normativa laboral.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">
+              Cantidad de Horas Extras a Solicitar / Autorizar:
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setHorasExtrasSeleccionadas(1)}
+                className={`p-3 rounded-lg border text-left transition-all ${horasExtrasSeleccionadas === 1 ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
+              >
+                <div className="font-bold text-sm text-slate-800 dark:text-slate-100">+1 Hora Extra</div>
+                <div className="text-xs text-slate-500 mt-0.5">Extiende el turno en 60 minutos (hasta 19:00 hrs)</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setHorasExtrasSeleccionadas(2)}
+                className={`p-3 rounded-lg border text-left transition-all ${horasExtrasSeleccionadas === 2 ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-400' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
+              >
+                <div className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                  +2 Horas Extras
+                  <span className="text-[9px] bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 font-bold px-1.5 py-0.5 rounded">Máx Legal</span>
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Extiende el turno en 120 minutos (hasta 20:00 hrs)</div>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">
+              Justificación / Tareas Pendientes (Obligatorio):
+            </label>
+            <textarea
+              className="w-full p-2.5 border rounded-lg dark:bg-slate-800 dark:border-slate-700 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+              rows={3}
+              value={motivoHorasExtras}
+              onChange={(e) => setMotivoHorasExtras(e.target.value)}
+              placeholder="Describa el motivo técnico por el cual se requiere tiempo adicional para completar los trabajos de la OT..."
+            />
+          </div>
+
+          <div className="flex justify-between items-center pt-2">
+            <span className="text-xs text-slate-500">
+              {isSupervisorOrAdmin ? 'Acción: Autorización Inmediata' : 'Acción: Solicitud a Supervisor'}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsHorasExtrasModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSolicitarHorasExtras}
+                disabled={!motivoHorasExtras.trim()}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              >
+                {isSupervisorOrAdmin ? 'Autorizar Horas Extras' : 'Enviar Solicitud'}
+              </Button>
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );

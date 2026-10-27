@@ -4,38 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, Zap, FileText, Download, Printer, Paperclip, Eye, AlertTriangle } from 'lucide-react';
 
-const mockReportes = [
-  {
-    id: 'FLS-2026-01',
-    fecha: '16/07/2026 14:15',
-    tipo: 'Cuasi-Accidente (Roce Pretil)',
-    area: 'Botadero Norte Faena',
-    potencial: 'Bajo'
-  },
-  {
-    id: 'FLS-2026-02',
-    fecha: '19/08/2026 09:15',
-    tipo: 'Proyección Piedra en Parabrisas',
-    area: 'Ruta 60-CH Carretera',
-    potencial: 'Bajo'
-  },
-  {
-    id: 'FLS-2026-03',
-    fecha: '05/09/2026 11:30',
-    tipo: 'Derrame Menor en Fosa Taller',
-    area: 'Taller Central Fosa 1',
-    potencial: 'Medio'
-  }
-];
+const mockReportes: any[] = [];
 
 const ReporteFlashSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredReportes = mockReportes.filter(r =>
-    r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.area.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getPotencialBadge = (potencial: string) => {
     switch (potencial) {
@@ -92,7 +64,7 @@ const ReporteFlashSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredReportes.map((reporte) => (
+                {mockReportes.map((reporte) => (
                   <tr key={reporte.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-300">
                       <div className="flex items-center gap-2">

@@ -25,61 +25,15 @@ export default function Trazabilidad() {
         .eq('empresa_id', activeCompanyId)
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
          setServicios(data);
-      } else {
-         setServicios(fallbackServicios);
       }
     } catch (e) {
       console.error(e);
-      setServicios(fallbackServicios);
     } finally {
       setLoading(false);
     }
   };
-
-const fallbackServicios = [
-  {
-    id: 'srv-01',
-    nombre: 'Transporte de Concentrado de Cobre - Lote 44B',
-    cliente: 'Minera Los Pelambres S.A.',
-    created_at: '2026-09-11T14:30:00Z',
-    estado: 'Realizado',
-    operacion_programacion: [
-      { id: 'prog-01', estado: 'Realizado', vehiculo: { patente: 'KHLP-90' }, conductor: { nombre: 'Juan Pérez Soto' } }
-    ]
-  },
-  {
-    id: 'srv-02',
-    nombre: 'Flete de Reactivos Químicos y Bolas de Molienda',
-    cliente: 'Codelco División Andina',
-    created_at: '2026-09-10T09:15:00Z',
-    estado: 'En Curso',
-    operacion_programacion: [
-      { id: 'prog-02', estado: 'En Curso', vehiculo: { patente: 'BRTH-44' }, conductor: { nombre: 'Carlos Morales' } }
-    ]
-  },
-  {
-    id: 'srv-03',
-    nombre: 'Traslado Maquinaria Pesada y Repuestos Críticos',
-    cliente: 'Anglo American Sur S.A.',
-    created_at: '2026-09-08T11:00:00Z',
-    estado: 'Realizado',
-    operacion_programacion: [
-      { id: 'prog-03', estado: 'Realizado', vehiculo: { patente: 'PRTZ-33' }, conductor: { nombre: 'Diego Castillo' } }
-    ]
-  },
-  {
-    id: 'srv-04',
-    nombre: 'Servicio Spot Retorno Cemento y Áridos',
-    cliente: 'Polpaico - Til Til',
-    created_at: '2026-08-28T16:00:00Z',
-    estado: 'Realizado',
-    operacion_programacion: [
-      { id: 'prog-04', estado: 'Realizado', vehiculo: { patente: 'JWRS-18' }, conductor: { nombre: 'Andrés Vega' } }
-    ]
-  }
-];
 
   return (
     <div className="space-y-6">

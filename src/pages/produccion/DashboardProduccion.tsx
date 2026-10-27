@@ -4,26 +4,28 @@ import { Loader2 } from 'lucide-react';
 import KPIsResumen from '../operaciones/produccion/KPIsResumen';
 import ConfiguracionMetas from '../operaciones/produccion/ConfiguracionMetas';
 import { GlobalStats, MetasObjetivos, useProduccion } from '../../contexts/ProduccionContext';
+import { useCompany } from '../../contexts/CompanyContext';
 
 export default function DashboardProduccion() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { metas, setMetas } = useProduccion();
+  const { currentCompany } = useCompany();
   
   const [stats, setStats] = useState<GlobalStats>({
-    rajoTotal: 4250,
-    millingTotal: 51000,
-    stockpile: 2800,
-    transported: 3980,
-    transporteTotal: 48200,
-    dispatchesCount: 42,
-    arrivedCount: 38,
-    inTransitCount: 4,
-    alertsCount: 1,
+    rajoTotal: 0,
+    millingTotal: 0,
+    stockpile: 0,
+    transported: 0,
+    transporteTotal: 0,
+    dispatchesCount: 0,
+    arrivedCount: 0,
+    inTransitCount: 0,
+    alertsCount: 0,
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (currentCompany?.id) fetchData();
+  }, [currentCompany]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -35,12 +37,14 @@ export default function DashboardProduccion() {
       // Fetch Mina
       const { data: minaData } = await supabase
         .from('produccion_registro_diario_mina')
-        .select('fecha, tonelaje');
+        .select('fecha, tonelaje')
+        .eq('empresa_id', currentCompany?.id || '');
 
       // Fetch Transporte
       const { data: transporteData, error: transporteError } = await supabase
         .from('produccion_registro_diario')
-        .select('fecha, tonelaje');
+        .select('fecha, tonelaje')
+        .eq('empresa_id', currentCompany?.id || '');
 
       let minaHoy = 0;
       let minaMes = 0;
@@ -69,14 +73,6 @@ export default function DashboardProduccion() {
         });
       }
 
-      if (minaHoy === 0 && minaMes === 0 && transporteHoy === 0 && transporteMes === 0) {
-        minaHoy = 4250;
-        minaMes = 51000;
-        transporteHoy = 3980;
-        transporteMes = 48200;
-        alertasHoy = 1;
-      }
-
       setStats(prev => ({
         ...prev,
         rajoTotal: minaHoy,
@@ -84,25 +80,10 @@ export default function DashboardProduccion() {
         transported: transporteHoy,
         transporteTotal: transporteMes,
         stockpile: Math.max(0, minaMes - transporteMes),
-        dispatchesCount: 42,
-        arrivedCount: 38,
-        inTransitCount: 4,
         alertsCount: alertasHoy
       }));
     } catch (error) {
       console.error(error);
-      setStats(prev => ({
-        ...prev,
-        rajoTotal: 4250,
-        millingTotal: 51000,
-        transported: 3980,
-        transporteTotal: 48200,
-        stockpile: 2800,
-        dispatchesCount: 42,
-        arrivedCount: 38,
-        inTransitCount: 4,
-        alertsCount: 1
-      }));
     } finally {
       setLoading(false);
     }

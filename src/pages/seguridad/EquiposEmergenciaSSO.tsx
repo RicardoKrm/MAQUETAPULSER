@@ -4,22 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, AlertTriangle, CheckCircle2, QrCode, Stethoscope, Droplets, ArrowRightCircle } from 'lucide-react';
 
-const mockEquipos = [
-  { id: 'EQ-01', codigo: 'DEA-01', tipo: 'Desfibrilador Externo Automático (DEA)', ubicacion: 'Recepción Taller Central', proximaInspeccion: '01/10/2026', responsable: 'Patricia Vergara', estado: 'Conforme' },
-  { id: 'EQ-02', codigo: 'CAM-01', tipo: 'Camilla Rígida Espinal de Rescate', ubicacion: 'Enfermería Móvil Taller', proximaInspeccion: '01/10/2026', responsable: 'Patricia Vergara', estado: 'Conforme' },
-  { id: 'EQ-03', codigo: 'LAV-01', tipo: 'Ducha y Lavaojos Presurizado', ubicacion: 'Zona de Baterías Taller', proximaInspeccion: '25/09/2026', responsable: 'Jorge Lagos', estado: 'Conforme' },
-  { id: 'EQ-04', codigo: 'KIT-01', tipo: 'Kit de Derrames de Hidrocarburos 240L', ubicacion: 'Isla de Combustible', proximaInspeccion: '18/09/2026', responsable: 'Héctor Muñoz', estado: 'Observación' },
-  { id: 'EQ-05', codigo: 'BOT-01', tipo: 'Botiquín de Trauma Avanzado Faena', ubicacion: 'Camioneta Rescate CAM-01', proximaInspeccion: '30/09/2026', responsable: 'Rodrigo Castillo', estado: 'Conforme' }
-];
+const mockEquipos: any[] = [];
 
 const EquiposEmergenciaSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredEquipos = mockEquipos.filter(e =>
-    e.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
@@ -35,7 +23,7 @@ const EquiposEmergenciaSSO = () => {
   };
 
   const getTipoIcon = (tipo: string) => {
-    if (tipo.includes('Botiquín') || tipo.includes('Camilla') || tipo.includes('DEA')) return <Stethoscope className="w-4 h-4 text-red-500" />;
+    if (tipo.includes('Botiquín') || tipo.includes('Camilla')) return <Stethoscope className="w-4 h-4 text-red-500" />;
     if (tipo.includes('Ducha')) return <Droplets className="w-4 h-4 text-blue-500" />;
     return <ArrowRightCircle className="w-4 h-4 text-orange-500" />;
   };
@@ -45,7 +33,7 @@ const EquiposEmergenciaSSO = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Equipos de Emergencia</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Control de botiquines, duchas, kits de derrames y elementos de rescate (Julio - Septiembre 2026).</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Control de botiquines, duchas, kits de derrames y elementos de rescate.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="flex items-center gap-2">
@@ -63,25 +51,25 @@ const EquiposEmergenciaSSO = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Equipos</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">5</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Conformes</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">4</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">En Observación</p>
-            <p className="text-2xl font-bold text-orange-500 mt-1">1</p>
+            <p className="text-2xl font-bold text-orange-500 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No Conformes / Vencidos</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">0</p>
           </CardContent>
         </Card>
       </div>
@@ -119,7 +107,7 @@ const EquiposEmergenciaSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredEquipos.map((equipo) => (
+                {mockEquipos.map((equipo) => (
                   <tr key={equipo.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-300">
                       {equipo.codigo}

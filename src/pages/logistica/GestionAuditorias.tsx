@@ -34,7 +34,6 @@ interface Bodega {
 
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
-import { mockAuditoriasLogistica, mockBodegasLogistica } from '../../lib/mockData';
 
 export default function GestionAuditorias() {
   const { currentCompany } = useCompany();
@@ -52,11 +51,8 @@ export default function GestionAuditorias() {
   }, [currentCompany]);
 
   const fetchAuditorias = async () => {
+    if (!currentCompany?.id) return;
     try {
-      if (!currentCompany?.id) {
-        setAuditorias(mockAuditoriasLogistica as any[]);
-        return;
-      }
       const { data, error } = await supabase
         .from('logistica_auditorias')
         .select(`
@@ -66,38 +62,26 @@ export default function GestionAuditorias() {
         .eq('empresa_id', currentCompany.id)
         .order('created_at', { ascending: false });
         
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         setAuditorias(data as any[]);
-      } else {
-        setAuditorias(mockAuditoriasLogistica as any[]);
       }
     } catch (e) {
       console.error("Error fetching audits", e);
-      setAuditorias(mockAuditoriasLogistica as any[]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const fetchBodegas = async () => {
+    if (!currentCompany?.id) return;
     try {
-      if (!currentCompany?.id) {
-        setBodegas(mockBodegasLogistica as any);
-        setNewAudit(prev => ({ ...prev, bodega_id: mockBodegasLogistica[0]?.id?.toString() || '1' }));
-        return;
-      }
       const { data, error } = await supabase.from('logistica_bodegas').select('*').eq('empresa_id', currentCompany.id);
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
          setBodegas(data as any);
-         setNewAudit(prev => ({ ...prev, bodega_id: data[0].id.toString() }));
-      } else {
-         setBodegas(mockBodegasLogistica as any);
-         setNewAudit(prev => ({ ...prev, bodega_id: mockBodegasLogistica[0]?.id?.toString() || '1' }));
+         if (data.length > 0) setNewAudit(prev => ({ ...prev, bodega_id: data[0].id.toString() }));
       }
     } catch (e) {
       console.error("Error fetching bodegas", e);
-      setBodegas(mockBodegasLogistica as any);
-      setNewAudit(prev => ({ ...prev, bodega_id: mockBodegasLogistica[0]?.id?.toString() || '1' }));
     }
   };
 

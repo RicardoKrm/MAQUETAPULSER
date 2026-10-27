@@ -8,7 +8,6 @@ import Swal from 'sweetalert2';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
-import { mockBodegasLogistica, mockColaboradores } from '../../lib/mockData';
 
 export default function GestionBodegas() {
   const [bodegas, setBodegas] = useState<any[]>([]);
@@ -27,18 +26,14 @@ export default function GestionBodegas() {
   useEffect(() => {
     const fetchColaboradores = async () => {
       if (!currentCompany?.id) return;
-      try {
-        const { data, error } = await supabase.from('colaborador')
-          .select('*')
-          .eq('empresa_id', currentCompany.id)
-          .or('rol.ilike.%bodeguero%,rol.ilike.%encargado de bodega%');
-        if (error || !data || data.length === 0) {
-          setBodegueros(mockColaboradores.filter(c => c.rol?.toLowerCase().includes('bodega') || c.rol?.toLowerCase().includes('taller') || c.rol?.toLowerCase().includes('jefe')));
-        } else {
-          setBodegueros(data);
-        }
-      } catch (e) {
-        setBodegueros(mockColaboradores.filter(c => c.rol?.toLowerCase().includes('bodega') || c.rol?.toLowerCase().includes('taller') || c.rol?.toLowerCase().includes('jefe')));
+      const { data, error } = await supabase.from('colaborador')
+        .select('*')
+        .eq('empresa_id', currentCompany.id)
+        .or('rol.ilike.%bodeguero%,rol.ilike.%encargado de bodega%');
+      if (error) {
+        console.error('Error fetching colaboradores:', error);
+      } else if (data) {
+        setBodegueros(data);
       }
     };
     fetchColaboradores();
@@ -46,23 +41,19 @@ export default function GestionBodegas() {
 
   const fetchBodegas = async () => {
     try {
-      if (!currentCompany?.id) {
-        setBodegas(mockBodegasLogistica);
-        return;
-      }
+      if (!currentCompany?.id) return;
       let query = supabase.from('logistica_bodegas').select('*');
       if (currentCompany.id !== 'emp-001') {
         query = query.eq('empresa_id', currentCompany.id);
       }
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         setBodegas(data);
       } else {
-        setBodegas(mockBodegasLogistica);
+        setBodegas([]);
       }
     } catch (e) {
       console.error(e);
-      setBodegas(mockBodegasLogistica);
     }
   };
 

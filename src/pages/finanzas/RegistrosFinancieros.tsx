@@ -5,7 +5,6 @@ import { Modal } from '../../components/ui/Modal';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import Swal from 'sweetalert2';
-import { mockRegistrosFinancieros } from '../../lib/mockData';
 
 export default function RegistrosFinancieros() {
   const { activeCompanyId } = useCompany();
@@ -83,10 +82,7 @@ export default function RegistrosFinancieros() {
 
   const isGlobal = selectedEntityId === 'global';
   const activeEntity = isGlobal ? empresa : vehiculos.find(v => v.id === selectedEntityId);
-  const entityRegistros = activeEntity?.detalles?.registros_financieros;
-  const registros = (entityRegistros && entityRegistros.length > 0)
-    ? entityRegistros
-    : (isGlobal ? mockRegistrosFinancieros : []);
+  const registros = activeEntity?.detalles?.registros_financieros || [];
 
   const handleEditClick = (reg: any) => {
      setEditingRegistroId(reg.id);

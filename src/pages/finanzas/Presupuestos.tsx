@@ -6,46 +6,6 @@ import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import Swal from 'sweetalert2';
-import { mockRegistrosFinancieros } from '../../lib/mockData';
-
-const mockPresupuestosFinancieros = [
-  {
-    id: 'pre-01',
-    name: 'Presupuesto Combustible Diésel Q3 2026',
-    total: 35000000,
-    period: 'Trimestral',
-    category: 'Combustible',
-    alertThreshold: 85,
-    created_at: '2026-07-01T08:00:00Z'
-  },
-  {
-    id: 'pre-02',
-    name: 'Mantenimiento Preventivo y Correctivo Flota',
-    total: 18000000,
-    period: 'Mensual',
-    category: 'Repuestos e Insumos',
-    alertThreshold: 80,
-    created_at: '2026-08-01T08:00:00Z'
-  },
-  {
-    id: 'pre-03',
-    name: 'Nómina y Viáticos faena cordillera',
-    total: 25000000,
-    period: 'Mensual',
-    category: 'Remuneraciones y Leyes Sociales',
-    alertThreshold: 90,
-    created_at: '2026-09-01T08:00:00Z'
-  },
-  {
-    id: 'pre-04',
-    name: 'Seguros y Permisos de Circulación Equipos',
-    total: 12000000,
-    period: 'Anual',
-    category: 'Operaciones y Servicios',
-    alertThreshold: 75,
-    created_at: '2026-07-10T09:30:00Z'
-  }
-];
 
 export default function Presupuestos() {
   const { activeCompanyId } = useCompany();
@@ -74,10 +34,7 @@ export default function Presupuestos() {
       const { data: vehData, error: vehErr } = await supabase.from('vehiculo').select('id, patente, detalles').eq('empresa_id', activeCompanyId);
 
       // Cargar presupuestos de empresa
-      let empBudgets = empData?.detalles?.presupuestos || [];
-      if (empBudgets.length === 0) {
-        empBudgets = mockPresupuestosFinancieros;
-      }
+      const empBudgets = empData?.detalles?.presupuestos || [];
       setBudgets(empBudgets);
 
       // Cargar gastos para calcular consumo
@@ -92,15 +49,10 @@ export default function Presupuestos() {
             }
          });
       }
-      if (allGastos.length === 0) {
-        allGastos = mockRegistrosFinancieros.filter(r => r.tipo === 'Costo/Egreso');
-      }
       setGastos(allGastos);
 
     } catch (e) {
       console.error(e);
-      setBudgets(mockPresupuestosFinancieros);
-      setGastos(mockRegistrosFinancieros.filter(r => r.tipo === 'Costo/Egreso'));
     } finally {
       setLoading(false);
     }

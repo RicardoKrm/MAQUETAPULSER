@@ -6,7 +6,6 @@ import Swal from 'sweetalert2';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
-import { mockTicketsSoporte } from '../../lib/mockData';
 
 export default function CentroAyuda() {
   const { currentCompany } = useCompany();
@@ -31,26 +30,6 @@ export default function CentroAyuda() {
     loadTickets();
   }, []);
 
-  const buildFallbackTickets = () => {
-    return mockTicketsSoporte.map((t: any) => ({
-      id: t.id,
-      ticket_id: t.id,
-      titulo: t.title || t.titulo,
-      descripcion: t.description || t.descripcion,
-      empresa: t.empresa,
-      prioridad: t.priority || t.prioridad || 'MEDIA',
-      categoria: t.category || t.categoria || 'SOPORTE',
-      estado: t.status || t.estado || 'RESUELTO',
-      fecha_creacion: t.fecha_creacion || '2026-08-01 10:00:00',
-      usuario: t.usuario || 'Operador',
-      email_contacto: 'soporte@imperia.cl',
-      mensajes: [
-        { sender: t.usuario || 'Operador', type: 'user', text: t.description || t.title, date: t.fecha_creacion },
-        { sender: 'Mesa de Ayuda Pulser', type: 'agent', text: 'Ticket recepcionado y derivado a los especialistas técnicos.', date: t.fecha_creacion }
-      ]
-    }));
-  };
-
   const loadTickets = async () => {
     setIsLoading(true);
     try {
@@ -59,22 +38,15 @@ export default function CentroAyuda() {
         .select('*')
         .order('fecha_creacion', { ascending: false });
         
-      if (!error && data && data.length > 0) {
-        setTickets(data);
-        const uniqueEmpresas = Array.from(new Set(data.map(t => t.empresa).filter(Boolean)));
-        setEmpresasList(['Todas', ...uniqueEmpresas]);
-      } else {
-        const fallbacks = buildFallbackTickets();
-        setTickets(fallbacks);
-        const uniqueEmpresas = Array.from(new Set(fallbacks.map(t => t.empresa).filter(Boolean)));
-        setEmpresasList(['Todas', ...uniqueEmpresas]);
-      }
+      if (error) throw error;
+      
+      setTickets(data || []);
+      
+      // Extraer empresas unicas para el filtro
+      const uniqueEmpresas = Array.from(new Set((data || []).map(t => t.empresa).filter(Boolean)));
+      setEmpresasList(['Todas', ...uniqueEmpresas]);
     } catch (error) {
       console.error('Error loading tickets:', error);
-      const fallbacks = buildFallbackTickets();
-      setTickets(fallbacks);
-      const uniqueEmpresas = Array.from(new Set(fallbacks.map(t => t.empresa).filter(Boolean)));
-      setEmpresasList(['Todas', ...uniqueEmpresas]);
     } finally {
       setIsLoading(false);
     }

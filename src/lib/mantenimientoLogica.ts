@@ -60,6 +60,115 @@ export function generarSecuenciaParaPauta(pauta: PautaEstructura, kilometrajeAct
     return secuencia;
 }
 
+export function normalizeTexto(s: any): string {
+    return String(s || '')
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toUpperCase();
+}
+
+export function obtenerCategoriaAceite(aceite: any): string {
+    const o = normalizeTexto(aceite);
+    if (!o) return 'UNKNOWN';
+    if (o.includes('SINTET') || o.includes('SYNTH') || o === '5W30' || o === '5W40' || o === '0W20' || o === '0W30' || o === '0W40') {
+        return 'SINTETICO';
+    }
+    if (o.includes('SEMI') || o === '10W40' || o === '10W30') {
+        return 'SEMI-SINTETICO';
+    }
+    if (o.includes('MINER') || o === '15W40' || o === '20W50') {
+        return 'MINERAL';
+    }
+    return o;
+}
+
+export function limpiarNombreModelo(modelo: any): string {
+    let s = normalizeTexto(modelo);
+    if (s.includes('/')) s = s.split('/').pop()!.trim();
+    // Remover marcas comunes si vienen pegadas al modelo
+    s = s.replace(/^(M\.\s*BENZ|M\.BENZ|MERCEDES\s*BENZ|MERCEDES-BENZ|MERCEDES|MB|HYUNDAI|TOYOTA|VOLVO|SCANIA|CHEVROLET|FORD|PEUGEOT|CITROEN|FIAT|VOLKSWAGEN|VW|MAXUS|RAM|MITSUBISHI|SSANGYONG)\s+/i, '');
+    return s.trim();
+}
+
+/**
+ * Obtiene la secuencia consolidada y ordenada de pautas de mantenimiento para un vehículo específico,
+ * resolviendo compatibilidad de modelo y tipo/viscosidad de aceite.
+ */
+export function obtenerPautasSecuenciaParaVehiculo(
+    vehiculoModelo: any,
+    vehiculoAceite: any,
+    kmsActuales: number,
+    todasLasPautas: any[]
+): HitoSecuencia[] {
+    if (!todasLasPautas || todasLasPautas.length === 0) return [];
+
+    const vMod = limpiarNombreModelo(vehiculoModelo);
+    const vOilCat = obtenerCategoriaAceite(vehiculoAceite);
+
+    const pautasCompatibles = todasLasPautas.filter(p => {
+        const pMod = limpiarNombreModelo(p.modelo?.nombre || p.nombre_modelo_vehiculo || p.modelo_nombre || '');
+        const pOilCat = obtenerCategoriaAceite(p.tipo_aceite);
+
+        // 1. Compatibilidad de Modelo (con verificación de subversión como VS30.1 vs VS30.2)
+        const vSub = vMod.match(/\.([0-9]+)/)?.[1];
+        const pSub = pMod.match(/\.([0-9]+)/)?.[1];
+        let modelMatch = false;
+        if (vSub || pSub) {
+            modelMatch = (vSub === pSub) && (vMod === pMod || vMod.includes(pMod) || pMod.includes(vMod));
+        } else {
+            modelMatch = vMod === pMod || (vMod && pMod && (vMod.includes(pMod) || pMod.includes(vMod)));
+        }
+        if (!modelMatch) return false;
+
+        // 2. Compatibilidad de Aceite
+        // Si la pauta no especifica aceite o el vehículo no lo tiene, es compatible
+        if (!p.tipo_aceite || !vehiculoAceite) return true;
+        // Si coinciden en categoría de aceite (ej: 5W30 -> SINTETICO)
+        if (vOilCat === pOilCat) return true;
+
+        // Si la categoría difiere pero el modelo en la BD no tiene pautas específicas para el otro aceite,
+        // se asume que las pautas existentes del modelo aplican
+        const pautasHermanas = todasLasPautas.filter(sib => {
+            const sibMod = limpiarNombreModelo(sib.modelo?.nombre || sib.nombre_modelo_vehiculo || sib.modelo_nombre || '');
+            return sibMod === pMod || (sibMod && pMod && (sibMod.includes(pMod) || pMod.includes(sibMod)));
+        });
+        const existePautaEspecificaAceite = pautasHermanas.some(sib => obtenerCategoriaAceite(sib.tipo_aceite) === vOilCat);
+        if (!existePautaEspecificaAceite) {
+            return true;
+        }
+
+        return false;
+    });
+
+    let pautasSecuencia: HitoSecuencia[] = [];
+    pautasCompatibles.forEach(p => {
+        const estructura: PautaEstructura = {
+            id: String(p.id || ''),
+            nombre: p.nombre || p.nombre_pauta || '',
+            kilometraje_inicial: Number(p.kilometraje_inicial ?? p.kilometraje_pauta ?? p.cronograma_en_km ?? 0),
+            intervalo_1: Number(p.intervalo_1 ?? p.intervalo_km ?? 0),
+            intervalo_2: p.intervalo_2 !== undefined ? (p.intervalo_2 ? Number(p.intervalo_2) : null) : (p['intervalo_km 2'] ? Number(p['intervalo_km 2']) : null),
+            tipo_aplicacion: p.tipo_aplicacion || p['tipo_aplicación'] || ''
+        };
+        const seq = generarSecuenciaParaPauta(estructura, kmsActuales);
+        pautasSecuencia = [...pautasSecuencia, ...seq];
+    });
+
+    // Ordenar matemáticamente de menor a mayor KM
+    pautasSecuencia.sort((a, b) => a.iteracion_km - b.iteracion_km);
+
+    // Desduplicar conservando el primer hito de cada KM
+    const uniqueKms = new Set<number>();
+    return pautasSecuencia.filter(item => {
+        if (!uniqueKms.has(item.iteracion_km)) {
+            uniqueKms.add(item.iteracion_km);
+            return true;
+        }
+        return false;
+    });
+}
+
 // 1. Datos de entrada (Lo que viene de tu Base de Datos)
 export interface VehiculoDB {
     id: string | number;
@@ -89,6 +198,8 @@ export interface VehiculoDB {
     intervaloMantenimiento?: number;
     tipoIntervalo?: string;
     factorConversionHoras?: number | null;
+    en_operacion_activa?: boolean;
+    estado?: string;
 }
 
 // 2. Estructura exacta de las 16 columnas de salida para la tabla
@@ -118,6 +229,8 @@ export interface FilaPizarraMantenimiento {
     tipoProximoMantencion: string;         // 13. Tipo Próx. Mant.
     semaforoPeligro10Dias: boolean;        // 14. Semáf. (Rojo=true, Verde=false)
     fechaProximaMantencion: string | null; // 15. Fecha Próx. Mant.
+    inconsistenciaKm?: boolean;             // Alerta: KM Actual < KM Última Mantención
+    mensajeInconsistencia?: string;
     
     // 16. Acciones es UI (HTML/Botones), no requiere lógica de datos aquí.
 
@@ -135,6 +248,25 @@ export interface FilaPizarraMantenimiento {
     intervaloMantenimiento?: number;
     tipoIntervalo?: string;
     factorConversionHoras?: number | null;
+    en_operacion_activa?: boolean;
+    estado?: string;
+}
+
+export function formatearDiaMesAno(d: Date | string | null): string | null {
+    if (!d) return null;
+    if (typeof d === 'string') {
+        const clean = d.split('T')[0];
+        const parts = clean.split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+    }
+    const date = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(date.getTime())) return null;
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${day}-${month}-${year}`;
 }
 
 /**
@@ -164,8 +296,13 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
     if (vehiculo.pautasSecuencia && vehiculo.pautasSecuencia.length > 0) {
         // --- Cálculo de Pauta Vencida ---
         const hasHistoryOrPastPhase = kmUltimo > 0 || kmActual > (intervalo * 1.5);
+        // El hito cubierto por la última mantención (ej: mantención hecha a 209.898 para el hito 210.000)
+        // se considera cumplido y no debe marcarse falsamente como pauta omitida o vencida.
+        const hitoCubierto = (intervalo > 0 && kmUltimo > 0) ? Math.round(kmUltimo / intervalo) * intervalo : kmUltimo;
+        const kmCorteOmitidas = Math.max(kmUltimo, hitoCubierto);
+
         let pautasOmitidas = vehiculo.pautasSecuencia.filter(
-             p => p.iteracion_km > kmUltimo && p.iteracion_km <= kmActual
+             p => p.iteracion_km > kmCorteOmitidas && p.iteracion_km <= kmActual
         );
 
         if (hasHistoryOrPastPhase && pautasOmitidas.length > 0) {
@@ -186,7 +323,11 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         }
 
         // --- Cálculo de Tipo Próx. Mant. ---
-        let pautasFuturas = vehiculo.pautasSecuencia.filter(p => p.iteracion_km > kmActual);
+        // DIRECTRIZ DE NEGOCIO OBLIGATORIA: El pronóstico de la próxima mantención
+        // SIEMPRE debe ser estrictamente posterior al kilometraje del último mantenimiento realizado.
+        // NUNCA pronosticar una pauta que haya quedado en el pasado del historial de mantención.
+        const kmBaseProyeccion = Math.max(kmActual, kmUltimo || 0);
+        let pautasFuturas = vehiculo.pautasSecuencia.filter(p => p.iteracion_km > kmBaseProyeccion);
         
         // Excepción de Rodaje: Si el camión ya pasó su fase inicial, ignora SI y R
         if (pautasFuturas.length > 0) {
@@ -228,16 +369,26 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         // --- LÓGICA DE FALLBACK (SI NO HAY SECUENCIA PAUTAS) ---
         if (kmUltimo > 0 && intervalo > 0) {
             const kmUltimoRedondeado = Math.round(kmUltimo / intervalo) * intervalo;
-            proximoHitoVencimiento = kmUltimoRedondeado + intervalo;
-            const kmsFaltantes = proximoHitoVencimiento - kmActual;
+            const primerHito = kmUltimoRedondeado + intervalo;
 
-            const diferenciaVencida = kmActual - proximoHitoVencimiento;
-            if (diferenciaVencida > 0) {
-                kmVencido = diferenciaVencida;
+            if (kmActual > primerHito) {
+                // Hay un hito vencido en el pasado
+                kmVencido = kmActual - primerHito;
                 estatus = "VENCIDO";
-                pautaVencidaStr = `Mant. de ${proximoHitoVencimiento.toLocaleString('es-CL')} km`;
-            } else if (kmsFaltantes > 0 && kmsFaltantes <= (intervalo * 0.25)) {
-                estatus = "PROXIMO";
+                pautaVencidaStr = `Mant. de ${primerHito.toLocaleString('es-CL')} km`;
+
+                // Avanzar al próximo hito estrictamente futuro
+                let hitoFuturo = primerHito;
+                while (hitoFuturo <= kmActual) {
+                    hitoFuturo += intervalo;
+                }
+                proximoHitoVencimiento = hitoFuturo;
+            } else {
+                proximoHitoVencimiento = primerHito;
+                const kmsFaltantes = proximoHitoVencimiento - kmActual;
+                if (kmsFaltantes > 0 && kmsFaltantes <= (intervalo * 0.25)) {
+                    estatus = "PROXIMO";
+                }
             }
         }
     }
@@ -294,15 +445,6 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         tipoProximoMantencion = vehiculo.tipoUltimaPauta || "N/A";
     }
 
-    // --- 4. RETORNO DEL OBJETO FORMATEADO PARA LA TABLA ---
-    const formatearDiaMesAno = (d: Date | null) => {
-        if (!d) return null;
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
-        return `${day}-${month}-${year}`;
-    };
-
     return {
         ...vehiculo,
         id: vehiculo.id,
@@ -323,7 +465,153 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         kmProximoMantencion: kmProximo,
         tipoProximoMantencion: tipoProximoMantencion,
         semaforoPeligro10Dias: semaforo10Dias,
-        fechaProximaMantencion: formatearDiaMesAno(fechaProxima)
+        fechaProximaMantencion: formatearDiaMesAno(fechaProxima),
+        inconsistenciaKm: (kmUltimo > 0 && kmActual > 0 && kmActual < (kmUltimo - 100)),
+        mensajeInconsistencia: (kmUltimo > 0 && kmActual > 0 && kmActual < (kmUltimo - 100))
+            ? `Inconsistencia: KM actual (${kmActual.toLocaleString('es-CL')} km) es menor a última mantención (${kmUltimo.toLocaleString('es-CL')} km)`
+            : undefined
     };
 }
 
+
+export const obtenerSoloModelo = (modeloRaw?: string, marcaRaw?: string): string => {
+  if (!modeloRaw || !modeloRaw.trim()) return '--';
+  let mod = modeloRaw.trim();
+  if (mod.includes('/')) {
+    const parts = mod.split('/');
+    mod = parts[parts.length - 1].trim();
+  }
+  if (marcaRaw && marcaRaw.trim()) {
+    const cleanMarca = marcaRaw.trim().toLowerCase();
+    if (mod.toLowerCase().startsWith(cleanMarca)) {
+      mod = mod.substring(cleanMarca.length).trim();
+      mod = mod.replace(/^[-/:\s]+/, '').trim();
+    }
+  }
+  return mod || modeloRaw || '--';
+};
+
+export function mapearVehiculoDB(v: any, pautasData: any[], ordenesTrabajo: any[]): VehiculoDB {
+  const detalles = v.detalles || {};
+  let kmsActuales = typeof v.kilometraje_actual === 'number' ? v.kilometraje_actual : parseFloat(String(v.kilometraje_actual).replace(/[^0-9.-]+/g, '')) || 0;
+  
+  const rawKmUlt = (v.km_ultima_mantencion !== undefined && v.km_ultima_mantencion !== null && v.km_ultima_mantencion !== '')
+    ? v.km_ultima_mantencion
+    : (detalles.km_ultima_mantencion !== undefined && detalles.km_ultima_mantencion !== null ? detalles.km_ultima_mantencion : 0);
+  let kmUltMant = typeof rawKmUlt === 'number' ? rawKmUlt : parseFloat(String(rawKmUlt).replace(/[^0-9.-]+/g, '')) || 0;
+
+  if (kmUltMant > 1000 && kmsActuales > (kmUltMant * 4) && Math.abs((kmsActuales / 10) - kmUltMant) < kmUltMant) {
+    kmsActuales = Math.round((kmsActuales / 10) * 100) / 100;
+  }
+
+  if (detalles?.odometro_manual && typeof detalles?.km_manual === 'number') {
+    if (kmsActuales < detalles.km_manual || (kmsActuales > (detalles.km_manual * 4))) {
+      kmsActuales = detalles.km_manual;
+    }
+  }
+  
+  const rawInterval = (v.intervalo_mantencion_km !== undefined && v.intervalo_mantencion_km !== null)
+    ? v.intervalo_mantencion_km
+    : ((v.intervalo_km !== undefined && v.intervalo_km !== null)
+      ? v.intervalo_km
+      : (detalles.intervalo_mantencion_km !== undefined && detalles.intervalo_mantencion_km !== null ? detalles.intervalo_mantencion_km : (detalles.intervalo_km || 15000)));
+  const kmInterv = typeof rawInterval === 'number' ? rawInterval : parseFloat(String(rawInterval).replace(/[^0-9.-]+/g, '')) || 15000;
+  
+  let pautasSecuenciaStr = v.tipo_ultimo_mant || v.tipo_ult_pauta || detalles.tipo_ultimo_mant || detalles.tipo_ult_pauta || '';
+  if (pautasSecuenciaStr && pautasSecuenciaStr.includes('-')) {
+    pautasSecuenciaStr = pautasSecuenciaStr.split('-')[0].trim();
+  }
+  let fechaUltMant = v.fecha_ultima_mantencion || v.fecha_ult_mantencion || detalles.fecha_ultima_mantencion || null;
+
+  const otsFinalizadas = (ordenesTrabajo || []).filter((o: any) =>
+    (String(o.vehiculoId || o.vehiculo_id) === String(v.id) || (v.patente && o.patente === v.patente)) &&
+    (o.estado === 'FINALIZADA' || o.estado === 'CERRADA_POR_MECANICO') &&
+    String(o.tipo || o.tipo_mantenimiento || '').toUpperCase().includes('PREVENTIV')
+  );
+
+  if (otsFinalizadas.length > 0) {
+    const sortedOts = [...otsFinalizadas].sort((a, b) => {
+      const kmB = Number(b.kilometrajeCierre || b.kilometraje_cierre || b.kilometrajeApertura || 0);
+      const kmA = Number(a.kilometrajeCierre || a.kilometraje_cierre || a.kilometrajeApertura || 0);
+      if (kmB !== kmA) return kmB - kmA;
+      const timeB = new Date(b.termino_proceso || b.fechaProgramada || b.fechaCreacion || 0).getTime();
+      const timeA = new Date(a.termino_proceso || a.fechaProgramada || a.fechaCreacion || 0).getTime();
+      return timeB - timeA;
+    });
+
+    const topOt = sortedOts[0];
+    const otKm = Number(topOt.kilometrajeCierre || topOt.kilometraje_cierre || topOt.kilometrajeApertura || 0);
+    if (otKm >= kmUltMant) {
+      kmUltMant = otKm;
+      const f = topOt.termino_proceso || topOt.fechaProgramada || topOt.fechaCreacion;
+      if (f) fechaUltMant = f;
+      if (topOt.pauta && !topOt.pauta.toLowerCase().includes('inicial') && topOt.pauta.trim() !== '') {
+        pautasSecuenciaStr = topOt.pauta.split('-')[0].trim();
+      }
+    }
+  }
+
+  if (kmsActuales <= 0 && kmUltMant > 0) {
+    kmsActuales = kmUltMant;
+  }
+
+  const vehOil = v.tipo_aceite || detalles.tipo_aceite || '';
+  const pautasSecuencia: HitoSecuencia[] = pautasData
+    ? obtenerPautasSecuenciaParaVehiculo(v.modelo || detalles.modelo, vehOil, kmsActuales, pautasData)
+    : [];
+
+  // Deducción automática de última pauta si venía vacía, como inicial o no reconocida:
+  if (!pautasSecuenciaStr || pautasSecuenciaStr.toLowerCase().includes('inicial') || pautasSecuenciaStr === 'N/A' || pautasSecuenciaStr === 'Mantenimiento Preventivo') {
+    if (pautasSecuencia && pautasSecuencia.length > 0 && kmUltMant > 0) {
+      let closestHito = pautasSecuencia[0];
+      let minDiff = Math.abs(pautasSecuencia[0].iteracion_km - kmUltMant);
+      for (const h of pautasSecuencia) {
+        const diff = Math.abs(h.iteracion_km - kmUltMant);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestHito = h;
+        }
+      }
+      pautasSecuenciaStr = closestHito.nombre.split('-')[0].trim();
+    } else {
+      pautasSecuenciaStr = 'SM1';
+    }
+  }
+
+  const rawMarca = v.marca || detalles.marca || '';
+  const rawMod = v.modelo || detalles.modelo || '';
+  const inferredMarca = (!rawMarca && rawMod && rawMod.includes('/')) ? rawMod.split('/')[0].trim() : rawMarca;
+  const pureModelo = obtenerSoloModelo(rawMod, inferredMarca);
+
+  const rawFechaAct = v.fecha_actualizacion_km || detalles.fecha_actualizacion_km || v.updated_at || v.created_at;
+  const parsedFechaAct = rawFechaAct ? new Date(rawFechaAct) : new Date();
+
+  return {
+    id: v.id,
+    numeroInterno: v.numero_interno?.toString() || '',
+    patente: v.patente || '',
+    kilometrajeActual: kmsActuales,
+    fechaActualizacionKm: !isNaN(parsedFechaAct.getTime()) ? parsedFechaAct : new Date(),
+    intervaloMantencionKm: kmInterv,
+    kmPromedioDia: v.km_promedio_dia || detalles.kmPromedioDia || 0,
+    kmUltimaMantencion: kmUltMant,
+    fechaUltimaMantencion: fechaUltMant ? new Date(fechaUltMant) : null,
+    tipoUltimaPauta: pautasSecuenciaStr,
+    pautasSecuencia,
+    marca: inferredMarca,
+    modelo: pureModelo !== '--' ? pureModelo : (rawMod || ''),
+    ano: v.anio || v.ano || detalles.ano || detalles.anio || '',
+    chasis: v.chasis || detalles.chasis || '',
+    motor: v.motor || detalles.motor || '',
+    norma: v.norma_euro || v.norma || detalles.norma_euro || detalles.norma || '',
+    aplicacion: v.aplicacion || detalles.aplicacion || '',
+    tipoAceite: v.tipo_aceite || v.tipoAceite || detalles.tipo_aceite || detalles.tipoAceite || '',
+    fecha_matriculacion: v.fecha_matriculacion || detalles.fecha_matriculacion || '',
+    detalles,
+    intervaloMantenimiento: kmInterv,
+    tipoIntervalo: v.tipo_intervalo || 'KM',
+    factorConversionHoras: v.factor_conversion_horas || null,
+    en_operacion_activa: v.en_operacion_activa !== false && v.estado !== 'DE_BAJA' && detalles?.activo !== false,
+    estado: v.estado || 'OPERATIVO'
+  };
+}

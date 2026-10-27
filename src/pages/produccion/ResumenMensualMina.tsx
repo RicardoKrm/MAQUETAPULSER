@@ -54,15 +54,13 @@ interface ProcessedRow {
   raw: any[]; 
 }
 
-import { mockResumenMensualMina } from '../../lib/mockProduccion';
-
 export default function ResumenMensualMina() {
   const { currentCompany } = useCompany();
   const { user } = useAuth();
 
-  const [selectedMonth, setSelectedMonth] = useState('2026-09');
-  const [data, setData] = useState<ProcessedRow[]>(() => mockResumenMensualMina.filter(r => r.mes === '2026-09') as any);
-  const availableMonths = ['2026-09', '2026-08', '2026-07'];
+  const [data, setData] = useState<ProcessedRow[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState('2026-07');
+  const availableMonths = ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12'];
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'resumen' | 'dia' | 'noche' | 'matriz'>('resumen');
@@ -88,6 +86,13 @@ export default function ResumenMensualMina() {
         .eq('mes', mes)
         .order('dia', { ascending: true });
 
+      if (error) {
+        if (error.code === 'PGRST205') {
+          setSchemaError(true);
+        }
+        throw error;
+      }
+
       if (records && records.length > 0) {
         const loaded: ProcessedRow[] = records.map(r => ({
           ...r.raw_data,
@@ -98,13 +103,11 @@ export default function ResumenMensualMina() {
         }));
         setData(loaded);
       } else {
-        const filtered = mockResumenMensualMina.filter(r => r.mes === mes);
-        setData(filtered as any);
+        setData([]);
       }
     } catch (err: any) {
-      console.warn("Using fallback mockResumenMensualMina:", err);
-      const filtered = mockResumenMensualMina.filter(r => r.mes === mes);
-      setData(filtered as any);
+      console.error(err);
+      setError("Error cargando datos de la base de datos.");
     } finally {
       setLoading(false);
     }

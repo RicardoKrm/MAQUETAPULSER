@@ -4,62 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, Eye, Camera, MapPin, Clock } from 'lucide-react';
 
-const mockObservaciones = [
-  {
-    id: 'OBS-2026-081',
-    tipo: 'Acto Inseguro',
-    descripcion: 'Operador desciende de cabina saltando desde el segundo peldaño sin mantener los 3 puntos de apoyo.',
-    fecha: '08/07/2026 10:15',
-    area: 'Patio de Maniobras Los Andes',
-    accion: 'Se detiene la acción y se realiza re-instrucción inmediata sobre técnica de tres puntos de apoyo.',
-    foto: true
-  },
-  {
-    id: 'OBS-2026-094',
-    tipo: 'Condición Insegura',
-    descripcion: 'Presencia de mancha de aceite hidráulico en piso de pasillo de tránsito peatonal de taller.',
-    fecha: '24/07/2026 15:40',
-    area: 'Taller Mecánico Fosa 1',
-    accion: 'Se colocó aserrín absorbente y señalética de advertencia de piso resbaladizo de inmediato.',
-    foto: true
-  },
-  {
-    id: 'OBS-2026-103',
-    tipo: 'Acto Inseguro',
-    descripcion: 'Conductor transita por zona de descarga sin chaleco reflectante debidamente abrochado.',
-    fecha: '14/08/2026 08:50',
-    area: 'Rampa de Descarga Faena',
-    accion: 'Retroalimentación positiva en terreno. El trabajador se abrocha el chaleco de inmediato.',
-    foto: false
-  },
-  {
-    id: 'OBS-2026-118',
-    tipo: 'Condición Insegura',
-    descripcion: 'Tapa de canaleta de cables eléctricos semi-abierta en zona de circulación de carretillas.',
-    fecha: '04/09/2026 16:10',
-    area: 'Bodega de Repuestos',
-    accion: 'Alineación y fijación correcta de la plancha metálica de protección.',
-    foto: true
-  },
-  {
-    id: 'OBS-2026-125',
-    tipo: 'Acto Inseguro',
-    descripcion: 'Mecánico operando esmeril angular sin careta facial completa adosada al casco.',
-    fecha: '11/09/2026 11:30',
-    area: 'Zona de Soldadura Taller',
-    accion: 'Detención de la labor, colocación obligatoria de careta de policarbonato facial.',
-    foto: true
-  }
-];
+const mockObservaciones: any[] = [];
 
 const ObservacionesSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredObservaciones = mockObservaciones.filter(obs =>
-    obs.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    obs.area.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    obs.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
@@ -94,7 +42,7 @@ const ObservacionesSSO = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredObservaciones.map((obs) => (
+            {mockObservaciones.map((obs) => (
               <Card key={obs.id} className="border border-gray-200 dark:border-gray-800 shadow-sm">
                 <CardContent className="p-5">
                   <div className="flex justify-between items-start mb-3">

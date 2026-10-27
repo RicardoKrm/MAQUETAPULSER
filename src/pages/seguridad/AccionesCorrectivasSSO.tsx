@@ -3,7 +3,8 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Search, Filter, Wrench, CheckSquare, Clock, ArrowRight } from 'lucide-react';
-import { mockAccionesSSO as mockAcciones } from '../../lib/mockSeguridad';
+
+const mockAcciones: any[] = [];
 
 const AccionesCorrectivasSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,25 +32,25 @@ const AccionesCorrectivasSSO = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Abiertas</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">7</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Vencidas</p>
-            <p className="text-2xl font-bold text-emerald-600 mt-1">0</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">En Revisión SSO</p>
-            <p className="text-2xl font-bold text-orange-500 mt-1">1</p>
+            <p className="text-2xl font-bold text-orange-500 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Eficacia Cierre (Mes)</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">94.2%</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
           </CardContent>
         </Card>
       </div>

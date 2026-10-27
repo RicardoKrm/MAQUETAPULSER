@@ -5,12 +5,14 @@ import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { Plus, Search, Filter, DollarSign, FileDown, Trash, Edit } from 'lucide-react';
+import { Plus, Search, Filter, DollarSign, FileDown, Trash, Edit, RotateCcw, SlidersHorizontal, User } from 'lucide-react';
 import { CrearOTModal } from '../../components/flota/CrearOTModal';
 import { usePermissions } from '../../hooks/usePermissions';
+import { exportToExcel } from '../../lib/excelExport';
+import Swal from 'sweetalert2';
 
 export default function GestionOrdenesTrabajo() {
-  const { ordenesTrabajo, vehiculos, eliminarOrdenTrabajo } = useAppContext();
+  const { ordenesTrabajo, vehiculos, eliminarOrdenTrabajo, recargarOrdenesTrabajo } = useAppContext();
   const { profile } = useAuth();
   const { hasPermission } = usePermissions();
   const canCrearOT = hasPermission('Módulo de Mantenimiento:Crear Órdenes');
@@ -19,25 +21,80 @@ export default function GestionOrdenesTrabajo() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [otToEdit, setOtToEdit] = useState<any>(null);
 
+  React.useEffect(() => {
+    recargarOrdenesTrabajo?.();
+  }, [recargarOrdenesTrabajo]);
+
   const [filtroVehiculo, setFiltroVehiculo] = useState('Todos');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
   const [filtroEstado, setFiltroEstado] = useState('Todos');
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
+  const [mostrarAvanzados, setMostrarAvanzados] = useState(false);
+
+  const handleLimpiarFiltros = () => {
+    setFiltroVehiculo('Todos');
+    setFiltroTipo('Todos');
+    setFiltroEstado('Todos');
+    setFiltroDesde('');
+    setFiltroHasta('');
+    setPaginaActual(1);
+  };
 
   const otsFiltradas = ordenesTrabajo.filter(ot => {
     // Seguridad de vistas (Roles)
     if (isMecanico && ot.responsable_id !== profile?.id) return false;
 
-    const vehiculo = vehiculos.find(v => v.id === ot.vehiculoId);
-    const matchVehiculo = filtroVehiculo === 'Todos' || (vehiculo && vehiculo.patente === filtroVehiculo);
-    const matchTipo = filtroTipo === 'Todos' || ot.tipo === filtroTipo;
-    const matchEstado = filtroEstado === 'Todos' || ot.estado === filtroEstado;
+    const vehiculo = vehiculos.find(v => String(v.id) === String(ot.vehiculoId));
+    const matchVehiculo = filtroVehiculo === 'Todos' || 
+      (vehiculo && (vehiculo.patente === filtroVehiculo || String(vehiculo.id) === filtroVehiculo));
+
+    const matchTipo = (() => {
+      if (filtroTipo === 'Todos') return true;
+      const otTipo = (ot.tipo || '').toUpperCase().trim();
+      const fTipo = filtroTipo.toUpperCase().trim();
+      return otTipo.includes(fTipo) || fTipo.includes(otTipo);
+    })();
+
+    const matchEstado = (() => {
+      if (filtroEstado === 'Todos') return true;
+      const otEstado = (ot.estado || '').toUpperCase().trim();
+      const fEstado = filtroEstado.toUpperCase().trim();
+      
+      if (fEstado === 'PENDIENTE') {
+        return otEstado === 'PENDIENTE' || otEstado === 'ABIERTA';
+      }
+      if (fEstado === 'PROGRAMADA') {
+        return otEstado === 'PROGRAMADA';
+      }
+      if (fEstado === 'EN_PROCESO') {
+        return otEstado === 'EN_PROCESO' || otEstado === 'EN PROCESO';
+      }
+      if (fEstado === 'PAUSADA') {
+        return otEstado === 'PAUSADA';
+      }
+      if (fEstado === 'FINALIZADA') {
+        return otEstado === 'FINALIZADA' || otEstado === 'CERRADA' || otEstado === 'CERRADA_POR_MECANICO';
+      }
+      if (fEstado === 'CANCELADA') {
+        return otEstado === 'CANCELADA';
+      }
+      return otEstado === fEstado;
+    })();
     
     // Date filtering logic
-    const fechaOT = new Date(ot.fechaCreacion);
-    const matchDesde = !filtroDesde || fechaOT >= new Date(filtroDesde);
-    const matchHasta = !filtroHasta || fechaOT <= new Date(filtroHasta);
+    const fechaOTStr = ot.fechaCreacion || (ot as any).created_at || (ot as any).fecha_creacion;
+    const fechaOT = fechaOTStr ? new Date(fechaOTStr) : null;
+    let matchDesde = true;
+    let matchHasta = true;
+    if (filtroDesde && fechaOT) {
+      const dDesde = new Date(filtroDesde + 'T00:00:00');
+      matchDesde = fechaOT >= dDesde;
+    }
+    if (filtroHasta && fechaOT) {
+      const dHasta = new Date(filtroHasta + 'T23:59:59');
+      matchHasta = fechaOT <= dHasta;
+    }
     
     return matchVehiculo && matchTipo && matchEstado && matchDesde && matchHasta;
   });
@@ -49,9 +106,28 @@ export default function GestionOrdenesTrabajo() {
   const totalPaginas = Math.ceil(otsFiltradas.length / itemsPorPagina);
   const isJefatura = profile?.rol?.nombre === 'Supervisor' || profile?.rol?.nombre === 'Administrador' || profile?.rol?.nombre === 'Súper Admin' || profile?.rol?.nombre === 'Dueño';
 
-  const costoTotal = otsFiltradas.reduce((acc, ot) => {
-    return acc + (ot.costoInsumos || 0) + (ot.costoManoObraTareas || 0) + (ot.costoManoObraHH || 0);
-  }, 0);
+  const getOtCosto = (ot: any) => {
+    const rawTotal = Number(ot.costoTotal || (ot as any).costo_total);
+    if (!isNaN(rawTotal) && rawTotal > 0) return rawTotal;
+    return (Number(ot.costoInsumos) || 0) + (Number(ot.costoManoObraTareas) || 0) + (Number(ot.costoManoObraHH) || 0);
+  };
+
+  const costoTotal = otsFiltradas.reduce((acc, ot) => acc + getOtCosto(ot), 0);
+
+  const costoPreventivas = otsFiltradas
+    .filter(ot => (ot.tipo || '').toUpperCase().includes('PREVENTIV'))
+    .reduce((acc, ot) => acc + getOtCosto(ot), 0);
+
+  const costoCorrectivas = otsFiltradas
+    .filter(ot => (ot.tipo || '').toUpperCase().includes('CORRECTIV'))
+    .reduce((acc, ot) => acc + getOtCosto(ot), 0);
+
+  const costoEvaluativas = otsFiltradas
+    .filter(ot => {
+      const t = (ot.tipo || '').toUpperCase();
+      return t.includes('EVALUA') || t.includes('INSPECC');
+    })
+    .reduce((acc, ot) => acc + getOtCosto(ot), 0);
 
   const getEstadoColor = (estado: string) => {
     switch(estado) {
@@ -98,75 +174,353 @@ export default function GestionOrdenesTrabajo() {
     }
   }
 
+  const handleExportExcel = () => {
+    if (otsFiltradas.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sin datos',
+        text: 'No hay órdenes de trabajo para exportar con los filtros seleccionados.',
+        confirmButtonColor: '#0891b2',
+      });
+      return;
+    }
+
+    const dataToExport = otsFiltradas.map((ot) => {
+      const vehiculo = vehiculos.find((v) => v.id === ot.vehiculoId);
+      const costoInsumos = Number(ot.costoInsumos) || 0;
+      const costoMO = (Number(ot.costoManoObraTareas) || 0) + (Number(ot.costoManoObraHH) || 0);
+      const rawTotal = Number(ot.costoTotal || (ot as any).costo_total);
+      const costoTotalOT = (!isNaN(rawTotal) && rawTotal > 0) ? rawTotal : (costoInsumos + costoMO);
+
+      return {
+        'Folio': ot.folio || 'S/F',
+        'Vehículo (Patente)': vehiculo?.patente || 'N/A',
+        'Marca': vehiculo?.marca || 'N/A',
+        'Modelo': vehiculo?.modelo || 'N/A',
+        'Tipo de OT': (ot.tipo || '').replace(/_/g, ' '),
+        'Estado': (ot.estado || '').replace(/_/g, ' '),
+        'Prioridad': ot.prioridad || 'MEDIA',
+        'Técnico Responsable': ot.tecnicoResponsable || ot.externo_nombre || 'Sin asignar',
+        'Personal Operativo': ot.personalOperativo || '',
+        'Fecha Creación': ot.fechaCreacion ? new Date(ot.fechaCreacion).toLocaleDateString('es-CL') : '',
+        'Fecha Programada': ot.fechaProgramada || '',
+        'Hora Inicio': ot.horaInicioProgramada || '',
+        'Hora Término': ot.horaTerminoProgramada || '',
+        'KM Apertura': ot.kilometrajeApertura || ot.kilometraje_apertura || 0,
+        'KM Cierre': ot.kilometrajeCierre || ot.kilometraje_cierre || 0,
+        'Pauta': ot.pauta || 'N/A',
+        'Tipo de Falla': ot.tipoFalla || 'N/A',
+        'Observación': ot.observacionInicial || ot.observaciones || '',
+        'Costo Insumos ($)': costoInsumos,
+        'Costo Mano de Obra ($)': costoMO,
+        'Costo Total ($)': costoTotalOT,
+      };
+    });
+
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    exportToExcel(dataToExport, `Reporte_Ordenes_Trabajo_${fechaHoy}`, 'OrdenesDeTrabajo');
+
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: `Se exportaron ${dataToExport.length} órdenes de trabajo a Excel`,
+      showConfirmButton: false,
+      timer: 2500,
+    });
+  };
+
+  const handleEliminarConConfirmacion = (otId: string, folio: string) => {
+    Swal.fire({
+      title: '¿Eliminar Orden de Trabajo?',
+      text: `¿Estás seguro de que deseas eliminar la orden de trabajo ${folio}? Esta acción no se puede deshacer.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await eliminarOrdenTrabajo(otId, true);
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'success',
+            title: `OT ${folio} eliminada correctamente`,
+            showConfirmButton: false,
+            timer: 2000
+          });
+        } catch (err) {
+          console.error("Error al eliminar OT:", err);
+          Swal.fire('Error', 'No se pudo eliminar la orden de trabajo.', 'error');
+        }
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-6 rounded-lg border dark:border-slate-800">
-        <h1 className="text-3xl font-bold">Órdenes de Trabajo</h1>
-        <div className="flex items-center gap-4">
-            <Button variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 dark:bg-green-900/30"><FileDown className="w-4 h-4 mr-2" /> Exportar</Button>
-            {canCrearOT && (
-              <Button className="bg-cyan-600" onClick={() => { setOtToEdit(null); setIsModalOpen(true); }}><Plus className="w-4 h-4 mr-2" /> Crear Nueva OT</Button>
-            )}
+      {/* Header con Título y Botones de Acción */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-slate-900 p-6 rounded-xl border dark:border-slate-800 gap-4 shadow-sm">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Órdenes de Trabajo</h1>
+          <p className="text-xs text-slate-500 mt-1">Gestión operativa, control de estados y costos de mantenimiento de la flota</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={handleExportExcel}
+            className="border-green-600 text-green-600 hover:bg-green-50 dark:bg-green-900/30 font-medium"
+            title="Descargar listado en formato Excel (.xlsx)"
+          >
+            <FileDown className="w-4 h-4 mr-2 text-green-600" /> Exportar Excel
+          </Button>
+          {canCrearOT && (
+            <Button className="bg-cyan-600 hover:bg-cyan-700 font-medium" onClick={() => { setOtToEdit(null); setIsModalOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> Crear Nueva Orden de Trabajo
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Casillas de Costos según Filtros Aplicados (Total, Preventivas, Correctivas y Evaluativas) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Costo Total OTs */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xl shrink-0">
+            $
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Costo Total OTs
+            </p>
+            <p className="text-xl md:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 truncate">
+              ${costoTotal.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {otsFiltradas.length} órdenes filtradas
+            </span>
+          </div>
+        </div>
+
+        {/* Preventivas */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/70 border border-blue-300 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xl shrink-0">
+            🛡️
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              Mant. Preventivas
+            </p>
+            <p className="text-xl md:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 truncate">
+              ${costoPreventivas.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {otsFiltradas.filter(ot => (ot.tipo || '').toUpperCase().includes('PREVENTIV')).length} órdenes
+            </span>
+          </div>
+        </div>
+
+        {/* Correctivas */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 flex items-center justify-center text-rose-600 dark:text-rose-400 font-bold text-xl shrink-0">
+            🔧
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              Mant. Correctivas
+            </p>
+            <p className="text-xl md:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 truncate">
+              ${costoCorrectivas.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {otsFiltradas.filter(ot => (ot.tipo || '').toUpperCase().includes('CORRECTIV')).length} órdenes
+            </span>
+          </div>
+        </div>
+
+        {/* Evaluativas */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-950/70 border border-purple-300 dark:border-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold text-xl shrink-0">
+            📋
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+              Mant. Evaluativas
+            </p>
+            <p className="text-xl md:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 truncate">
+              ${costoEvaluativas.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {otsFiltradas.filter(ot => (ot.tipo || '').toUpperCase().includes('EVALUA') || (ot.tipo || '').toUpperCase().includes('INSPECC')).length} órdenes
+            </span>
+          </div>
         </div>
       </div>
       
       <CrearOTModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} otToEdit={otToEdit} />
       
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-6 flex items-center gap-2"><Filter className="text-cyan-600 w-5 h-5"/> Filtros</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <select className="p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={filtroVehiculo} onChange={(e) => setFiltroVehiculo(e.target.value)}>
-                <option value="Todos">Todos los Vehículos</option>
-                {vehiculos.map(v => <option key={v.id} value={v.patente}>{v.patente}</option>)}
-            </select>
-            <select className="p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
-                <option value="Todos">Todos los Tipos</option>
-                <option value="PREVENTIVA">PREVENTIVA</option>
-                <option value="CORRECTIVA">CORRECTIVA</option>
-                <option value="INSPECCION">INSPECCION</option>
-            </select>
-            <select className="p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-                <option value="Todos">Todos los Estados</option>
-                <option value="EN_PROCESO">EN PROCESO</option>
-                <option value="PROGRAMADA">PROGRAMADA</option>
-                <option value="FINALIZADA">FINALIZADA</option>
-                <option value="CERRADA_POR_MECANICO">CERRADA POR MECANICO</option>
-                <option value="ABIERTA">ABIERTA</option>
-                <option value="PAUSADA">PAUSADA</option>
-            </select>
-            <input type="date" className="p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} placeholder="Desde" />
-            <input type="date" className="p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} placeholder="Hasta" />
+      {/* Sección de Filtros Dinámicos */}
+      <Card className="p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+            <Filter className="text-cyan-600 w-5 h-5"/> Filtros de Órdenes
+          </h2>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleLimpiarFiltros} 
+              className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1" /> Limpiar
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setMostrarAvanzados(!mostrarAvanzados)} 
+              className={`text-xs ${mostrarAvanzados ? 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/40' : 'text-slate-500'}`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 mr-1" /> {mostrarAvanzados ? 'Ocultar Avanzados' : 'Más Filtros'}
+            </Button>
+          </div>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 items-end">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Vehículo</label>
+            <select 
+              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500" 
+              value={filtroVehiculo} 
+              onChange={(e) => { setFiltroVehiculo(e.target.value); setPaginaActual(1); }}
+            >
+              <option value="Todos">Todos los Vehículos</option>
+              {vehiculos.map(v => (
+                <option key={v.id} value={v.patente}>
+                  {v.numero ? `${v.numero} - ${v.patente}` : v.patente} {v.modelo ? `(${v.modelo})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Tipo</label>
+            <select 
+              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500" 
+              value={filtroTipo} 
+              onChange={(e) => { setFiltroTipo(e.target.value); setPaginaActual(1); }}
+            >
+              <option value="Todos">Todos los Tipos</option>
+              <option value="PREVENTIVA">Preventiva</option>
+              <option value="CORRECTIVA">Correctiva</option>
+              <option value="EVALUATIVA">Evaluativa</option>
+              <option value="INSPECCION">Inspección</option>
+              <option value="PREVENTIVA_NEUMATICOS">Preventiva Neumáticos</option>
+              <option value="CORRECTIVA_NEUMATICOS">Correctiva Neumáticos</option>
+              <option value="EVALUATIVA_NEUMATICOS">Evaluativa Neumáticos</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Estado</label>
+            <select 
+              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500" 
+              value={filtroEstado} 
+              onChange={(e) => { setFiltroEstado(e.target.value); setPaginaActual(1); }}
+            >
+              <option value="Todos">Todos los Estados</option>
+              <option value="PENDIENTE">Pendiente</option>
+              <option value="PROGRAMADA">Programada</option>
+              <option value="EN_PROCESO">En Proceso</option>
+              <option value="PAUSADA">Pausada</option>
+              <option value="FINALIZADA">Finalizada</option>
+              <option value="CANCELADA">Cancelada</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Fecha Desde</label>
+            <input 
+              type="date" 
+              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500" 
+              value={filtroDesde} 
+              onChange={(e) => { setFiltroDesde(e.target.value); setPaginaActual(1); }} 
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Fecha Hasta</label>
+            <input 
+              type="date" 
+              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500" 
+              value={filtroHasta} 
+              onChange={(e) => { setFiltroHasta(e.target.value); setPaginaActual(1); }} 
+            />
+          </div>
+        </div>
+
+        {mostrarAvanzados && (
+          <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in fade-in duration-200">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+              <span className="font-medium">
+                Mostrando {otsFiltradas.length} órdenes de trabajo encontradas según los filtros.
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleLimpiarFiltros}
+                className="text-xs"
+              >
+                Restablecer todos los filtros
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-auto mt-6">
-            {isJefatura && (
-               <div className="flex justify-end p-4 font-bold text-lg text-slate-700 dark:text-slate-200">
-                  Costo Total OTs Mostradas: <span className="ml-2 font-mono">${costoTotal.toLocaleString()}</span>
-               </div>
-            )}
             <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 dark:bg-slate-900/50 border-b dark:border-slate-800 uppercase text-xs text-slate-500 dark:text-slate-400">
                     <tr>
                         <th className="p-4">Folio</th>
-                        <th className="p-4">Vehículo / Modelo</th>
+                        <th className="p-4">Vehículo</th>
                         <th className="p-4">Tipo</th>
                         <th className="p-4">Estado</th>
+                        <th className="p-4 text-right">Costo Total</th>
                         <th className="p-4 text-right">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     {otsPaginadas.map((ot) => {
-                        const vehiculo = vehiculos.find(v => v.id === ot.vehiculoId);
+                        const vehiculo = vehiculos.find(v => String(v.id) === String(ot.vehiculoId));
+                        const costoFila = (ot.costoInsumos || 0) + (ot.costoManoObraTareas || 0) + (ot.costoManoObraHH || 0);
                         return (
-                            <tr key={ot.id} className="border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-900/50">
-                                <td className="p-4 font-bold">{ot.folio}</td>
-                                <td className="p-4">{vehiculo?.patente || 'N/A'}</td>
-                                <td className="p-4"><Badge className={`${getTipoColor(ot.tipo)} border dark:border-slate-800`}>{ot.tipo}</Badge></td>
-                                <td className="p-4"><Badge className={`${getEstadoColor(ot.estado)} border dark:border-slate-800`}>{ot.estado.replace('_', ' ')}</Badge></td>
+                            <tr key={ot.id} className="border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-900/50 transition-colors">
+                                <td className="p-4">
+                                  <div className="font-bold text-slate-900 dark:text-slate-100">{ot.folio}</div>
+                                  {ot.tecnicoResponsable && (
+                                    <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 font-normal">
+                                      <User className="w-3 h-3 text-slate-400" /> {ot.tecnicoResponsable}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-4">
+                                    <div className="font-semibold text-slate-800 dark:text-slate-200">
+                                      {vehiculo ? `${vehiculo.numero ? vehiculo.numero + ' - ' : ''}${vehiculo.patente}` : (ot.vehiculoId || 'N/A')}
+                                    </div>
+                                    {vehiculo?.modelo && <div className="text-xs text-slate-500">{vehiculo.modelo}</div>}
+                                </td>
+                                <td className="p-4"><Badge className={`${getTipoColor(ot.tipo)} border dark:border-slate-800`}>{ot.tipo ? ot.tipo.replace(/_/g, ' ') : ''}</Badge></td>
+                                <td className="p-4"><Badge className={`${getEstadoColor(ot.estado)} border dark:border-slate-800`}>{ot.estado ? ot.estado.replace(/_/g, ' ') : ''}</Badge></td>
+                                <td className="p-4 text-right font-mono font-medium text-slate-800 dark:text-slate-200">
+                                  ${costoFila.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
                                 <td className="p-4 text-right">
-                                    <Button size="sm" variant="ghost" className="mr-2 text-cyan-600" onClick={() => { setOtToEdit(ot); setIsModalOpen(true); }}><Edit className="w-4 h-4"/></Button>
+                                    <Button size="sm" variant="ghost" className="mr-2 text-cyan-600 hover:text-cyan-700" onClick={() => { setOtToEdit(ot); setIsModalOpen(true); }}><Edit className="w-4 h-4"/></Button>
                                     <Button size="sm" variant="outline" className="mr-2" onClick={() => navigate(`/flota/ordenes-trabajo/${ot.id}`)}>Ver</Button>
-                                    <Button size="sm" variant="ghost" className="text-red-500" onClick={() => eliminarOrdenTrabajo(ot.id)}><Trash className="w-4 h-4"/></Button>
+                                    <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleEliminarConConfirmacion(ot.id, ot.folio)}><Trash className="w-4 h-4"/></Button>
                                 </td>
                             </tr>
                         );
@@ -177,7 +531,7 @@ export default function GestionOrdenesTrabajo() {
             {totalPaginas > 1 && (
                 <div className="flex justify-center items-center gap-2 p-4 border-t dark:border-slate-800">
                     <Button variant="outline" size="sm" disabled={paginaActual === 1} onClick={() => setPaginaActual(p => p - 1)}>Anterior</Button>
-                    <span className="text-sm">Página {paginaActual} de {totalPaginas}</span>
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Página {paginaActual} de {totalPaginas}</span>
                     <Button variant="outline" size="sm" disabled={paginaActual === totalPaginas} onClick={() => setPaginaActual(p => p + 1)}>Siguiente</Button>
                 </div>
             )}

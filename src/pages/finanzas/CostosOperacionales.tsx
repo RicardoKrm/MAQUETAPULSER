@@ -10,8 +10,12 @@ export default function CostosOperacionales() {
   const [vehiculosStats, setVehiculosStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [fechaDesde, setFechaDesde] = useState<string>('2026-07-01');
-  const [fechaHasta, setFechaHasta] = useState<string>('2026-09-12');
+  const [fechaDesde, setFechaDesde] = useState<string>(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+  );
+  const [fechaHasta, setFechaHasta] = useState<string>(
+    new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]
+  );
   
   useEffect(() => {
     if (activeCompanyId) {
@@ -107,107 +111,14 @@ export default function CostosOperacionales() {
         });
         
         stats.sort((a, b) => b.costoTotal - a.costoTotal);
-        if (stats.length === 0 || stats.every(s => s.costoTotal === 0 && s.ingresos === 0)) {
-          setVehiculosStats(mockVehiculosStatsFallback);
-        } else {
-          setVehiculosStats(stats);
-        }
-      } else {
-        setVehiculosStats(mockVehiculosStatsFallback);
+        setVehiculosStats(stats);
       }
     } catch (e) {
       console.error(e);
-      setVehiculosStats(mockVehiculosStatsFallback);
     } finally {
       setLoading(false);
     }
   };
-
-const mockVehiculosStatsFallback = [
-  {
-    id: 'veh-01',
-    vehiculo: 'KHLP-90 - Scania R500 6x4',
-    estado: 'excelente',
-    detalle: [
-      { nombre: 'Combustible Diésel (4.120 L)', monto: 4326000 },
-      { nombre: 'Mantenimiento Preventivo (Pauta 140.000 km)', monto: 1850000 },
-      { nombre: 'Cambio de 4 Neumáticos Tracción Bridgestone', monto: 2200000 },
-      { nombre: 'Peajes Troncal Ruta 5 Norte / Los Andes', monto: 640000 }
-    ],
-    costoTotal: 9016000,
-    ingresos: 28500000,
-    ganancia: 19484000
-  },
-  {
-    id: 'veh-02',
-    vehiculo: 'BRTH-44 - Volvo FH16 750',
-    estado: 'excelente',
-    detalle: [
-      { nombre: 'Combustible Diésel (3.850 L)', monto: 4042500 },
-      { nombre: 'Mantenimiento Preventivo (Pauta 90.000 km)', monto: 1420000 },
-      { nombre: 'Insumos y AdBlue Urea Grado Automotriz', monto: 380000 },
-      { nombre: 'Peajes y TAG Faena Cordillera', monto: 590000 }
-    ],
-    costoTotal: 6432500,
-    ingresos: 24200000,
-    ganancia: 17767500
-  },
-  {
-    id: 'veh-03',
-    vehiculo: 'JWRS-18 - Mercedes-Benz Actros 2645',
-    estado: 'normal',
-    detalle: [
-      { nombre: 'Combustible Diésel (3.200 L)', monto: 3360000 },
-      { nombre: 'Mantenimiento Correctivo (Cambio Válvula APU)', monto: 1650000 },
-      { nombre: 'Alineación y Balanceo de Ejes', monto: 280000 },
-      { nombre: 'Peajes', monto: 480000 }
-    ],
-    costoTotal: 5770000,
-    ingresos: 16800000,
-    ganancia: 11030000
-  },
-  {
-    id: 'veh-04',
-    vehiculo: 'PRTZ-33 - Scania G450',
-    estado: 'alerta',
-    detalle: [
-      { nombre: 'Combustible Diésel (3.980 L)', monto: 4179000 },
-      { nombre: 'Mantenimiento Correctivo (Turboalimentador)', monto: 4890000 },
-      { nombre: 'Cambio Discos de Freno Delanteros', monto: 1250000 },
-      { nombre: 'Insumos Lubricantes y Filtros', monto: 620000 }
-    ],
-    costoTotal: 10939000,
-    ingresos: 9800000,
-    ganancia: -1139000
-  },
-  {
-    id: 'veh-05',
-    vehiculo: 'HGZX-55 - Volvo FMX 460',
-    estado: 'excelente',
-    detalle: [
-      { nombre: 'Combustible Diésel (2.900 L)', monto: 3045000 },
-      { nombre: 'Mantenimiento Preventivo (Pauta 60.000 km)', monto: 1100000 },
-      { nombre: 'Lavado y Engrase General', monto: 190000 },
-      { nombre: 'Peajes y Escolta Faena', monto: 420000 }
-    ],
-    costoTotal: 4755000,
-    ingresos: 18400000,
-    ganancia: 13645000
-  },
-  {
-    id: 'veh-06',
-    vehiculo: 'FXLK-12 - Mack Anthem 6x4',
-    estado: 'regular',
-    detalle: [
-      { nombre: 'Combustible Diésel (2.400 L)', monto: 2520000 },
-      { nombre: 'Inspección de Relleno y Filtro Partículas DPF', monto: 980000 },
-      { nombre: 'Seguro Obligatorio y Certificación Minera', monto: 450000 }
-    ],
-    costoTotal: 3950000,
-    ingresos: 4200000,
-    ganancia: 250000
-  }
-];
 
   return (
     <div className="space-y-6">

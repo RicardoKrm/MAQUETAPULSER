@@ -76,12 +76,12 @@ export const navigation = [
     submodules: [
       { title: 'Contratos Clientes', icon: Briefcase, href: '/operaciones/contratos' },
       { title: 'Crear Servicio', icon: ClipboardList, href: '/operaciones/servicios' },
-      { title: 'Reservas', icon: Calendar, href: '/operaciones/reservas' },
+      { title: 'Servicios SPOT & Rental', icon: Zap, href: '/operaciones/spot' },
       { title: 'Mantenedores', icon: ClipboardList, href: '/operaciones/mantenedores' },
       { title: 'Programación', icon: CalendarClock, href: '/operaciones/programacion' },
       { title: 'Control Documental', icon: FileCheck, href: '/operaciones/control-documental' },
       { title: 'Historial', icon: Activity, href: '/operaciones/historial' },
-      { title: 'GPS FleetSat', icon: MapPin, href: '/operaciones/gps' },
+      { title: 'Monitor GPS', icon: MapPin, href: '/operaciones/gps' },
       { title: 'Portal Conductor', icon: UserCircle, href: '/operaciones/portal-conductor' },
       { title: 'Gestión de Rutas', icon: MapIcon, href: '/operaciones/rutas' },
     ],
@@ -121,6 +121,7 @@ export const navigation = [
     submodules: [
       { title: 'Gestión de Suministros', icon: Package, href: '/logistica/suministros' },
       { title: 'Gestión de Bodegas', icon: Boxes, href: '/logistica/bodegas' },
+      { title: 'Punto de Reorden', icon: ShoppingCart, href: '/logistica/suministros?view=compras' },
       { title: 'Puerto de Escaneo', icon: ScanBarcode, href: '/logistica/escaneo' },
       { title: 'Auditoría de Salidas', icon: CheckSquare, href: '/logistica/auditoria-salidas' },
       { title: 'Aprobaciones', icon: CheckSquare, href: '/logistica/validaciones' },
@@ -216,6 +217,8 @@ export const navigation = [
       { title: 'Gestión de Vehículos', icon: Archive, href: '/configuracion/vehiculos' },
       { title: 'Kit de Repuestos', icon: Package, href: '/herramientas/kits' },
       { title: 'Gestión de Pausas', icon: Clock, href: '/configuracion/pausas' },
+      { title: 'Configuración de Alertas', icon: Bell, href: '/configuracion/alertas' },
+      { title: 'Matriz de Escalamiento', icon: ShieldCheck, href: '/configuracion/escalamiento' },
       { title: 'Carga Masiva', icon: Zap, href: '/configuracion/carga-masiva' },
     ],
   },
@@ -230,3 +233,4 @@ export const navigation = [
     ],
   },
 ];
+

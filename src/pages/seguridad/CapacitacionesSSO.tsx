@@ -4,14 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Plus, Search, Filter, BookOpen, GraduationCap, Award, Clock } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 
-const mockCursos = [
-  { id: 'CAP-01', curso: 'Manejo a la Defensiva en Alta Montaña', trabajador: 'Rodrigo Castillo Fuentes', relator: 'Escuela de Conductores del Norte', fecha: '08/07/2026', vencimiento: '08/07/2027', estado: 'Vigente' },
-  { id: 'CAP-02', curso: 'Primeros Auxilios Básicos y RCP', trabajador: 'Mauricio Silva Valenzuela', relator: 'Mutual de Seguridad CChC', fecha: '22/07/2026', vencimiento: '22/07/2027', estado: 'Vigente' },
-  { id: 'CAP-03', curso: 'Uso y Manejo Seguro de Extintores', trabajador: 'Carlos Venegas Morales', relator: 'Cuerpo de Bomberos Los Andes', fecha: '12/08/2026', vencimiento: '12/08/2027', estado: 'Vigente' },
-  { id: 'CAP-04', curso: 'Aislación, Bloqueo y Tarjeteo (LOTO)', trabajador: 'Jorge Lagos Cárdenas', relator: 'Consultores Mineros SpA', fecha: '28/08/2026', vencimiento: '28/08/2027', estado: 'Vigente' },
-  { id: 'CAP-05', curso: 'Transporte de Sustancias Peligrosas (DS 298)', trabajador: 'Felipe Araya Godoy', relator: 'Asociación de Industriales', fecha: '09/09/2026', vencimiento: '09/09/2027', estado: 'Vigente' },
-  { id: 'CAP-06', curso: 'Trabajo Seguro en Espacios Confinados', trabajador: 'Gonzalo Pavez Castro', relator: 'Mutual CChC', fecha: '15/07/2025', vencimiento: '15/09/2026', estado: 'Próximo a Vencer' }
-];
+const mockCursos: any[] = [];
 
 const CapacitacionesSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,7 +41,7 @@ const CapacitacionesSSO = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Cursos (Año)</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">6</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">0</p>
               </div>
               <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                 <BookOpen className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -61,7 +54,7 @@ const CapacitacionesSSO = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Trabajadores Habilitados</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">148</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">0</p>
               </div>
               <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
                 <GraduationCap className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
@@ -74,7 +67,7 @@ const CapacitacionesSSO = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Próximos a Vencer (30d)</p>
-                <p className="text-3xl font-bold text-orange-500 mt-1">1</p>
+                <p className="text-3xl font-bold text-orange-500 mt-1">0</p>
               </div>
               <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
                 <Clock className="w-6 h-6 text-orange-600 dark:text-orange-400" />

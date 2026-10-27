@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { supabase, logActividad } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
-import { mockDocumentosBiblioteca } from '../../lib/mockData';
 import { Search, Filter, FileText, Download, ExternalLink, Bookmark, Clock, Tag, ChevronRight, Hash } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -47,14 +46,15 @@ export default function BibliotecaExplorador() {
       
       const { data, error } = await query;
       
-      if (!error && data && data.length > 0) {
-        setDocs(data as Documento[]);
+      if (error) {
+        // Table might not exist yet, set empty docs to avoid crash
+        console.error("No se pudo cargar la biblioteca. ¿Corriste el script de sql?", error);
+        setDocs([]);
       } else {
-        setDocs(mockDocumentosBiblioteca as Documento[]);
+        setDocs(data as Documento[]);
       }
     } catch (e) {
       console.error(e);
-      setDocs(mockDocumentosBiblioteca as Documento[]);
     } finally {
       setLoading(false);
     }

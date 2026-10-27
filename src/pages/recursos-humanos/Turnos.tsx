@@ -17,7 +17,6 @@ import { Button } from "../../components/ui/Button";
 import Swal from 'sweetalert2';
 import { useCompany } from "../../contexts/CompanyContext";
 import { supabase } from "../../lib/supabase";
-import { mockColaboradores } from "../../lib/mockData";
 
 // --- Types ---
 type EmployeeStatus = 'ACTIVO' | 'VACACIONES' | 'LICENCIA' | 'AUSENTE' | 'PERMISO' | 'RENUNCIO';
@@ -45,68 +44,15 @@ interface ShiftGroup {
 // --- Mock Data ---
 const initialData: Record<Area, ShiftGroup[]> = {
   DÍA: [
-    {
-      id: 'dia-iqq',
-      title: 'Transporte IQQ / Troncal',
-      supervisor: 'Rodrigo Fuentes',
-      workers: [
-        { id: 'colab-01', name: 'Juan Pérez Soto', role: 'Conductor Alto Tonelaje', details: 'RUT: 12.345.678-9', status: 'ACTIVO', isApoyo: false, notes: 'Turno 7x7 Los Andes' },
-        { id: 'colab-02', name: 'Carlos Morales', role: 'Conductor Cama Baja', details: 'RUT: 14.567.890-2', status: 'ACTIVO', isApoyo: false, notes: 'Escolta autorizada' }
-      ]
-    },
-    {
-      id: 'dia-hospicio',
-      title: 'Transporte Hospicio / Químicos',
-      supervisor: 'Mauricio Soto',
-      workers: [
-        { id: 'colab-03', name: 'Diego Castillo', role: 'Conductor Aljibe', details: 'RUT: 16.789.012-3', status: 'ACTIVO', isApoyo: false, notes: 'Reactivos Codelco' }
-      ]
-    },
-    {
-      id: 'dia-taller',
-      title: 'Taller Central / Mantenimiento',
-      supervisor: 'Patricio Riquelme',
-      workers: [
-        { id: 'colab-05', name: 'Roberto Díaz', role: 'Mecánico Senior', details: 'RUT: 13.987.654-1', status: 'ACTIVO', isApoyo: false, notes: 'Jefe de patio' },
-        { id: 'colab-06', name: 'Gabriel Tapia', role: 'Eléctrico Automotriz', details: 'RUT: 17.654.321-8', status: 'ACTIVO', isApoyo: false, notes: 'Diagnóstico CAN Bus' }
-      ]
-    },
-    {
-      id: 'dia-mina',
-      title: 'Transporte Mina / Faena Cordillera',
-      supervisor: 'Carlos Morales',
-      workers: [
-        { id: 'colab-04', name: 'Andrés Vega', role: 'Operador CAEX', details: 'RUT: 15.234.567-4', status: 'ACTIVO', isApoyo: false, notes: 'Faena Los Pelambres' },
-        { id: 'colab-07', name: 'Esteban Parra', role: 'Operador Cargador Frontal', details: 'RUT: 18.112.233-4', status: 'ACTIVO', isApoyo: true, notes: 'Apoyo turno día' }
-      ]
-    }
+    { id: 'dia-iqq', title: 'Transporte IQQ', supervisor: '', workers: [] },
+    { id: 'dia-hospicio', title: 'Transporte Hospicio', supervisor: '', workers: [] },
+    { id: 'dia-taller', title: 'Transporte Taller', supervisor: '', workers: [] },
+    { id: 'dia-mina', title: 'Transporte Mina', supervisor: '', workers: [] }
   ],
   NOCHE: [
-    {
-      id: 'noche-iqq',
-      title: 'Transporte IQQ / Troncal',
-      supervisor: 'Felipe Araya',
-      workers: [
-        { id: 'colab-08', name: 'Cristian Silva', role: 'Conductor Nocturno', details: 'RUT: 15.678.901-5', status: 'ACTIVO', isApoyo: false, notes: 'Ruta nocturna Los Andes' },
-        { id: 'colab-09', name: 'Marcelo Valenzuela', role: 'Conductor Relevo', details: 'RUT: 16.345.678-7', status: 'ACTIVO', isApoyo: false, notes: 'Relevo cuarto turno' }
-      ]
-    },
-    {
-      id: 'noche-hospicio',
-      title: 'Transporte Hospicio / Químicos',
-      supervisor: 'Jorge Valdés',
-      workers: [
-        { id: 'colab-10', name: 'Héctor Carrizo', role: 'Conductor Cisterna Noche', details: 'RUT: 14.890.123-6', status: 'ACTIVO', isApoyo: false, notes: 'Traslado combustible noche' }
-      ]
-    },
-    {
-      id: 'noche-mina',
-      title: 'Transporte Mina / Faena Cordillera',
-      supervisor: 'Gonzalo Olivares',
-      workers: [
-        { id: 'colab-11', name: 'Luis Herrera', role: 'Operador CAEX Noche', details: 'RUT: 17.234.567-9', status: 'ACTIVO', isApoyo: false, notes: 'Turno mina nocturno' }
-      ]
-    }
+    { id: 'noche-iqq', title: 'Transporte IQQ', supervisor: '', workers: [] },
+    { id: 'noche-hospicio', title: 'Transporte Hospicio', supervisor: '', workers: [] },
+    { id: 'noche-mina', title: 'Transporte Mina', supervisor: '', workers: [] }
   ]
 };
 
@@ -167,73 +113,36 @@ export default function Turnos() {
   }, [currentCompany?.id]);
 
   const fetchColaboradores = async () => {
-    try {
-      if (!currentCompany?.id) {
-        setColaboradores(mockColaboradores.map(c => ({ id: c.id, nombre: c.nombre, rut: c.rut, rol: c.rol })));
-        return;
-      }
-      const { data, error } = await supabase
-        .from('colaborador')
-        .select('id, nombre, rut, rol')
-        .eq('empresa_id', currentCompany.id)
-        .eq('estado', 'ACTIVO')
-        .order('nombre');
-      
-      if (!error && data && data.length > 0) {
-        setColaboradores(data);
-      } else {
-        setColaboradores(mockColaboradores.map(c => ({ id: c.id, nombre: c.nombre, rut: c.rut, rol: c.rol })));
-      }
-    } catch (e) {
-      setColaboradores(mockColaboradores.map(c => ({ id: c.id, nombre: c.nombre, rut: c.rut, rol: c.rol })));
+    if (!currentCompany?.id) return;
+    const { data, error } = await supabase
+      .from('colaborador')
+      .select('id, nombre, rut, rol')
+      .eq('empresa_id', currentCompany.id)
+      .eq('estado', 'ACTIVO')
+      .order('nombre');
+    
+    if (data) {
+      setColaboradores(data);
     }
   };
 
   const fetchWeeks = async () => {
+    if (!currentCompany?.id) return;
     setIsLoading(true);
-    const fallbackWeeks = [
-      { id: 'sem-2026-w37', fecha_inicio: '2026-09-07', fecha_fin: '2026-09-13' },
-      { id: 'sem-2026-w36', fecha_inicio: '2026-08-31', fecha_fin: '2026-09-06' },
-      { id: 'sem-2026-w35', fecha_inicio: '2026-08-24', fecha_fin: '2026-08-30' },
-      { id: 'sem-2026-w34', fecha_inicio: '2026-08-17', fecha_fin: '2026-08-23' }
-    ];
+    const { data, error } = await supabase
+      .from('turnos_semanales')
+      .select('id, fecha_inicio, fecha_fin')
+      .eq('empresa_id', currentCompany.id)
+      .order('fecha_inicio', { ascending: false });
 
-    try {
-      if (!currentCompany?.id) {
-        setAllWeeks(fallbackWeeks);
-        setCurrentWeekIndex(0);
-        setCurrentWeekId(fallbackWeeks[0].id);
-        setWeekDates({ inicio: fallbackWeeks[0].fecha_inicio, fin: fallbackWeeks[0].fecha_fin });
-        setBoardData(initialData);
-        setIsLoading(false);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('turnos_semanales')
-        .select('id, fecha_inicio, fecha_fin')
-        .eq('empresa_id', currentCompany.id)
-        .order('fecha_inicio', { ascending: false });
-
-      if (error || !data || data.length === 0) {
-        setAllWeeks(fallbackWeeks);
-        setCurrentWeekIndex(0);
-        setCurrentWeekId(fallbackWeeks[0].id);
-        setWeekDates({ inicio: fallbackWeeks[0].fecha_inicio, fin: fallbackWeeks[0].fecha_fin });
-        setBoardData(initialData);
-      } else {
-        setAllWeeks(data);
-        setCurrentWeekIndex(0);
-        loadWeekData(data[0].id);
-      }
-    } catch (e) {
-      setAllWeeks(fallbackWeeks);
+    if (error) {
+      console.error("Error fetching weeks:", error);
+    } else if (data && data.length > 0) {
+      setAllWeeks(data);
       setCurrentWeekIndex(0);
-      setCurrentWeekId(fallbackWeeks[0].id);
-      setWeekDates({ inicio: fallbackWeeks[0].fecha_inicio, fin: fallbackWeeks[0].fecha_fin });
-      setBoardData(initialData);
-    } finally {
-      setIsLoading(false);
+      loadWeekData(data[0].id);
     }
+    setIsLoading(false);
   };
 
   const loadWeekData = async (weekId: string) => {

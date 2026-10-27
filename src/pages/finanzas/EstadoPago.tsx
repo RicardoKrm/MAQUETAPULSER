@@ -4,7 +4,6 @@ import { Badge } from '../../components/ui/Badge';
 import { DollarSign, MessageSquare, Mail, ClipboardList, TrendingUp } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
-import { mockRegistrosFinancieros } from '../../lib/mockData';
 
 export default function EstadoPago() {
   const { activeCompanyId } = useCompany();
@@ -39,17 +38,6 @@ export default function EstadoPago() {
                });
             }
          });
-      }
-
-      if (allRegistros.length === 0) {
-        allRegistros = mockRegistrosFinancieros
-          .filter((r: any) => r.tipo === 'Ingreso')
-          .map((r: any) => ({
-            ...r,
-            fuente: r.contrato || 'Contrato Minero Principal',
-            fuenteId: 'emp-001',
-            entityType: 'empresa'
-          }));
       }
 
       // Ordenar por fecha mas reciente

@@ -33,7 +33,6 @@ import Swal from 'sweetalert2';
 import { useCompany } from '../../contexts/CompanyContext';
 import { supabase } from '../../lib/supabase';
 import OrdenCompraDetalle from './OrdenCompraDetalle';
-import { mockHistorialOC } from '../../lib/mockData';
 
 interface PedidoTaller {
   id: string;
@@ -169,23 +168,20 @@ export default function OrdenesCompra() {
        .eq('empresa_id', currentCompany.id)
        .order('fecha_emision', { ascending: false });
 
-      if (data && data.length > 0) {
-         const parsed = data.map(o => ({
-            id: o.id,
-            folio: o.folio,
-            fecha: new Date(o.fecha_emision).toLocaleString('es-CL'),
-            proveedor: o.proveedor_nombre || 'Desconocido',
-            monto: o.monto_estimado,
-            estado: o.estado,
-            resumen: o.notas || 'Compra general',
-            lineas: o.lineas || []
-         }));
-         setOrdenesPendientes(parsed.filter(p => p.estado === 'PENDIENTE'));
-         setHistorialOrdenes(parsed);
-      } else {
-         setOrdenesPendientes(mockHistorialOC.filter(o => o.estado === 'PENDIENTE') as any);
-         setHistorialOrdenes(mockHistorialOC as any);
-      }
+     if (data) {
+        const parsed = data.map(o => ({
+           id: o.id,
+           folio: o.folio,
+           fecha: new Date(o.fecha_emision).toLocaleString('es-CL'),
+           proveedor: o.proveedor_nombre || 'Desconocido',
+           monto: o.monto_estimado,
+           estado: o.estado,
+           resumen: o.notas || 'Compra general',
+           lineas: o.lineas || []
+        }));
+        setOrdenesPendientes(parsed.filter(p => p.estado === 'PENDIENTE'));
+        setHistorialOrdenes(parsed);
+     }
   };
 
   const allPedidosTaller = React.useMemo(() => {
@@ -266,12 +262,8 @@ export default function OrdenesCompra() {
     return allPedidosTaller;
   }, [allPedidosTaller, filtroPedidosTaller]);
 
-  const [ordenesPendientes, setOrdenesPendientes] = useState<OrdenCompra[]>(
-    mockHistorialOC.filter(o => o.estado === 'PENDIENTE') as any
-  );
-  const [historialOrdenes, setHistorialOrdenes] = useState<HistorialOrden[]>(
-    mockHistorialOC as any
-  );
+  const [ordenesPendientes, setOrdenesPendientes] = useState<OrdenCompra[]>([]);
+  const [historialOrdenes, setHistorialOrdenes] = useState<HistorialOrden[]>([]);
 
   const [nuevaOCLineas, setNuevaOCLineas] = useState<LineaOC[]>([
     { id: Date.now(), repuesto: '', descripcion: '', centroCosto: '', cantidad: 1, precioUnitario: 0 }

@@ -5,7 +5,6 @@ import { Modal } from '../../components/ui/Modal';
 import Swal from 'sweetalert2';
 import { useCompany } from '../../contexts/CompanyContext';
 import { supabase } from '../../lib/supabase';
-import { mockContratosCompras } from '../../lib/mockData';
 
 interface Contrato {
   id: string;
@@ -24,7 +23,7 @@ interface Contrato {
 
 export default function ContratosProveedores() {
   const { currentCompany } = useCompany();
-  const [contratos, setContratos] = useState<Contrato[]>(mockContratosCompras as any);
+  const [contratos, setContratos] = useState<Contrato[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedoresDist, setProveedoresDist] = useState<any[]>([]);
@@ -55,7 +54,7 @@ export default function ContratosProveedores() {
         .eq('empresa_id', currentCompany.id)
         .order('created_at', { ascending: false });
         
-      if (data && data.length > 0) {
+      if (data) {
           const parsed = data.map(c => ({
              id: c.folio,
              uuid: c.id,
@@ -71,8 +70,6 @@ export default function ContratosProveedores() {
              condicionPago: c.condicion_pago
           }));
           setContratos(parsed);
-      } else {
-          setContratos(mockContratosCompras as any);
       }
   };
 

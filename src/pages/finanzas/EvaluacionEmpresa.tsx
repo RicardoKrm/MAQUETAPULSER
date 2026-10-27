@@ -4,7 +4,6 @@ import { Badge } from '../../components/ui/Badge';
 import { Building2, Search, ArrowUpCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
-import { mockProveedores } from '../../lib/mockData';
 
 export default function EvaluacionEmpresa() {
   const { activeCompanyId } = useCompany();
@@ -22,37 +21,26 @@ export default function EvaluacionEmpresa() {
     try {
       const { data: pData, error: pErr } = await supabase.from('proveedores_directorio').select('*').eq('empresa_id', activeCompanyId);
       
-      const sourceData = (!pErr && pData && pData.length > 0) ? pData : mockProveedores;
-      
-      const arr = sourceData.map((p: any) => {
-          const hash = (p.nombre || '').length;
-          return {
-             id: p.id,
-             empresa: p.nombre,
-             rut: p.rut,
-             contratosActivos: (hash % 3) + 1,
-             ticketPromedio: ((hash || 10) * 150000),
-             nivelRiesgo: hash % 2 === 0 ? 'Bajo' : 'Medio',
-             salud: hash % 3 === 0 ? 'Regular' : 'Excelente'
-          };
-      });
+      if (!pErr && pData) {
+         // Evaluaremos a los proveedores (empresas) registradas
+         const arr = pData.map((p: any) => {
+             // Mock evaluations based on real data existence
+             const hash = p.nombre.length; // consistent mock based on name length
+             return {
+                id: p.id,
+                empresa: p.nombre,
+                rut: p.rut,
+                contratosActivos: (hash % 3) + 1,
+                ticketPromedio: (hash * 150000),
+                nivelRiesgo: hash % 2 === 0 ? 'Bajo' : 'Medio',
+                salud: hash % 3 === 0 ? 'Regular' : 'Excelente'
+             }
+         });
 
-      setEmpresasEval(arr);
+         setEmpresasEval(arr);
+      }
     } catch (e) {
       console.error(e);
-      const arr = mockProveedores.map((p: any) => {
-          const hash = (p.nombre || '').length;
-          return {
-             id: p.id,
-             empresa: p.nombre,
-             rut: p.rut,
-             contratosActivos: (hash % 3) + 1,
-             ticketPromedio: ((hash || 10) * 150000),
-             nivelRiesgo: hash % 2 === 0 ? 'Bajo' : 'Medio',
-             salud: hash % 3 === 0 ? 'Regular' : 'Excelente'
-          };
-      });
-      setEmpresasEval(arr);
     } finally {
       setLoading(false);
     }

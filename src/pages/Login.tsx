@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, logActividad } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Building2, Lock, User, ArrowRight, ShieldCheck, Zap, BarChart3, X, Mail } from 'lucide-react';
+import { Building2, Lock, User, ArrowRight, ShieldCheck, Zap, BarChart3, X, Mail, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -24,7 +24,20 @@ export default function Login() {
   const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   useEffect(() => {
-    navigate('/dashboard', { replace: true });
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        try {
+          const { data } = await supabase.from('usuario_aplicacion').select('panel_inicio').eq('auth_user_id', session.user.id).single();
+          if (data && data.panel_inicio) {
+            navigate(data.panel_inicio);
+          } else {
+            navigate('/dashboard');
+          }
+        } catch {
+          navigate('/dashboard');
+        }
+      }
+    });
   }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -58,9 +71,28 @@ export default function Login() {
         sessionUser = data.session.user;
         let { data: profile } = await supabase
           .from('usuario_aplicacion')
-          .select('id, nombre, empresa_id, panel_inicio')
+          .select('id, nombre, empresa_id, panel_inicio, estado, empresa:empresa_id(estado)')
           .eq('auth_user_id', sessionUser.id)
           .maybeSingle();
+
+
+        if (profile) {
+          
+          let isInactive = profile.estado?.toLowerCase() === 'inactivo';
+          if (profile.empresa) {
+            const emp = Array.isArray(profile.empresa) ? profile.empresa[0] : profile.empresa;
+            if (emp && emp.estado?.toLowerCase() === 'inactivo') {
+              isInactive = true;
+            }
+          }
+
+          if (isInactive) {
+            await supabase.auth.signOut();
+            setErrorMsg('Cuenta suspendida. Por favor contacte con soporte.');
+            setIsLoading(false);
+            return;
+          }
+        }
 
         if (!profile) {
           const namePart = email.split('@')[0] || 'Usuario';
@@ -78,7 +110,7 @@ export default function Login() {
             .select('id, nombre, empresa_id, panel_inicio')
             .maybeSingle();
 
-          profile = newProfile;
+          profile = newProfile as any;
         }
           
         if (profile) {
@@ -160,14 +192,17 @@ export default function Login() {
             }]);
         }
 
+        localStorage.setItem('superAdminTenantId', '161a47ac-9c63-435d-ab55-a6163a6805ab');
         navigate('/dashboard');
       } else {
         // Iniciar sesión local instantánea para acceso demo sin fallas
+        localStorage.setItem('superAdminTenantId', '161a47ac-9c63-435d-ab55-a6163a6805ab');
         setLocalSession(demoEmail, 'Administrador Demo', '/dashboard');
         navigate('/dashboard');
       }
     } catch (err: any) {
       console.warn('Acceso demo con respaldo local:', err);
+      localStorage.setItem('superAdminTenantId', '161a47ac-9c63-435d-ab55-a6163a6805ab');
       setLocalSession(demoEmail, 'Administrador Demo', '/dashboard');
       navigate('/dashboard');
     } finally {
@@ -235,7 +270,7 @@ export default function Login() {
         <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-fuchsia-500/10 blur-[100px] rounded-full pointer-events-none" />
 
         <div className="w-full max-w-md relative z-10">
-          <div className="mb-10">
+          <div className="mb-8">
             <div className="flex items-center gap-3 mb-8">
               <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/30">
                 <Building2 className="w-8 h-8 text-white" />
@@ -244,6 +279,30 @@ export default function Login() {
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">Ingresa a tu cuenta</h1>
             <p className="text-slate-400 text-lg">La plataforma todo-en-uno para gestionar y escalar tu empresa de transporte.</p>
+          </div>
+
+          {/* Banner Entorno Interactivo Demo Pulser Gaval */}
+          <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 shadow-xl shadow-indigo-950/20">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-wider">
+                <Building2 className="w-4 h-4 text-indigo-400" />
+                PULSER TMS DEMO (GAVAL)
+              </span>
+              <span className="text-[10px] bg-indigo-950 px-2 py-0.5 rounded text-indigo-300 font-semibold border border-indigo-500/30">
+                Entorno de Prueba
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+              Explora las funcionalidades de gestión de flota, mantenimiento preventivo ASRA y órdenes de trabajo sin restricciones:
+            </p>
+            <button
+              type="button"
+              onClick={handleDemoLogin}
+              className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs tracking-wide shadow-md shadow-indigo-900/30 transition-all hover:scale-[1.01]"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-300" />
+              <span>Ingresar Directo a la Maqueta Demo</span>
+            </button>
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 shadow-2xl rounded-2xl">

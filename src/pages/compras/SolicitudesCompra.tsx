@@ -6,7 +6,6 @@ import { Button } from '../../components/ui/Button';
 import { Plus, Search, Filter, CheckCircle, XCircle, Clock, FileText, ShoppingCart, Eye, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
 import Swal from 'sweetalert2';
 import SolicitudCompraDetalle from './SolicitudCompraDetalle';
-import { mockSolicitudesCompra } from '../../lib/mockData';
 
 export default function SolicitudesCompra() {
   const { currentCompany } = useCompany();
@@ -14,7 +13,7 @@ export default function SolicitudesCompra() {
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedSolicitud, setSelectedSolicitud] = useState<any>(null);
 
-  const [solicitudes, setSolicitudes] = useState<any[]>(mockSolicitudesCompra);
+  const [solicitudes, setSolicitudes] = useState<any[]>([]);
 
   const [showFilters, setShowFilters] = useState(true);
   const [filters, setFilters] = useState({
@@ -60,11 +59,10 @@ export default function SolicitudesCompra() {
 
       if (error) {
         console.warn('Supabase compras_solicitudes notice:', error.message);
-        setSolicitudes(mockSolicitudesCompra);
         return;
       }
 
-      if (data && data.length > 0) {
+      if (data) {
         const dbMapped = data.map((item: any) => ({
           id: item.id || item.codigo_solicitud,
           solicitante: item.solicitante,
@@ -78,12 +76,9 @@ export default function SolicitudesCompra() {
         }));
 
         setSolicitudes(dbMapped);
-      } else {
-        setSolicitudes(mockSolicitudesCompra);
       }
     } catch (e) {
       console.warn('Error conectando a Supabase compras_solicitudes:', e);
-      setSolicitudes(mockSolicitudesCompra);
     }
   };
 

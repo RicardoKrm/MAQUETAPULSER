@@ -1,1366 +1,854 @@
-import React, { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../../components/ui/card";
-import { Badge } from "../../../components/ui/badge";
-import {
-  Upload,
-  FileText,
-  FileCheck,
-  FileWarning,
-  Download,
-  UserPlus,
-  Truck,
-  ShieldAlert,
-  CheckCircle2,
-  AlertCircle,
-  X,
-  Calendar,
-  User,
-  Hash,
-  Search,
-  Trash2,
-} from "lucide-react";
-import { exportToExcel } from "../../lib/excelExport";
-import { supabase } from "../../lib/supabase";
-import { useCompany } from "../../contexts/CompanyContext";
-import { useAuth } from "../../context/AuthContext";
-import Swal from "sweetalert2";
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { Badge } from "../../components/ui/Badge";
+import { 
+  FileCheck, Truck, Users, AlertCircle, ShieldAlert, 
+  CalendarClock, Search, Filter, Plus, FileText, 
+  X, Save, CheckCircle2, AlertTriangle, XCircle, 
+  UploadCloud, Download, Edit, Paperclip, Eye, Calendar
+} from 'lucide-react';
+import { useCompany } from '../../contexts/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
+import Swal from 'sweetalert2';
 
 export default function ControlDocumental() {
   const { activeCompanyId } = useCompany();
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<"conductores" | "vehiculos">(
-    "conductores",
-  );
+  
+  // Try to use activeCompanyId first, fallback to profile.empresa_id
+  const saveCompanyId = activeCompanyId || profile?.empresa_id;
+
+  const [alertConfig, setAlertConfig] = useState({
+    diasAvisoLicencia: 15,
+    diasAvisoSalud: 15,
+    diasAvisoRevision: 30,
+    diasAvisoSeguro: 30
+  });
 
   const [drivers, setDrivers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
-  const [selectedEntity, setSelectedEntity] = useState<any>(null); // For Modal
-  const [modalType, setModalType] = useState<"driver" | "vehicle" | null>(null);
-  const [isAddingEntity, setIsAddingEntity] = useState<
-    "driver" | "vehicle" | null
-  >(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'personal' | 'unidades'>('personal');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const [newDriverForm, setNewDriverForm] = useState({
-    nombre: "",
-    rut: "",
-    cargo: "Conductor Interprovincial",
-    tipoLicencia: ["A4"] as string[],
-    vencimientoLicencia: "",
-    vencimientoSalud: "",
+  // Modals
+  const [showDriverModal, setShowDriverModal] = useState(false);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Forms
+  const [driverForm, setDriverForm] = useState({
+    rut: '', nombre: '', rol: '', telefono: '',
+    vencimientoLicencia: '', archivoLicencia: '',
+    licenciasMedicas: [],
+    vencimientoExamenes: '', archivoExamenes: '', estadoExamen: 'APTO',
+    fechaVacaciones: ''
   });
 
-  const [newVehicleForm, setNewVehicleForm] = useState({
-    patente: "",
-    tipo: "Bus",
-    anio: "2026",
-    kmActual: "0",
-    vencimientoRev: "",
-    vencimientoSeguro: "",
+  const [vehicleForm, setVehicleForm] = useState({
+    patente: '', marca: '', modelo: '', tipo: 'Camión', anio: new Date().getFullYear(),
+    fechaInscripcion: '', tipoUso: 'Carga General',
+    vencimientoRev: '', archivoRev: '',
+    vencimientoSeguro: '', archivoSeguro: '',
+    vencimientoPermisoCirculacion: '', archivoPermisoCirculacion: ''
   });
 
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // File Upload State
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentUploadField, setCurrentUploadField] = useState<{type: 'driver'|'vehicle', field: string} | null>(null);
 
-  const [documentos, setDocumentos] = useState<any[]>([]);
-
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !selectedEntity || !modalType) return;
-
-    try {
-      const file = files[0];
-      const saveCompanyId = activeCompanyId || profile?.empresa_id;
-      const newDoc = {
-        empresa_id: saveCompanyId,
-        tipo_entidad: modalType === "driver" ? "CONDUCTOR" : "VEHICULO",
-        entidad_id: selectedEntity.id,
-        tipo_documento: file.name,
-        estado: "Vigente",
-        archivo_url: file.name,
-      };
-
-      const { data, error } = await supabase
-        .from("operacion_documento")
-        .insert([newDoc])
-        .select();
-      if (error) throw error;
-
-      if (data) {
-        setDocumentos((prev) => [...prev, ...data]);
-        alert(`Archivo "${file.name}" registrado correctamente.`);
-      }
-    } catch (error) {
-      console.error("Error uploading document:", error);
-      alert("Error al adjuntar el documento.");
-    }
-  };
-
-  const loadDocumentos = async (entityId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("operacion_documento")
-        .select("*")
-        .eq("entidad_id", entityId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setDocumentos(data || []);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handleDeleteDocumento = async (docId: string) => {
-    if (!confirm("¿Estás seguro de que deseas eliminar este documento?"))
-      return;
-    try {
-      const { error } = await supabase
-        .from("operacion_documento")
-        .delete()
-        .eq("id", docId);
-      if (error) throw error;
-      setDocumentos((prev) => prev.filter((d) => d.id !== docId));
-    } catch (e) {
-      console.error(e);
-      alert("Error al eliminar");
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFileUpload(e.dataTransfer.files);
-  };
-
-  const today = new Date("2026-05-12").getTime();
+  const msPorDia = 24 * 60 * 60 * 1000;
+  const today = new Date().getTime();
 
   useEffect(() => {
-    fetchData();
-  }, [activeCompanyId]);
+    if (saveCompanyId) {
+      const saved = localStorage.getItem(`config_alertas_${saveCompanyId}`);
+      if (saved) setAlertConfig(JSON.parse(saved));
+      fetchData();
+    }
+  }, [saveCompanyId]);
 
   const fetchData = async () => {
+    if (!saveCompanyId) return;
+    setLoading(true);
     try {
-      let dQuery = supabase
-        .from("colaborador")
-        .select("id, nombre, rut, rol, telefono, detalles")
-        .eq("empresa_id", activeCompanyId);
-      let vQuery = supabase
-        .from("vehiculo")
-        .select(
-          "id, patente, marca, modelo, anio, kilometraje_actual, tipo, detalles",
-        )
-        .eq("empresa_id", activeCompanyId);
-
-      const [dRes, vRes] = await Promise.all([dQuery, vQuery]);
-
-      if (dRes.data) {
-        setDrivers(
-          dRes.data.map((d: any) => ({
-            ...d,
-            cargo: d.rol || "Conductor",
-            tipoLicencia: d.detalles?.tipoLicencia || "A4",
-            vencimientoLicencia:
-              d.detalles?.vencimientoLicencia || "2026-12-31",
-            vencimientoSalud: d.detalles?.vencimientoSalud || "2026-12-31",
-            vacaciones: d.detalles?.vacaciones || "Al día",
-          })),
-        );
-      }
-
-      if (vRes.data) {
-        setVehicles(
-          vRes.data.map((v: any) => ({
-            ...v,
-            tipo: v.tipo || "Camión",
-            anio: v.anio || 2020,
-            kmActual: v.kilometraje_actual || 0,
-            kmProximo: (v.kilometraje_actual || 0) + 10000,
-            vencimientoRev: "2026-12-31",
-            vencimientoSeguro: "2026-12-31",
-          })),
-        );
-      }
+      const { data: cols } = await supabase
+        .from('colaborador')
+        .select('*')
+        .eq('empresa_id', saveCompanyId);
+      
+      const { data: vehs } = await supabase
+        .from('vehiculo')
+        .select('*')
+        .eq('empresa_id', saveCompanyId);
+      
+      if (cols) setDrivers(cols);
+      if (vehs) setVehicles(vehs);
     } catch (e) {
       console.error(e);
     }
+    setLoading(false);
   };
 
-  const handleRegularizar = async (
-    entityId: string,
-    tipoEntidad: "driver" | "vehicle",
-    field: string,
-    newValue: string,
-    reasonDetails: string,
-  ) => {
-    try {
-      const table = tipoEntidad === "driver" ? "colaborador" : "vehiculo";
-
-      const res = await supabase
-        .from(table)
-        .select("detalles")
-        .eq("id", entityId)
-        .single();
-      const currentDetails = res.data?.detalles || {};
-
-      const updatedDetails = {
-        ...currentDetails,
-        [field]: newValue,
-      };
-
-      const { error } = await supabase
-        .from(table)
-        .update({
-          detalles: updatedDetails,
-        })
-        .eq("id", entityId);
-
-      if (error) throw error;
-
-      alert(`${reasonDetails}`);
-      fetchData();
-      if (selectedEntity && selectedEntity.id === entityId) {
-        setSelectedEntity({ ...selectedEntity, ...updatedDetails });
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Error al actualizar datos");
+  // ----- FILE UPLOAD HANDLER -----
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0 || !currentUploadField || !saveCompanyId) return;
+    const file = event.target.files[0];
+    
+    if (file.type !== 'application/pdf') {
+      Swal.fire('Error', 'Solo se permiten archivos PDF', 'error');
+      return;
     }
+
+    setUploading(true);
+    try {
+      const fileExt = 'pdf';
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${saveCompanyId}/${currentUploadField.type}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documentos_legales')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error(uploadError);
+        Swal.fire('Error de Almacenamiento', 'No se pudo subir el archivo. Por favor, asegúrate de haber creado el bucket "documentos_legales" en Supabase Storage.', 'error');
+        setUploading(false);
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('documentos_legales')
+        .getPublicUrl(filePath);
+
+      const url = publicUrlData.publicUrl;
+
+      if (currentUploadField.type === 'driver') {
+        setDriverForm(prev => ({ ...prev, [currentUploadField.field]: url }));
+      } else {
+        setVehicleForm(prev => ({ ...prev, [currentUploadField.field]: url }));
+      }
+
+      Swal.fire('Subido', 'El documento se cargó correctamente', 'success');
+    } catch (error) {
+      console.error(error);
+      Swal.fire('Error', 'Hubo un problema subiendo el archivo', 'error');
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setCurrentUploadField(null);
   };
 
-  // Rules Check
+  const triggerUpload = (type: 'driver'|'vehicle', field: string) => {
+    setCurrentUploadField({ type, field });
+    fileInputRef.current?.click();
+  };
+
+  // ----- STATUS CHECKERS -----
+  const checkDocument = (dateStr: string, warningDays: number) => {
+    if (!dateStr) return { status: 'FALTANTE', text: 'No registrado', date: '' };
+    
+    // Formatear a DD/MM/YYYY
+    const [y, m, d] = dateStr.split('-');
+    const dateFormatted = d && m && y ? `${d}/${m}/${y}` : dateStr;
+
+    const t = new Date(dateStr).getTime();
+    if (t < today) return { status: 'VENCIDO', text: 'Vencido', date: dateFormatted };
+    if (t < today + warningDays * msPorDia) return { status: 'PROXIMO', text: 'Próximo a vencer', date: dateFormatted };
+    return { status: 'EN ORDEN', text: 'Vigente', date: dateFormatted };
+  };
+
   const checkDriverStatus = (driver: any) => {
-    const isLicenciaVencida =
-      new Date(driver.vencimientoLicencia).getTime() < today;
-    const isVacacionesVencidas = driver.vacaciones === "Vencidas";
-
-    if (isLicenciaVencida || isVacacionesVencidas) {
-      return {
-        status: "BLOQUEADO",
-        reasons: [
-          isLicenciaVencida ? "Licencia Vencida" : null,
-          isVacacionesVencidas ? "Vacaciones Vencidas" : null,
-        ].filter(Boolean),
-      };
+    const det = driver.detalles || {};
+    
+    const docLicencia = checkDocument(det.vencimientoLicencia, alertConfig.diasAvisoLicencia);
+    // Licencias médicas logic
+    const hoy = new Date();
+    hoy.setHours(0,0,0,0);
+    let tieneLicenciaActiva = false;
+    let tieneLicenciaVencida = false;
+    let docSalud = { status: 'EN ORDEN', days: 0 };
+    
+    if (det.licenciasMedicas && det.licenciasMedicas.length > 0) {
+       const sorted = [...det.licenciasMedicas].sort((a,b) => new Date(b.hasta).getTime() - new Date(a.hasta).getTime());
+       const newest = sorted[0];
+       const hastaDate = new Date(newest.hasta);
+       const desdeDate = new Date(newest.desde);
+       hastaDate.setHours(23,59,59,999);
+       desdeDate.setHours(0,0,0,0);
+       
+       if (hoy >= desdeDate && hoy <= hastaDate) {
+         tieneLicenciaActiva = true;
+         docSalud = { status: 'VENCIDO', days: 0 }; 
+       } else if (hastaDate < hoy) {
+         docSalud = { status: 'EN ORDEN', days: 0 };
+       }
     }
-    return { status: "ACTIVO", reasons: [] };
+    const docExamen = checkDocument(det.vencimientoExamenes, alertConfig.diasAvisoSalud);
+      if (det.estadoExamen === 'NO APTO') {
+        docExamen.status = 'VENCIDO';
+        docExamen.text = 'NO APTO';
+      }
+    const docVacaciones = checkDocument(det.fechaVacaciones, 0);
+    
+    let status = 'EN ORDEN';
+    let reasons: string[] = [];
+
+    if (docLicencia.status === 'VENCIDO') reasons.push('Licencia Vencida');
+    if (tieneLicenciaActiva) reasons.push('Con Licencia Médica Activa');
+    if (docExamen.status === 'VENCIDO') reasons.push(det.estadoExamen === 'NO APTO' ? 'Examen Médico NO APTO' : 'Examen Vencido');
+    if (docVacaciones.status === 'VENCIDO') reasons.push('Vacaciones Vencidas');
+
+    if (reasons.length > 0) {
+      status = 'VENCIDO';
+    } else {
+      if (docLicencia.status === 'PROXIMO') reasons.push(`Licencia próxima (< ${alertConfig.diasAvisoLicencia} días)`);
+      // No PROXIMO for sick leave
+      if (docExamen.status === 'PROXIMO') reasons.push(`Exámenes próximos (< ${alertConfig.diasAvisoSalud} días)`);
+      if (reasons.length > 0) status = 'PROXIMO';
+    }
+
+    return { 
+      status, 
+      reasons,
+      docs: { licencia: docLicencia, salud: docSalud, examen: docExamen, vacaciones: docVacaciones }
+    };
+  };
+
+
+  const handleExportExcel = () => {
+    import('xlsx').then(XLSX => {
+      const wb = XLSX.utils.book_new();
+
+      // Exportar Conductores
+      const driversData = drivers.map(d => {
+        const stats = checkDriverStatus(d);
+        let licenciaActivaStr = 'Apto para trabajar';
+        if (d.detalles?.licenciasMedicas && d.detalles.licenciasMedicas.length > 0) {
+           const hasActive = d.detalles.licenciasMedicas.some((lm:any) => {
+             const h = new Date(); h.setHours(0,0,0,0);
+             const de = new Date(lm.desde); de.setHours(0,0,0,0);
+             const t = new Date(lm.hasta); t.setHours(23,59,59,999);
+             return h >= de && h <= t;
+           });
+           if (hasActive) licenciaActivaStr = 'Con Licencia Médica';
+        }
+
+        return {
+          'Nombre': d.nombre || '',
+          'RUT': d.rut || '',
+          'Cargo': d.rol || 'Conductor',
+          'Teléfono': d.telefono || '',
+          'Tipo Licencia': d.detalles?.tipoLicencia || '',
+          'Venc. Licencia Conducir': d.detalles?.vencimientoLicencia || 'No registrado',
+          'Estado Médico': licenciaActivaStr,
+          'Venc. Exámenes': d.detalles?.vencimientoExamenes || 'No registrado',
+          'Fecha Vacaciones': d.detalles?.fechaVacaciones || 'No registrado',
+          'Estado Documental': stats.status,
+          'Observaciones': stats.reasons.join(', ')
+        };
+      });
+      const wsDrivers = XLSX.utils.json_to_sheet(driversData);
+      XLSX.utils.book_append_sheet(wb, wsDrivers, 'Conductores');
+
+      // Exportar Vehículos
+      const vehiclesData = vehicles.map(v => {
+        const stats = checkVehicleStatus(v);
+        return {
+          'Patente': v.patente || '',
+          'N° Interno': v.numero_interno || '',
+          'Tipo': v.tipo || '',
+          'Marca': v.marca || '',
+          'Modelo': v.modelo || '',
+          'Año': v.anio || '',
+          'Tipo Uso': v.detalles?.tipoUso || '',
+          'Inscripción': v.detalles?.fechaInscripcion || '',
+          'Venc. Rev. Técnica': v.detalles?.vencimientoRev || 'No registrado',
+          'Venc. Seguro': v.detalles?.vencimientoSeguro || 'No registrado',
+          'Venc. Permiso Circ.': v.detalles?.vencimientoPermisoCirculacion || 'No registrado',
+          'Estado Documental': stats.status,
+          'Observaciones': stats.reasons.join(', ')
+        };
+      });
+      const wsVehicles = XLSX.utils.json_to_sheet(vehiclesData);
+      XLSX.utils.book_append_sheet(wb, wsVehicles, 'Vehículos');
+
+      XLSX.writeFile(wb, 'Control_Documental.xlsx');
+    });
+  };
+
+  const getVidaUtil = (tipoUso: string) => {
+    switch(tipoUso) {
+      case 'Carga Peligrosa': return 10;
+      case 'Minería': return 5;
+      case 'Pasajeros': return 12;
+      default: return 15;
+    }
   };
 
   const checkVehicleStatus = (vehicle: any) => {
-    const isRevVencida = new Date(vehicle.vencimientoRev).getTime() < today;
-    const isSeguroVencido =
-      new Date(vehicle.vencimientoSeguro).getTime() < today;
-    const isOld = 2026 - vehicle.anio >= 15;
-
-    if (isRevVencida || isSeguroVencido || isOld) {
-      return {
-        status: "BLOQUEADO",
-        reasons: [
-          isRevVencida ? "Revisión Técnica Vencida" : null,
-          isSeguroVencido ? "Seguro Vencido" : null,
-          isOld
-            ? `Bloqueo automático: Unidad cumple 15+ años (Tiene ${2026 - vehicle.anio})`
-            : null,
-        ].filter(Boolean),
-      };
+    const det = vehicle.detalles || {};
+    
+    const docRev = checkDocument(det.vencimientoRev, alertConfig.diasAvisoRevision);
+    const docSeguro = checkDocument(det.vencimientoSeguro, alertConfig.diasAvisoSeguro);
+    const docPermiso = checkDocument(det.vencimientoPermisoCirculacion, 30);
+    
+    let docVidaUtil = { status: 'EN ORDEN', text: 'Vigente' };
+    const vidaUtilMax = getVidaUtil(det.tipoUso);
+    if (det.fechaInscripcion) {
+      const yearInscripcion = new Date(det.fechaInscripcion).getFullYear();
+      const currentYear = new Date().getFullYear();
+      const age = currentYear - yearInscripcion;
+      if (age >= vidaUtilMax) docVidaUtil = { status: 'VENCIDO', text: `Excedida (${age}/${vidaUtilMax} años)` };
+      else if (age === vidaUtilMax - 1) docVidaUtil = { status: 'PROXIMO', text: 'Último año' };
+      else docVidaUtil.text = `${age}/${vidaUtilMax} años`;
+    } else {
+      docVidaUtil = { status: 'FALTANTE', text: 'Sin fecha insc.' };
     }
-    return { status: "ACTIVO", reasons: [] };
+
+    let status = 'EN ORDEN';
+    let reasons: string[] = [];
+
+    if (docRev.status === 'VENCIDO') reasons.push('Rev. Técnica Vencida');
+    if (docSeguro.status === 'VENCIDO') reasons.push('Seguro Vencido');
+    if (docPermiso.status === 'VENCIDO') reasons.push('Permiso Circulación Vencido');
+    if (docVidaUtil.status === 'VENCIDO') reasons.push(docVidaUtil.text);
+
+    if (reasons.length > 0) {
+      status = 'VENCIDO';
+    } else {
+      if (docRev.status === 'PROXIMO') reasons.push(`Revisión próxima (< ${alertConfig.diasAvisoRevision} días)`);
+      if (docSeguro.status === 'PROXIMO') reasons.push(`Seguro próximo (< ${alertConfig.diasAvisoSeguro} días)`);
+      if (docPermiso.status === 'PROXIMO') reasons.push(`Permiso próximo (< 30 días)`);
+      if (docVidaUtil.status === 'PROXIMO') reasons.push(docVidaUtil.text);
+      if (reasons.length > 0) status = 'PROXIMO';
+    }
+
+    return { 
+      status, 
+      reasons,
+      docs: { rev: docRev, seguro: docSeguro, permiso: docPermiso, vida: docVidaUtil }
+    };
+  };
+
+  // ----- CRUD HANDLERS -----
+  const handleEditDriver = (driver: any) => {
+    const det = driver.detalles || {};
+    setDriverForm({
+      rut: driver.rut || '',
+      nombre: driver.nombre || '',
+      rol: driver.rol || '',
+      telefono: driver.telefono || '',
+      vencimientoLicencia: det.vencimientoLicencia || '',
+      archivoLicencia: det.archivoLicencia || '',
+      vencimientoSalud: det.vencimientoSalud || '',
+      archivoSalud: det.archivoSalud || '',
+      vencimientoExamenes: det.vencimientoExamenes || '',
+        estadoExamen: det.estadoExamen || 'APTO',
+      archivoExamenes: det.archivoExamenes || '',
+      fechaVacaciones: det.fechaVacaciones || ''
+    });
+    setEditingId(driver.id);
+    setIsEditing(true);
+    setShowDriverModal(true);
+  };
+
+  const handleEditVehicle = (vehicle: any) => {
+    const det = vehicle.detalles || {};
+    setVehicleForm({
+      patente: vehicle.patente || '',
+      marca: vehicle.marca || '',
+      modelo: vehicle.modelo || '',
+      tipo: vehicle.tipo || 'Camión',
+      anio: vehicle.anio || new Date().getFullYear(),
+      fechaInscripcion: det.fechaInscripcion || '',
+      tipoUso: det.tipoUso || 'Carga General',
+      vencimientoRev: det.vencimientoRev || '',
+      archivoRev: det.archivoRev || '',
+      vencimientoSeguro: det.vencimientoSeguro || '',
+      archivoSeguro: det.archivoSeguro || '',
+      vencimientoPermisoCirculacion: det.vencimientoPermisoCirculacion || '',
+      archivoPermisoCirculacion: det.archivoPermisoCirculacion || ''
+    });
+    setEditingId(vehicle.id);
+    setIsEditing(true);
+    setShowVehicleModal(true);
   };
 
   const handleSaveDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
-
-    const saveCompanyId = activeCompanyId;
-    if (!saveCompanyId) {
-      Swal.fire('Error', 'No perteneces a una empresa asignada. Por favor contacta al administrador.', 'error');
-      return;
-    }
+    if (!saveCompanyId) return;
+    const payload = {
+      empresa_id: saveCompanyId,
+      rut: driverForm.rut,
+      nombre: driverForm.nombre,
+      rol: driverForm.rol,
+      telefono: driverForm.telefono,
+      detalles: {
+        vencimientoLicencia: driverForm.vencimientoLicencia,
+        archivoLicencia: driverForm.archivoLicencia,
+        vencimientoSalud: driverForm.vencimientoSalud,
+        archivoSalud: driverForm.archivoSalud,
+        vencimientoExamenes: driverForm.vencimientoExamenes,
+          estadoExamen: driverForm.estadoExamen,
+        archivoExamenes: driverForm.archivoExamenes,
+        fechaVacaciones: driverForm.fechaVacaciones
+      }
+    };
 
     try {
-      setIsSubmitting(true);
-      // Ensure no duplicates by RUT and Empresa
-      const { data: existing, error: checkError } = await supabase
-        .from("colaborador")
-        .select("id")
-        .eq("rut", newDriverForm.rut)
-        .eq("empresa_id", saveCompanyId);
-
-      if (checkError) throw checkError;
-      if (existing && existing.length > 0) {
-        Swal.fire('Error', 'Ya existe un conductor con ese RUT.', 'error');
-        return;
+      if (isEditing && editingId) {
+        await supabase.from('colaborador').update(payload).eq('id', editingId);
+        Swal.fire('Actualizado', 'Ficha de conductor actualizada', 'success');
+      } else {
+        await supabase.from('colaborador').insert([payload]);
+        Swal.fire('Registrado', 'Conductor registrado', 'success');
       }
-
-      const { data, error } = await supabase
-        .from("colaborador")
-        .insert([
-          {
-            empresa_id: saveCompanyId,
-            nombre: newDriverForm.nombre,
-            rut: newDriverForm.rut,
-            rol: newDriverForm.cargo,
-            detalles: {
-              tipoLicencia: newDriverForm.tipoLicencia,
-              vencimientoLicencia: newDriverForm.vencimientoLicencia,
-              vacaciones: "Al día",
-            },
-          },
-        ])
-        .select();
-      if (error) throw error;
-      Swal.fire('Éxito', 'Conductor guardado correctamente', 'success');
-      setIsAddingEntity(null);
-      fetchData(); // reload
-    } catch (error) {
-      console.error(error);
-      Swal.fire('Error', 'Error al guardar conductor', 'error');
-    } finally {
-      setIsSubmitting(false);
+      setShowDriverModal(false);
+      fetchData();
+    } catch(err) {
+      Swal.fire('Error', 'Hubo un error al guardar', 'error');
     }
   };
 
   const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
-
-    const saveCompanyId = activeCompanyId;
-    if (!saveCompanyId) {
-       Swal.fire('Error', 'No perteneces a una empresa asignada. Por favor contacta al administrador.', 'error');
-       return;
-    }
+    if (!saveCompanyId) return;
+    const payload = {
+      empresa_id: saveCompanyId,
+      patente: vehicleForm.patente,
+      marca: vehicleForm.marca,
+      modelo: vehicleForm.modelo,
+      tipo: vehicleForm.tipo,
+      anio: vehicleForm.anio,
+      detalles: {
+        fechaInscripcion: vehicleForm.fechaInscripcion,
+        tipoUso: vehicleForm.tipoUso,
+        vencimientoRev: vehicleForm.vencimientoRev,
+        archivoRev: vehicleForm.archivoRev,
+        vencimientoSeguro: vehicleForm.vencimientoSeguro,
+        archivoSeguro: vehicleForm.archivoSeguro,
+        vencimientoPermisoCirculacion: vehicleForm.vencimientoPermisoCirculacion,
+        archivoPermisoCirculacion: vehicleForm.archivoPermisoCirculacion
+      }
+    };
 
     try {
-      setIsSubmitting(true);
-      // Ensure no duplicates by patente and Empresa
-      const { data: existing, error: checkError } = await supabase
-        .from("vehiculo")
-        .select("id")
-        .ilike("patente", newVehicleForm.patente)
-        .eq("empresa_id", saveCompanyId);
-
-      if (checkError) throw checkError;
-      if (existing && existing.length > 0) {
-        Swal.fire('Error', 'Ya existe una unidad con esa patente.', 'error');
-        return;
+      if (isEditing && editingId) {
+        await supabase.from('vehiculo').update(payload).eq('id', editingId);
+        Swal.fire('Actualizado', 'Ficha de vehículo actualizada', 'success');
+      } else {
+        await supabase.from('vehiculo').insert([payload]);
+        Swal.fire('Registrado', 'Vehículo registrado', 'success');
       }
-
-      const { data, error } = await supabase
-        .from("vehiculo")
-        .insert([
-          {
-            empresa_id: saveCompanyId,
-            patente: newVehicleForm.patente,
-            tipo: newVehicleForm.tipo,
-            anio: parseInt(newVehicleForm.anio) || 2026,
-            kilometraje_actual: parseInt(newVehicleForm.kmActual) || 0,
-            detalles: {
-              vencimientoRev: newVehicleForm.vencimientoRev,
-              vencimientoSeguro: newVehicleForm.vencimientoSeguro,
-            },
-          },
-        ])
-        .select();
-      if (error) throw error;
-      Swal.fire('Éxito', 'Unidad guardada correctamente', 'success');
-      setIsAddingEntity(null);
-      fetchData(); // reload
-    } catch (error) {
-      console.error(error);
-      Swal.fire('Error', 'Error al guardar unidad', 'error');
-    } finally {
-      setIsSubmitting(false);
+      setShowVehicleModal(false);
+      fetchData();
+    } catch(err) {
+      Swal.fire('Error', 'Hubo un error al guardar', 'error');
     }
   };
 
-  const openDriverModal = (driver: any) => {
-    setSelectedEntity(driver);
-    setModalType("driver");
-    loadDocumentos(driver.id);
+  const handleDelete = async (table: string, id: string) => {
+    if(!confirm("¿Estás seguro de eliminar este registro?")) return;
+    try {
+      await supabase.from(table).delete().eq('id', id);
+      fetchData();
+    } catch(err) {}
   };
 
-  const openVehicleModal = (vehicle: any) => {
-    setSelectedEntity(vehicle);
-    setModalType("vehicle");
-    loadDocumentos(vehicle.id);
+  // ----- RENDER COMPONENTS -----
+  const renderStatusDot = (status: string) => {
+    if (status === 'EN ORDEN') return <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>;
+    if (status === 'PROXIMO') return <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse"></div>;
+    if (status === 'VENCIDO') return <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse"></div>;
+    return <div className="w-2.5 h-2.5 rounded-full bg-slate-300"></div>; // FALTANTE
   };
 
-  const closeModals = () => {
-    setSelectedEntity(null);
-    setModalType(null);
-  };
-
-  const handleDeleteEntity = async (id: string, type: "driver" | "vehicle") => {
-    const table = type === "driver" ? "colaborador" : "vehiculo";
-    const entityName = type === "driver" ? "conductor" : "vehículo";
-    
-    const result = await Swal.fire({
-      title: `¿Eliminar ${entityName}?`,
-      text: "Esta acción no se puede deshacer.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      cancelButtonColor: "#64748b",
-      confirmButtonText: "Sí, eliminar",
-      cancelButtonText: "Cancelar"
-    });
-
-    if (result.isConfirmed) {
-      try {
-        const { error } = await supabase.from(table).delete().eq("id", id);
-        if (error) throw error;
-        
-        Swal.fire("Eliminado", `El ${entityName} ha sido eliminado.`, "success");
-        fetchData();
-        closeModals();
-      } catch (err: any) {
-        console.error("Error al eliminar entidad:", err);
-        Swal.fire("Error", `No se pudo eliminar el ${entityName}. Es posible que tenga registros asociados.`, "error");
-      }
+  const renderFileAction = (url: string, type: 'driver'|'vehicle', field: string) => {
+    if (url) {
+      return (
+        <div className="flex gap-1">
+          <a href={url} target="_blank" rel="noreferrer" className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-blue-500" title="Ver Documento">
+            <Eye className="w-4 h-4" />
+          </a>
+          <button type="button" onClick={(e) => { e.stopPropagation(); triggerUpload(type, field); }} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-500" title="Reemplazar">
+            <UploadCloud className="w-4 h-4" />
+          </button>
+        </div>
+      );
     }
+    return (
+      <button type="button" onClick={(e) => { e.stopPropagation(); triggerUpload(type, field); }} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400" title="Subir Documento PDF">
+        <UploadCloud className="w-4 h-4" />
+      </button>
+    );
   };
 
-  const handleExportDrivers = () =>
-    exportToExcel(
-      drivers.map((d) => ({
-        Nombre: d.nombre,
-        RUT: d.rut,
-        Cargo: d.cargo,
-        "Venc. Licencia": d.vencimientoLicencia,
-        "Venc. Salud": d.vencimientoSalud,
-        Estado: checkDriverStatus(d).status,
-      })),
-      "Conductores",
-      "Conductores",
-    );
-
-  const handleExportVehicles = () =>
-    exportToExcel(
-      vehicles.map((v) => ({
-        Patente: v.patente,
-        Tipo: v.tipo,
-        Año: v.anio,
-        "Venc. Rev. Técnica": v.vencimientoRev,
-        "Venc. Seguro": v.vencimientoSeguro,
-        Estado: checkVehicleStatus(v).status,
-      })),
-      "Vehiculos",
-      "Vehiculos",
-    );
+  const renderDocRow = (label: string, docObj: any, url: string | undefined, type: 'driver'|'vehicle', uploadField: string) => (
+    <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+      <div className="flex items-center gap-2">
+        {renderStatusDot(docObj.status)}
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{label}:</span>
+        <span className={`text-xs font-bold ${docObj.status === 'VENCIDO' ? 'text-red-600' : docObj.status === 'PROXIMO' ? 'text-amber-600' : 'text-slate-800 dark:text-white'}`}>
+          {docObj.date ? `${docObj.date} (${docObj.text})` : docObj.text}
+        </span>
+      </div>
+      {uploadField && renderFileAction(url || '', type, uploadField)}
+    </div>
+  );
 
   return (
-    <div className="w-full flex flex-col min-h-full space-y-6">
-      {/* Header */}
+    <div className="p-6 w-full max-w-[1600px] mx-auto space-y-6">
+      <input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={handleFileUpload} />
+
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-            Gestión de Ciclo de Vida y Documental
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+            <FileCheck className="w-8 h-8 text-indigo-500" />
+            Control de Ciclo de Vida y Documental
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm font-medium">
-            Control de personal operativo y unidades motrices (GCV & GDC).
+            Sistema centralizado de vigencias, certificaciones y documentos legales.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {activeTab === "conductores" ? (
-            <button
-              key="btn-add-driver"
-              onClick={() => setIsAddingEntity("driver")}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center justify-center gap-2 text-sm"
-            >
-              <UserPlus className="w-4 h-4" /> <span>Registrar Conductor</span>
+        <div className="flex gap-3">
+          <button onClick={handleExportExcel} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 flex items-center gap-2 transition-all shadow-sm">
+              <Download className="w-4 h-4" /> Exportar
             </button>
-          ) : (
-            <button
-              key="btn-add-vehicle"
-              onClick={() => setIsAddingEntity("vehicle")}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center justify-center gap-2 text-sm"
-            >
-              <Truck className="w-4 h-4" /> <span>Registrar Vehículo</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs and Search */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <div className="flex bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit">
-          <button
-            onClick={() => {
-              setActiveTab("conductores");
-              setSearchQuery("");
-            }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all ${activeTab === "conductores" ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"}`}
-          >
-            <User className="w-4 h-4" /> <span>Personal Operativo</span>
+            <button onClick={() => { setDriverForm({rut:'', nombre:'', rol:'', telefono:'', vencimientoLicencia:'', archivoLicencia:'', licenciasMedicas:[], vencimientoExamenes:'', archivoExamenes:'', estadoExamen:'APTO', fechaVacaciones:''}); setIsEditing(false); setShowDriverModal(true); }} className="bg-white dark:bg-slate-900 text-indigo-600 border border-indigo-200 dark:border-indigo-900 px-4 py-2 rounded-xl font-bold hover:bg-indigo-50 flex items-center gap-2 transition-all shadow-sm">
+            <Users className="w-4 h-4" /> Registrar Conductor
           </button>
-          <button
-            onClick={() => {
-              setActiveTab("vehiculos");
-              setSearchQuery("");
-            }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all ${activeTab === "vehiculos" ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"}`}
-          >
-            <Truck className="w-4 h-4" /> <span>Unidades Motrices</span>
+          <button onClick={() => { setVehicleForm({patente:'', marca:'', modelo:'', tipo:'Camión', anio:new Date().getFullYear(), fechaInscripcion:'', tipoUso:'Carga General', vencimientoRev:'', archivoRev:'', vencimientoSeguro:'', archivoSeguro:'', vencimientoPermisoCirculacion:'', archivoPermisoCirculacion:''}); setIsEditing(false); setShowVehicleModal(true); }} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 flex items-center gap-2 transition-all shadow-sm">
+            <Truck className="w-4 h-4" /> Registrar Vehículo
           </button>
         </div>
-
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder={
-              activeTab === "conductores"
-                ? "Buscar conductor por nombre o RUT..."
-                : "Buscar unidad por patente..."
-            }
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm font-medium focus:border-indigo-500 outline-none transition-colors text-slate-900 dark:text-white shadow-sm"
-          />
-        </div>
       </div>
 
-      {/* Content Area */}
-      <div className="w-full">
-        {activeTab === "conductores" && (
-          <div
-            key="tab-conductores"
-            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-          >
-            {drivers
-              .filter(
-                (d) =>
-                  d.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  d.rut.toLowerCase().includes(searchQuery.toLowerCase()),
-              )
-              .map((d) => {
-                const { status, reasons } = checkDriverStatus(d);
-                return (
-                  <div
-                    key={d.id}
-                    onClick={() => openDriverModal(d)}
-                    className={`bg-white dark:bg-slate-900 border p-4 rounded-xl cursor-pointer hover:shadow-md transition-all ${status === "BLOQUEADO" ? "border-red-300 dark:border-red-900/50 hover:border-red-400" : "border-slate-200 dark:border-slate-800 hover:border-indigo-400"}`}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">
-                          {d.nombre}
-                        </h4>
-                        <p className="text-xs text-slate-500 font-medium dark:text-slate-400">
-                          <span>{d.rut}</span> • <span>{d.cargo}</span>
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          status === "ACTIVO" ? "default" : "destructive"
-                        }
-                        className={
-                          status === "ACTIVO"
-                            ? "bg-emerald-500 hover:bg-emerald-600"
-                            : "animate-pulse"
-                        }
-                      >
-                        <span>{status}</span>
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm mt-4">
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Licencia:{" "}
-                        <span className="font-bold text-slate-800 dark:text-slate-200">
-                          {Array.isArray(d.tipoLicencia)
-                            ? d.tipoLicencia.join(", ")
-                            : d.tipoLicencia}
-                        </span>
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Vacaciones:{" "}
-                        <span
-                          className={`font-semibold ${d.vacaciones === "Vencidas" ? "text-red-500" : "text-slate-800 dark:text-slate-200"}`}
-                        >
-                          {d.vacaciones}
-                        </span>
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-400 col-span-2">
-                        Vencimiento:{" "}
-                        <span
-                          className={`font-semibold ${reasons.some((r) => r?.includes("Licencia")) ? "text-red-500" : "text-slate-800 dark:text-slate-200"}`}
-                        >
-                          {d.vencimientoLicencia}
-                        </span>
-                      </p>
-                    </div>
-                    {status === "BLOQUEADO" && (
-                      <div className="mt-3 bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30">
-                        <ul className="text-xs text-red-600 dark:text-red-400 font-medium space-y-0.5">
-                          {reasons.map((r, idx) => (
-                            <li key={idx} className="flex gap-1.5 items-center">
-                              <AlertCircle className="w-3 h-3" /> <span>{r}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-        )}
-
-        {activeTab === "vehiculos" && (
-          <div
-            key="tab-vehiculos"
-            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-          >
-            {vehicles
-              .filter((v) =>
-                v.patente.toLowerCase().includes(searchQuery.toLowerCase()),
-              )
-              .map((v) => {
-                const { status, reasons } = checkVehicleStatus(v);
-                return (
-                  <div
-                    key={v.id}
-                    onClick={() => openVehicleModal(v)}
-                    className={`bg-white dark:bg-slate-900 border p-4 rounded-xl cursor-pointer hover:shadow-md transition-all ${status === "BLOQUEADO" ? "border-red-300 dark:border-red-900/50 hover:border-red-400" : "border-slate-200 dark:border-slate-800 hover:border-indigo-400"}`}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="font-black text-slate-900 dark:text-white text-lg tracking-wide leading-tight">
-                          {v.patente}
-                        </h4>
-                        <p className="text-xs text-slate-500 font-medium dark:text-slate-400">
-                          <span>{v.tipo}</span> • Año <span>{v.anio}</span> ({2026 - v.anio} Años)
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          status === "ACTIVO" ? "default" : "destructive"
-                        }
-                        className={
-                          status === "ACTIVO"
-                            ? "bg-emerald-500 hover:bg-emerald-600"
-                            : "animate-pulse"
-                        }
-                      >
-                        <span>{status}</span>
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm mt-4">
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Rev. Técnica:{" "}
-                        <span
-                          className={`font-semibold ${reasons.some((r) => r?.includes("Revisión")) ? "text-red-500" : "text-slate-800 dark:text-slate-200"}`}
-                        >
-                          {v.vencimientoRev}
-                        </span>
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Km:{" "}
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {v.kmActual.toLocaleString()} /{" "}
-                          {v.kmProximo.toLocaleString()}
-                        </span>
-                      </p>
-                    </div>
-                    {status === "BLOQUEADO" && (
-                      <div className="mt-3 bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30">
-                        <ul className="text-xs text-red-600 dark:text-red-400 font-medium space-y-0.5">
-                          {reasons.map((r, idx) => (
-                            <li key={idx} className="flex gap-1.5 items-center">
-                              <AlertCircle className="w-3 h-3" /> <span>{r}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-        )}
+      <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
+        <button onClick={() => setActiveTab('personal')} className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'personal' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          <Users className="w-4 h-4" /> Personal Operativo
+        </button>
+        <button onClick={() => setActiveTab('unidades')} className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'unidades' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          <Truck className="w-4 h-4" /> Unidades Motrices
+        </button>
       </div>
 
-      {/* Modal Agregar Entidad */}
-      {isAddingEntity === "driver" && (
-        <div
-          key="add-driver-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-        >
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <UserPlus className="w-5 h-5 text-indigo-500" />
-                <h2 className="font-black text-slate-800 dark:text-white text-lg">
-                  Registrar Nuevo Conductor
-                </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {activeTab === 'personal' && drivers.map(d => {
+          const { status, reasons, docs } = checkDriverStatus(d);
+          const det = d.detalles || {};
+          return (
+            <div key={d.id} className={`bg-white dark:bg-slate-900 border p-5 rounded-2xl shadow-sm hover:shadow-md transition-all ${status === 'VENCIDO' ? 'border-red-300 dark:border-red-900/50' : status === 'PROXIMO' ? 'border-amber-300 dark:border-amber-900/50' : 'border-slate-200 dark:border-slate-800'}`}>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">{d.nombre}</h4>
+                  <p className="text-xs text-slate-500 mt-1">{d.rut} • {d.rol || 'Conductor'}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => handleEditDriver(d)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400"><Edit className="w-4 h-4"/></button>
+                  <button onClick={() => handleDelete('colaborador', d.id)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-red-400"><X className="w-4 h-4"/></button>
+                </div>
               </div>
-              <button
-                onClick={() => setIsAddingEntity(null)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6">
-              <form className="space-y-4" onSubmit={handleSaveDriver}>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                    Nombre Completo
-                  </label>
-                  <input
-                    type="text"
-                    value={newDriverForm.nombre}
-                    onChange={(e) =>
-                      setNewDriverForm({
-                        ...newDriverForm,
-                        nombre: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                    RUT
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="12.345.678-9"
-                    value={newDriverForm.rut}
-                    onChange={(e) =>
-                      setNewDriverForm({
-                        ...newDriverForm,
-                        rut: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Cargo
-                    </label>
-                    <select
-                      value={newDriverForm.cargo}
-                      onChange={(e) =>
-                        setNewDriverForm({
-                          ...newDriverForm,
-                          cargo: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                    >
-                      <option value="Conductor Interprovincial">
-                        Conductor Interprovincial
-                      </option>
-                      <option value="Conductor Interno Mina">
-                        Conductor Interno Mina
-                      </option>
-                    </select>
+
+              <div className="space-y-1 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                {renderDocRow('Licencia', docs.licencia, det.archivoLicencia, 'driver', 'archivoLicencia')}
+                {(() => {
+                    const hasActive = det.licenciasMedicas && det.licenciasMedicas.some((lm:any) => {
+                      const h = new Date(); h.setHours(0,0,0,0);
+                      const d = new Date(lm.desde); d.setHours(0,0,0,0);
+                      const t = new Date(lm.hasta); t.setHours(23,59,59,999);
+                      return h >= d && h <= t;
+                    });
+                    const color = hasActive ? 'bg-red-500' : 'bg-emerald-500';
+                    const text = hasActive ? 'Con Licencia Médica' : 'Apto para trabajar';
+                    return (
+                      <div className="flex items-center justify-between p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-slate-400" />
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Licencias Médicas</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-slate-500">{text}</span>
+                          <div className={`w-3 h-3 rounded-full ${color} shadow-sm border border-white dark:border-slate-800`}></div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                {renderDocRow('Examen Med.', docs.examen, det.archivoExamenes, 'driver', 'archivoExamenes')}
+                {renderDocRow('Vacaciones', docs.vacaciones, null, 'driver', '')}
+              </div>
+
+              {status !== 'EN ORDEN' && (
+                <div className={`mt-3 p-3 rounded-xl border text-xs font-bold ${status === 'VENCIDO' ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <AlertCircle className="w-4 h-4" /> Alertas:
                   </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Tipo de Licencia
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {["B", "C", "A1", "A2", "A3", "A4", "A5"].map((tipo) => (
-                        <button
-                          key={tipo}
-                          type="button"
-                          onClick={() => {
-                            const current: string[] = Array.isArray(
-                              newDriverForm.tipoLicencia,
-                            )
-                              ? newDriverForm.tipoLicencia
-                              : [
-                                  newDriverForm.tipoLicencia as unknown as string,
-                                ];
-                            if (current.includes(tipo)) {
-                              setNewDriverForm({
-                                ...newDriverForm,
-                                tipoLicencia: current.filter(
-                                  (t) => t !== tipo,
-                                ) as any,
-                              });
-                            } else {
-                              setNewDriverForm({
-                                ...newDriverForm,
-                                tipoLicencia: [...current, tipo] as any,
-                              });
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                            (Array.isArray(newDriverForm.tipoLicencia)
-                              ? newDriverForm.tipoLicencia
-                              : [
-                                  newDriverForm.tipoLicencia as unknown as string,
-                                ]
-                            ).includes(tipo)
-                              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-400"
-                          }`}
-                        >
-                          {tipo}
-                        </button>
-                      ))}
+                  <ul className="pl-5 list-disc font-medium opacity-90 space-y-0.5">
+                    {reasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {activeTab === 'unidades' && vehicles.map(v => {
+          const { status, reasons, docs } = checkVehicleStatus(v);
+          const det = v.detalles || {};
+          return (
+            <div key={v.id} className={`bg-white dark:bg-slate-900 border p-5 rounded-2xl shadow-sm hover:shadow-md transition-all ${status === 'VENCIDO' ? 'border-red-300 dark:border-red-900/50' : status === 'PROXIMO' ? 'border-amber-300 dark:border-amber-900/50' : 'border-slate-200 dark:border-slate-800'}`}>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                      <h4 className="font-black text-slate-900 dark:text-white text-xl tracking-wide uppercase">{v.patente}</h4>
+                      {status === 'VENCIDO' ? <Badge className="bg-red-500 text-white text-[10px] py-0">BLOQUEADO</Badge> : <Badge className="bg-emerald-500 text-white text-[10px] py-0">OPERATIVO</Badge>}
                     </div>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Venc. Licencia
-                    </label>
-                    <input
-                      type="date"
-                      value={newDriverForm.vencimientoLicencia}
-                      onChange={(e) =>
-                        setNewDriverForm({
-                          ...newDriverForm,
-                          vencimientoLicencia: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition-colors"
-                  >
-                    Guardar Conductor
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAddingEntity === "vehicle" && (
-        <div
-          key="add-vehicle-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-        >
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <Truck className="w-5 h-5 text-indigo-500" />
-                <h2 className="font-black text-slate-800 dark:text-white text-lg">
-                  Registrar Nueva Unidad Motriz
-                </h2>
-              </div>
-              <button
-                onClick={() => setIsAddingEntity(null)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6">
-              <form className="space-y-4" onSubmit={handleSaveVehicle}>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Patente
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="AB-CD-12"
-                      value={newVehicleForm.patente}
-                      onChange={(e) =>
-                        setNewVehicleForm({
-                          ...newVehicleForm,
-                          patente: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Tipo
-                    </label>
-                    <select
-                      value={newVehicleForm.tipo}
-                      onChange={(e) =>
-                        setNewVehicleForm({
-                          ...newVehicleForm,
-                          tipo: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                    >
-                      <option>Bus</option>
-                      <option>Camion</option>
-                      <option>Minibus</option>
-                      <option>Sedan</option>
-                      <option>SUV</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Año Inscrip.
-                    </label>
-                    <input
-                      type="number"
-                      value={newVehicleForm.anio}
-                      onChange={(e) =>
-                        setNewVehicleForm({
-                          ...newVehicleForm,
-                          anio: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Km Actuales
-                    </label>
-                    <input
-                      type="number"
-                      value={newVehicleForm.kmActual}
-                      onChange={(e) =>
-                        setNewVehicleForm({
-                          ...newVehicleForm,
-                          kmActual: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Venc. Rev. Técnica
-                    </label>
-                    <input
-                      type="date"
-                      value={newVehicleForm.vencimientoRev}
-                      onChange={(e) =>
-                        setNewVehicleForm({
-                          ...newVehicleForm,
-                          vencimientoRev: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1 dark:text-slate-400">
-                      Venc. Seguro
-                    </label>
-                    <input
-                      type="date"
-                      value={newVehicleForm.vencimientoSeguro}
-                      onChange={(e) =>
-                        setNewVehicleForm({
-                          ...newVehicleForm,
-                          vencimientoSeguro: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition-colors"
-                  >
-                    Guardar Unidad
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Reusable para Control Documental */}
-      {selectedEntity && modalType && (
-        <div
-          key="reusable-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-        >
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header Modal */}
-            <div
-              className={`px-6 py-4 flex justify-between items-center shrink-0 border-b ${modalType === "driver" ? "border-indigo-100 bg-indigo-50/50 dark:bg-indigo-900/20" : "border-amber-100 bg-amber-50/50 dark:bg-amber-900/20"}`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`p-2 rounded-lg ${modalType === "driver" ? "bg-indigo-100 text-indigo-600" : "bg-amber-100 text-amber-600"}`}
-                >
-                  {modalType === "driver" ? (
-                    <User className="w-5 h-5" />
-                  ) : (
-                    <Truck className="w-5 h-5" />
-                  )}
-                </div>
-                <div>
-                  <h2 className="font-black text-slate-800 dark:text-white text-lg">
-                    <span>{modalType === "driver"
-                      ? selectedEntity.nombre
-                      : selectedEntity.patente}</span>
-                  </h2>
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    <span>{modalType === "driver"
-                      ? `${selectedEntity.rut} - ${selectedEntity.cargo}`
-                      : `${selectedEntity.tipo} - Año ${selectedEntity.anio}`}</span>
+                  <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded inline-block mt-1">
+                    {det.tipoUso || 'Carga General'} • Año {v.anio}
                   </p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleDeleteEntity(selectedEntity.id, modalType)}
-                  className="p-1.5 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors"
-                  title={`Eliminar ${modalType === "driver" ? "conductor" : "vehículo"}`}
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={closeModals}
-                  className="p-1.5 rounded-lg hover:bg-black/5 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {/* Documentos List */}
-              <div>
-                <div className="flex justify-between items-end mb-4">
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-slate-400" /> <span>Control
-                    Documental</span>
-                  </h3>
-                  <label className="text-indigo-600 font-bold text-xs hover:underline flex items-center gap-1 cursor-pointer">
-                    <Upload className="w-3 h-3" /> <span>Adjuntar Documento</span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      ref={fileInputRef}
-                      accept="image/*,.pdf,.doc,.docx"
-                      onChange={(e) => handleFileUpload(e.target.files)}
-                      multiple
-                    />
-                  </label>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => handleEditVehicle(v)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400"><Edit className="w-4 h-4"/></button>
+                  <button onClick={() => handleDelete('vehiculo', v.id)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-red-400"><X className="w-4 h-4"/></button>
                 </div>
+              </div>
 
-                {modalType === "driver" && (
-                  <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
-                    <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-2">
-                      Documentos requeridos sugeridos:
-                    </p>
-                    <div className="flex flex-wrap gap-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-400">
-                      <span className="bg-indigo-100 dark:bg-indigo-900/40 px-2 py-1 rounded">
-                        Licencia de Conducir
-                      </span>
-                      <span className="bg-indigo-100 dark:bg-indigo-900/40 px-2 py-1 rounded">
-                        Cédula de Identidad
-                      </span>
-                      <span className="bg-indigo-100 dark:bg-indigo-900/40 px-2 py-1 rounded">
-                        Hoja de Vida del Conductor
-                      </span>
-                      <span className="bg-indigo-100 dark:bg-indigo-900/40 px-2 py-1 rounded">
-                        Certificado de Antecedentes
-                      </span>
-                    </div>
+              <div className="space-y-1 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                {renderDocRow('Rev. Técnica', docs.rev, det.archivoRev, 'vehicle', 'archivoRev')}
+                {renderDocRow('Seguro', docs.seguro, det.archivoSeguro, 'vehicle', 'archivoSeguro')}
+                {renderDocRow('Permiso', docs.permiso, det.archivoPermisoCirculacion, 'vehicle', 'archivoPermisoCirculacion')}
+                {renderDocRow('Vida Útil', docs.vida, null, 'vehicle', '')}
+              </div>
+
+              {status !== 'EN ORDEN' && (
+                <div className={`mt-3 p-3 rounded-xl border text-xs font-bold ${status === 'VENCIDO' ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <AlertCircle className="w-4 h-4" /> Alertas:
                   </div>
-                )}
+                  <ul className="pl-5 list-disc font-medium opacity-90 space-y-0.5">
+                    {reasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
 
-                <div
-                  className={`space-y-3 min-h-[140px] rounded-xl border-2 border-dashed p-4 transition-colors ${
-                    isDragging
-                      ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/10"
-                      : "border-slate-200 dark:border-slate-800"
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  {!documentos || documentos.length === 0 ? (
-                    <div
-                      key="no-docs"
-                      className="h-full flex flex-col items-center justify-center py-6 text-center"
-                    >
-                      <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-full mb-3">
-                        <Upload className="w-6 h-6 text-slate-400" />
-                      </div>
-                      <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
-                        No hay documentos adjuntos
-                      </p>
-                      <p className="text-xs font-medium text-slate-400 mt-1">
-                        Arrastra tus archivos aquí o escoge "Adjuntar Documento"
-                      </p>
+      {showDriverModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+              <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-500" />
+                {isEditing ? 'Editar Ficha de Conductor' : 'Registrar Nuevo Conductor'}
+              </h2>
+              <button type="button" onClick={() => setShowDriverModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
+            </div>
+            <form onSubmit={handleSaveDriver} className="p-6 h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-6 mb-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">RUT</label>
+                  <input required value={driverForm.rut} onChange={e=>setDriverForm({...driverForm, rut: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" placeholder="12.345.678-9"/>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Nombre Completo</label>
+                  <input required value={driverForm.nombre} onChange={e=>setDriverForm({...driverForm, nombre: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Rol / Cargo</label>
+                  <input required value={driverForm.rol} onChange={e=>setDriverForm({...driverForm, rol: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Teléfono</label>
+                  <input value={driverForm.telefono} onChange={e=>setDriverForm({...driverForm, telefono: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                </div>
+                
+                <div className="col-span-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <h4 className="font-bold text-slate-800 dark:text-white mb-4">Fechas de Vencimiento</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500">Venc. Licencia</label>
+                      <input type="date" required value={driverForm.vencimientoLicencia} onChange={e=>setDriverForm({...driverForm, vencimientoLicencia: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
                     </div>
-                  ) : (
-                    <div key="docs" className="w-full space-y-3">
-                      {documentos.map((doc: any) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl hover:border-indigo-300 transition-colors group relative overflow-hidden"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`p-2 rounded-lg ${(doc.estado || "").toLowerCase() === "vigente" ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20" : "bg-red-50 text-red-600 dark:bg-red-900/20"}`}
-                            >
-                              {(doc.estado || "").toLowerCase() ===
-                              "vigente" ? (
-                                <FileCheck className="w-5 h-5" />
-                              ) : (
-                                <FileWarning className="w-5 h-5" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-bold text-sm text-slate-800 dark:text-white">
-                                <span>{doc.nombre || doc.tipo_documento}</span>
-                              </p>
-                              <p
-                                className={`text-[10px] font-bold uppercase tracking-wide ${(doc.estado || "").toLowerCase() === "vigente" ? "text-emerald-600" : "text-red-500"}`}
-                              >
-                                Registrado
-                              </p>
+                    
+                    <div className="space-y-2 col-span-1 md:col-span-2">
+                      <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Historial de Licencias Médicas</label>
+                        <button type="button" onClick={() => setDriverForm({...driverForm, licenciasMedicas: [...(driverForm.licenciasMedicas||[]), {desde: '', hasta: '', archivo: '', motivo: ''}]})} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 flex items-center gap-1">
+                          <Plus className="w-3 h-3" /> Agregar Licencia
+                        </button>
+                      </div>
+                      
+                      {(driverForm.licenciasMedicas || []).map((lic: any, idx: number) => (
+                        <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 relative group">
+                          <button type="button" onClick={() => { const nl = [...driverForm.licenciasMedicas]; nl.splice(idx, 1); setDriverForm({...driverForm, licenciasMedicas: nl}); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Desde</label>
+                            <input type="date" value={lic.desde} onChange={(e) => { const nl = [...driverForm.licenciasMedicas]; nl[idx].desde = e.target.value; setDriverForm({...driverForm, licenciasMedicas: nl}); }} className="w-full px-2 py-1.5 text-sm bg-white dark:bg-slate-800 border rounded" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Hasta</label>
+                            <input type="date" value={lic.hasta} onChange={(e) => { const nl = [...driverForm.licenciasMedicas]; nl[idx].hasta = e.target.value; setDriverForm({...driverForm, licenciasMedicas: nl}); }} className="w-full px-2 py-1.5 text-sm bg-white dark:bg-slate-800 border rounded" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Motivo (Opcional)</label>
+                            <input type="text" value={lic.motivo || ''} placeholder="Ej: Reposo" onChange={(e) => { const nl = [...driverForm.licenciasMedicas]; nl[idx].motivo = e.target.value; setDriverForm({...driverForm, licenciasMedicas: nl}); }} className="w-full px-2 py-1.5 text-sm bg-white dark:bg-slate-800 border rounded" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Certificado PDF</label>
+                            <div className="flex items-center gap-1">
+                                {lic.archivo ? (
+                                  <div className="flex items-center gap-1 w-full">
+                                    <a href={lic.archivo} target="_blank" rel="noreferrer" className="flex-1 truncate text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1.5 rounded border border-blue-200 dark:border-blue-800 flex items-center justify-center gap-1 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
+                                      <Eye className="w-3 h-3" /> Ver
+                                    </a>
+                                    <button type="button" onClick={() => { const nl = [...driverForm.licenciasMedicas]; nl[idx].archivo = ''; setDriverForm({...driverForm, licenciasMedicas: nl}); }} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded border border-red-200 dark:border-red-800 transition-colors">
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button type="button" onClick={() => triggerUpload('driver', 'licencia_medica_' + idx)} className="w-full cursor-pointer flex items-center justify-center gap-1 bg-slate-100 dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-700 rounded px-2 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                    <UploadCloud className="w-3 h-3" />
+                                    <span>Subir PDF</span>
+                                  </button>
+                                )}
                             </div>
                           </div>
-                          <button
-                            onClick={() => handleDeleteDocumento(doc.id)}
-                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400 font-bold text-xs opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1"
-                          >
-                            Eliminar
-                          </button>
                         </div>
                       ))}
+                      {(!driverForm.licenciasMedicas || driverForm.licenciasMedicas.length === 0) && (
+                        <div className="text-center p-4 bg-slate-50 dark:bg-slate-900 border border-dashed rounded-lg text-sm text-slate-500">
+                          Sin historial de licencias médicas.
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500">Venc. Examen Médico/Preocupacional</label>
+                        <input type="date" value={driverForm.vencimientoExamenes} onChange={e=>setDriverForm({...driverForm, vencimientoExamenes: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500">Estado Examen</label>
+                        <select value={driverForm.estadoExamen || 'APTO'} onChange={e=>setDriverForm({...driverForm, estadoExamen: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg font-semibold text-slate-700 dark:text-slate-300">
+                          <option value="APTO">APTO PARA EL TRABAJO</option>
+                          <option value="NO APTO">NO APTO PARA EL TRABAJO</option>
+                        </select>
+                      </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500">Fecha Límite Vacaciones</label>
+                      <input type="date" value={driverForm.fechaVacaciones} onChange={e=>setDriverForm({...driverForm, fechaVacaciones: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {/* Regularizacion Notice */}
-              {((modalType === "driver" &&
-                checkDriverStatus(selectedEntity).status === "BLOQUEADO") ||
-                (modalType === "vehicle" &&
-                  checkVehicleStatus(selectedEntity).status ===
-                    "BLOQUEADO")) && (
-                <>
-                  <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-200 dark:border-red-900/30 flex gap-3 items-start">
-                    <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-black text-red-800 dark:text-red-400 text-sm">
-                        Entidad Irregular
-                      </h4>
-                      <p className="text-xs text-red-700 dark:text-red-300 mt-1 font-medium">
-                        Esta entidad se encuentra bloqueada operativamente. Para
-                        reactivar, es necesario regularizar los documentos
-                        vencidos adjuntando los nuevos certificados.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl">
-                    <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-3">
-                      Herramientas de Regularización
-                    </h4>
-                    {modalType === "driver" &&
-                      checkDriverStatus(selectedEntity).reasons.includes(
-                        "Licencia Vencida",
-                      ) && (
-                        <div className="flex gap-2 items-center mb-3">
-                          <span className="text-xs font-semibold w-1/3 text-slate-700 dark:text-slate-300">
-                            Licencia Vencida:
-                          </span>
-                          <input
-                            type="date"
-                            className="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            id="nueva_licencia"
-                            defaultValue=""
-                          />
-                          <button
-                            onClick={() => {
-                              const v = (
-                                document.getElementById(
-                                  "nueva_licencia",
-                                ) as HTMLInputElement
-                              ).value;
-                              if (v)
-                                handleRegularizar(
-                                  selectedEntity.id,
-                                  "driver",
-                                  "vencimientoLicencia",
-                                  v,
-                                  `Licencia renovada hasta ${v}`,
-                                );
-                            }}
-                            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
-                          >
-                            Actualizar
-                          </button>
-                        </div>
-                      )}
-                    {modalType === "driver" &&
-                      checkDriverStatus(selectedEntity).reasons.includes(
-                        "Vacaciones Vencidas",
-                      ) && (
-                        <div className="flex gap-2 items-center mb-3">
-                          <span className="text-xs font-semibold w-1/3 text-slate-700 dark:text-slate-300">
-                            Vacaciones:
-                          </span>
-                          <button
-                            onClick={() => {
-                              handleRegularizar(
-                                selectedEntity.id,
-                                "driver",
-                                "vacaciones",
-                                "Al día",
-                                "Vacaciones marcadas como Al día",
-                              );
-                            }}
-                            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition flex-1"
-                          >
-                            Marcar al día
-                          </button>
-                        </div>
-                      )}
-                    {modalType === "vehicle" &&
-                      checkVehicleStatus(selectedEntity).reasons.includes(
-                        "Revisión Técnica Vencida",
-                      ) && (
-                        <div className="flex gap-2 items-center mb-3">
-                          <span className="text-xs font-semibold w-1/3 text-slate-700 dark:text-slate-300">
-                            Rev. Técnica Vencida:
-                          </span>
-                          <input
-                            type="date"
-                            className="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            id="nueva_revTec"
-                            defaultValue=""
-                          />
-                          <button
-                            onClick={() => {
-                              const v = (
-                                document.getElementById(
-                                  "nueva_revTec",
-                                ) as HTMLInputElement
-                              ).value;
-                              if (v)
-                                handleRegularizar(
-                                  selectedEntity.id,
-                                  "vehicle",
-                                  "vencimientoRev",
-                                  v,
-                                  `Revisión Técnica renovada hasta ${v}`,
-                                );
-                            }}
-                            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
-                          >
-                            Actualizar
-                          </button>
-                        </div>
-                      )}
-                    {modalType === "vehicle" &&
-                      checkVehicleStatus(selectedEntity).reasons.includes(
-                        "Seguro Vencido",
-                      ) && (
-                        <div className="flex gap-2 items-center mb-3">
-                          <span className="text-xs font-semibold w-1/3 text-slate-700 dark:text-slate-300">
-                            Seguro Vencido:
-                          </span>
-                          <input
-                            type="date"
-                            className="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            id="nuevo_seguro"
-                            defaultValue=""
-                          />
-                          <button
-                            onClick={() => {
-                              const v = (
-                                document.getElementById(
-                                  "nuevo_seguro",
-                                ) as HTMLInputElement
-                              ).value;
-                              if (v)
-                                handleRegularizar(
-                                  selectedEntity.id,
-                                  "vehicle",
-                                  "vencimientoSeguro",
-                                  v,
-                                  `Seguro renovado hasta ${v}`,
-                                );
-                            }}
-                            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
-                          >
-                            Actualizar
-                          </button>
-                        </div>
-                      )}
-                    {modalType === "vehicle" &&
-                      checkVehicleStatus(selectedEntity).reasons.some((r) =>
-                        r?.includes(
-                          "Bloqueo automático: Unidad cumple 15+ años",
-                        ),
-                      ) && (
-                        <div className="text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30">
-                          La unidad no puede ser regularizada debido a
-                          antigüedad superior a 15 años. Debe ser dada de baja.
-                        </div>
-                      )}
-                  </div>
-                </>
-              )}
-
-              {/* Historial */}
-              {selectedEntity.historial &&
-                selectedEntity.historial.length > 0 && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-800">
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2 mb-3">
-                      <Calendar className="w-4 h-4 text-slate-400" /> Historial
-                      de Regularizaciones
-                    </h3>
-                    <div className="space-y-3">
-                      {selectedEntity.historial.map((h: any) => (
-                        <div
-                          key={h.id}
-                          className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm border-l-2 border-emerald-500 pl-3"
-                        >
-                          <span className="text-slate-400 dark:text-slate-500 min-w-[120px] font-bold text-[11px] whitespace-nowrap">
-                            {h.fecha}
-                          </span>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {h.accion}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-            </div>
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" onClick={() => setShowDriverModal(false)} className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">Cancelar</button>
+                <button type="submit" className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 flex items-center gap-2">
+                  <Save className="w-4 h-4"/> Guardar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
+
+      {showVehicleModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+              <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <Truck className="w-5 h-5 text-indigo-500" />
+                {isEditing ? 'Editar Ficha de Vehículo' : 'Registrar Nuevo Vehículo'}
+              </h2>
+              <button type="button" onClick={() => setShowVehicleModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
+            </div>
+            <form onSubmit={handleSaveVehicle} className="p-6 h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-6 mb-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Patente</label>
+                  <input required value={vehicleForm.patente} onChange={e=>setVehicleForm({...vehicleForm, patente: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg font-mono uppercase" placeholder="ABCD-12"/>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Tipo</label>
+                  <select required value={vehicleForm.tipo} onChange={e=>setVehicleForm({...vehicleForm, tipo: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg">
+                    <option>Camión</option>
+                    <option>Tractocamión</option>
+                    <option>Remolque</option>
+                    <option>Semiremolque</option>
+                    <option>Furgón</option>
+                    <option>Camioneta</option>
+                    <option>Bus</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Marca / Modelo</label>
+                  <input value={vehicleForm.marca + (vehicleForm.modelo ? ' ' + vehicleForm.modelo : '')} onChange={e=>{
+                    const parts = e.target.value.split(' ');
+                    setVehicleForm({...vehicleForm, marca: parts[0] || '', modelo: parts.slice(1).join(' ')})
+                  }} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" placeholder="Ej: Mercedes Benz Actros"/>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Año Fabricación</label>
+                  <input type="number" required value={vehicleForm.anio} onChange={e=>setVehicleForm({...vehicleForm, anio: parseInt(e.target.value)})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                </div>
+                <div className="space-y-1 col-span-2 md:col-span-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Tipo de Uso (Operación)</label>
+                  <select required value={vehicleForm.tipoUso} onChange={e=>setVehicleForm({...vehicleForm, tipoUso: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg">
+                    <option>Carga General</option>
+                    <option>Carga Peligrosa</option>
+                    <option>Pasajeros</option>
+                    <option>Minería</option>
+                  </select>
+                </div>
+                
+                <div className="col-span-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <h4 className="font-bold text-slate-800 dark:text-white mb-4">Fechas de Ciclo de Vida y Legal</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1 col-span-2 md:col-span-1">
+                      <label className="text-xs font-bold text-slate-500">Fecha Primera Inscripción</label>
+                      <input type="date" required value={vehicleForm.fechaInscripcion} onChange={e=>setVehicleForm({...vehicleForm, fechaInscripcion: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                    </div>
+                    <div className="space-y-1 col-span-2 md:col-span-1">
+                      <label className="text-xs font-bold text-slate-500">Venc. Rev. Técnica</label>
+                      <input type="date" required value={vehicleForm.vencimientoRev} onChange={e=>setVehicleForm({...vehicleForm, vencimientoRev: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                    </div>
+                    <div className="space-y-1 col-span-2 md:col-span-1">
+                      <label className="text-xs font-bold text-slate-500">Venc. Seguro Obligatorio</label>
+                      <input type="date" required value={vehicleForm.vencimientoSeguro} onChange={e=>setVehicleForm({...vehicleForm, vencimientoSeguro: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                    </div>
+                    <div className="space-y-1 col-span-2 md:col-span-1">
+                      <label className="text-xs font-bold text-slate-500">Venc. Permiso Circulación</label>
+                      <input type="date" required value={vehicleForm.vencimientoPermisoCirculacion} onChange={e=>setVehicleForm({...vehicleForm, vencimientoPermisoCirculacion: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border rounded-lg" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" onClick={() => setShowVehicleModal(false)} className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">Cancelar</button>
+                <button type="submit" className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 flex items-center gap-2">
+                  <Save className="w-4 h-4"/> Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {uploading && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex flex-col items-center justify-center p-4">
+          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <h2 className="text-white font-bold text-xl">Subiendo documento a la nube...</h2>
+        </div>
+      )}
+
     </div>
   );
 }
+
+
+

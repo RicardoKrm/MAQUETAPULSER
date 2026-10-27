@@ -36,9 +36,9 @@ interface AuthContextType {
 
 const LOCAL_SESSION_KEY = 'pulser_local_session_data';
 
-export const createMockSession = (email: string = 'admin@pulser.cl', nombre: string = 'Administrador General', panelInicio: string = '/dashboard'): { session: Session; user: User; profile: AuthProfile } => {
+export const createMockSession = (email: string, nombre?: string, panelInicio: string = '/dashboard'): { session: Session; user: User; profile: AuthProfile } => {
   const userId = `user-local-${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  const formattedName = nombre || 'Administrador General';
+  const formattedName = nombre || (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1));
   
   const user: User = {
     id: userId,
@@ -47,7 +47,7 @@ export const createMockSession = (email: string = 'admin@pulser.cl', nombre: str
     aud: 'authenticated',
     created_at: new Date().toISOString(),
     email: email,
-    phone: '+56 9 8765 4321',
+    phone: '',
     role: 'authenticated',
     updated_at: new Date().toISOString()
   };
@@ -55,10 +55,10 @@ export const createMockSession = (email: string = 'admin@pulser.cl', nombre: str
   const session: Session = {
     access_token: `mock-token-${Date.now()}`,
     token_type: 'bearer',
-    expires_in: 36000000,
+    expires_in: 360000,
     refresh_token: `mock-refresh-${Date.now()}`,
     user: user,
-    expires_at: Math.floor(Date.now() / 1000) + 36000000
+    expires_at: Math.floor(Date.now() / 1000) + 360000
   };
 
   const profile: AuthProfile = {
@@ -67,19 +67,18 @@ export const createMockSession = (email: string = 'admin@pulser.cl', nombre: str
     empresa_id: '57fa41da-645d-48ba-a671-65a35312d0e9',
     rol_id: 'rol-admin',
     nombre: formattedName,
-    rut: '14.285.901-3',
+    rut: '12.345.678-9',
     email: email,
     estado: 'ACTIVO',
-    cargo: 'Súper Administrador',
+    cargo: 'Administrador General',
     panel_inicio: panelInicio,
-    cambio_clave_pendiente: false,
     rol: {
-      nombre: 'Súper Administrador',
-      tipo: 'SUPER_ADMIN',
+      nombre: 'Administrador',
+      tipo: 'ADMIN',
       permisos: { all: true }
     },
     empresa: {
-      nombre: 'Imperia SpA',
+      nombre: 'Imperia',
       rut: '76.785.260-6'
     }
   };
@@ -87,22 +86,20 @@ export const createMockSession = (email: string = 'admin@pulser.cl', nombre: str
   return { session, user, profile };
 };
 
-const defaultMockSession = createMockSession();
-
 const AuthContext = createContext<AuthContextType>({
-  session: defaultMockSession.session,
-  user: defaultMockSession.user,
-  profile: defaultMockSession.profile,
+  session: null,
+  user: null,
+  profile: null,
   signOut: async () => {},
   setLocalSession: () => {},
-  loading: false,
+  loading: true,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<Session | null>(defaultMockSession.session);
-  const [user, setUser] = useState<User | null>(defaultMockSession.user);
-  const [profile, setProfile] = useState<AuthProfile | null>(defaultMockSession.profile);
-  const [loading, setLoading] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<AuthProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const setLocalSession = (email: string, nombre?: string, panelInicio: string = '/dashboard') => {
     const mockData = { email, nombre, panel_inicio: panelInicio };
@@ -120,7 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select(`
           *,
           rol:rol_id(nombre, tipo, permisos),
-          empresa:empresa_id(nombre, rut)
+          empresa:empresa_id(nombre, rut, estado)
         `);
 
       if (email) {
@@ -135,6 +132,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data) {
         if (Array.isArray(data.rol)) data.rol = data.rol[0];
         if (Array.isArray(data.empresa)) data.empresa = data.empresa[0];
+        
+        // Block inactive users or users belonging to inactive companies
+        if (data.estado?.toLowerCase() === 'inactivo' || (data.empresa && data.empresa.estado?.toLowerCase() === 'inactivo')) {
+          console.warn('Usuario o empresa inactiva. Bloqueando acceso.');
+          supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          return;
+        }
+
         setProfile(data);
       }
     } catch (error) {
@@ -183,9 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session?.user?.id) {
         loadProfile(session.user.id, session.user.email).finally(() => setLoading(false));
       } else {
-        setSession(defaultMockSession.session);
-        setUser(defaultMockSession.user);
-        setProfile(defaultMockSession.profile);
+        setProfile(null);
         setLoading(false);
       }
     });
@@ -195,10 +201,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     localStorage.removeItem(LOCAL_SESSION_KEY);
-    const mock = createMockSession();
-    setSession(mock.session);
-    setUser(mock.user);
-    setProfile(mock.profile);
+    if (profile) {
+      try {
+        await logActividad(
+          'Acceso', 
+          'Cerró Sesión', 
+          `Usuario ${profile.nombre || 'Desconocido'} cerró su sesión.`, 
+          profile.empresa_id, 
+          profile.id
+        );
+      } catch (le) {
+        console.warn(le);
+      }
+    }
+    setSession(null);
+    setUser(null);
+    setProfile(null);
     try {
       await supabase.auth.signOut();
     } catch (e) {

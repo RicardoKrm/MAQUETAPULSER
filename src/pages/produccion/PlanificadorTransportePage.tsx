@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useCompany } from '../../contexts/CompanyContext';
 import { useProduccion } from '../../contexts/ProduccionContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -15,7 +16,6 @@ import {
   CartesianGrid, Tooltip as RechartsTooltip, Legend, 
   ResponsiveContainer, ReferenceLine, ComposedChart, Area
 } from 'recharts';
-import { mockProduccionTransporte } from '../../lib/mockProduccion';
 
 interface ParametrosSimulacion {
   choferesDia: number;
@@ -41,19 +41,20 @@ interface EscenarioGuardado {
 }
 
 export default function PlanificadorTransportePage() {
+  const { currentCompany } = useCompany();
   const { metas } = useProduccion();
-  const [loading, setLoading] = useState(false);
-  const [mesSeleccionado, setMesSeleccionado] = useState('2026-09');
+  const [loading, setLoading] = useState(true);
+  const [mesSeleccionado, setMesSeleccionado] = useState(
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  );
   
   const [activeTab, setActiveTab] = useState<'simulador' | 'graficos'>('simulador');
   const [showChartDetails, setShowChartDetails] = useState<boolean>(false);
 
   // Datos reales
-  const [realData, setRealData] = useState<any[]>(
-    mockProduccionTransporte.filter(r => r.fecha.startsWith('2026-09'))
-  );
+  const [realData, setRealData] = useState<any[]>([]);
   const [diasMes, setDiasMes] = useState(30);
-  const [diasTranscurridos, setDiasTranscurridos] = useState(12);
+  const [diasTranscurridos, setDiasTranscurridos] = useState(0);
   
   // Parámetros de simulación
   const [params, setParams] = useState<ParametrosSimulacion>({
@@ -100,23 +101,22 @@ export default function PlanificadorTransportePage() {
 
       const { data, error } = await supabase
         .from('produccion_registro_diario')
-        .select('*')
-        .gte('fecha', startDateStr)
+        .select('*').eq('empresa_id', currentCompany?.id || '').gte('fecha', startDateStr)
         .lte('fecha', endDateStr);
 
-      if (error || !data || data.length === 0) {
-        const fallback = mockProduccionTransporte.filter(r => r.fecha >= startDateStr && r.fecha <= endDateStr);
-        setRealData(fallback);
-      } else {
-        setRealData(data);
+      if (error) throw error;
+
+      setRealData(data || []);
+
+      // Approximate initial params based on real data
+      if (data && data.length > 0) {
+        // Calculate average distinct drivers per day/shift and trucks
+        // For simplicity, we just use defaults or rough estimates
+        // In a real scenario we would group by fecha and turno
       }
+
     } catch (err) {
       console.error(err);
-      const [year, month] = mesSeleccionado.split('-').map(Number);
-      const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDateStr = `${year}-${String(month).padStart(2, '0')}-31`;
-      const fallback = mockProduccionTransporte.filter(r => r.fecha >= startDateStr && r.fecha <= endDateStr);
-      setRealData(fallback);
     } finally {
       setLoading(false);
     }

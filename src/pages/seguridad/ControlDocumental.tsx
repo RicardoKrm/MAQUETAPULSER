@@ -4,26 +4,11 @@ import { Button } from '../../components/ui/Button';
 import { Search, Filter, FileCheck, Upload, AlertCircle, Clock, CheckCircle2, ChevronDown } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 
-const mockDocumentos = [
-  { id: 'DOC-01', tipo: 'Examen Ocupacional Gran Altura Geográfica', entidad: 'Rodrigo Castillo Fuentes', categoria: 'trabajadores', fechaEmision: '10/04/2026', fechaVencimiento: '10/04/2027', estado: 'Vigente' },
-  { id: 'DOC-02', tipo: 'Licencia Profesional A5 / Hoja de Vida', entidad: 'Mauricio Silva Valenzuela', categoria: 'trabajadores', fechaEmision: '15/01/2026', fechaVencimiento: '15/01/2028', estado: 'Vigente' },
-  { id: 'DOC-03', tipo: 'Inducción SSO y Pasaporte Faena Cordillera', entidad: 'Carlos Venegas Morales', categoria: 'trabajadores', fechaEmision: '02/07/2026', fechaVencimiento: '02/07/2027', estado: 'Vigente' },
-  { id: 'DOC-04', tipo: 'Certificación LOTO y Trabajo en Altura', entidad: 'Jorge Lagos Cárdenas', categoria: 'trabajadores', fechaEmision: '18/07/2026', fechaVencimiento: '18/07/2027', estado: 'Vigente' },
-  { id: 'DOC-05', tipo: 'Examen Psicosensotécnico Riguroso', entidad: 'Gonzalo Pavez Castro', categoria: 'trabajadores', fechaEmision: '20/09/2025', fechaVencimiento: '20/09/2026', estado: 'Próximo a Vencer' },
-  { id: 'DOC-06', tipo: 'Certificado F30-1 Cumplimiento Laboral', entidad: 'Servicios Mineros del Norte SpA', categoria: 'empresas', fechaEmision: '01/08/2026', fechaVencimiento: '30/09/2026', estado: 'Vigente' },
-  { id: 'DOC-07', tipo: 'Póliza Responsabilidad Civil y Daños Faena', entidad: 'Imperia SpA', categoria: 'empresas', fechaEmision: '01/01/2026', fechaVencimiento: '31/12/2026', estado: 'Vigente' },
-  { id: 'DOC-08', tipo: 'Certificado de Afiliación y Tasa Siniestralidad ACHS', entidad: 'Imperia SpA', categoria: 'empresas', fechaEmision: '01/07/2026', fechaVencimiento: '31/12/2026', estado: 'Vigente' }
-];
+const mockDocumentos: any[] = [];
 
 const ControlDocumentalSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'todos' | 'trabajadores' | 'empresas'>('todos');
-
-  const filteredDocumentos = mockDocumentos.filter(doc => {
-    const matchesSearch = doc.tipo.toLowerCase().includes(searchTerm.toLowerCase()) || doc.entidad.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTab = activeTab === 'todos' || doc.categoria === activeTab;
-    return matchesSearch && matchesTab;
-  });
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
@@ -121,7 +106,7 @@ const ControlDocumentalSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredDocumentos.map((doc) => (
+                {mockDocumentos.map((doc) => (
                   <tr key={doc.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-300">
                       <div className="flex items-center gap-2">

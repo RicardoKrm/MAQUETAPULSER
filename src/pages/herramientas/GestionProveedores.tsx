@@ -6,13 +6,12 @@ import { Trash, Plus, Search, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useAppContext } from '../../context/AppContext';
-import { mockProveedores } from '../../lib/mockData';
 import Swal from 'sweetalert2';
 
 export default function GestionProveedores() {
   const { currentCompany } = useCompany();
   const { crearProveedor, eliminarProveedor: eliminarProvContext } = useAppContext();
-  const [proveedores, setProveedores] = useState<any[]>(mockProveedores);
+  const [proveedores, setProveedores] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Form State
@@ -35,20 +34,15 @@ export default function GestionProveedores() {
         .select('*')
         .eq('empresa_id', currentCompany.id);
       
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
          setProveedores(data);
       } else {
          // Fallback a localStorage si la tabla aún no se crea
          const local = localStorage.getItem('proveedores_' + currentCompany.id);
-         if (local) {
-           setProveedores(JSON.parse(local));
-         } else {
-           setProveedores(mockProveedores);
-         }
+         if (local) setProveedores(JSON.parse(local));
       }
     } catch (e) {
       console.error(e);
-      setProveedores(mockProveedores);
     }
   };
 

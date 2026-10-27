@@ -4,21 +4,9 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, ClipboardCheck, Calendar, User, ListChecks } from 'lucide-react';
 
-const mockInspecciones = [
-  { id: 'INSP-081', tipo: 'Inspección de Fosa y Herramientas Eléctricas', area: 'Taller Central', fecha: '04/07/2026', responsable: 'Patricia Vergara', estado: 'Realizada', hallazgos: 1 },
-  { id: 'INSP-082', tipo: 'Inspección de Flota Pesada en Ruta', area: 'Ruta 60-CH', fecha: '15/07/2026', responsable: 'Patricia Vergara', estado: 'Realizada', hallazgos: 2 },
-  { id: 'INSP-083', tipo: 'Inspección de Equipos Contra Incendio', area: 'Todas las Instalaciones', fecha: '02/08/2026', responsable: 'Jorge Lagos', estado: 'Realizada', hallazgos: 0 },
-  { id: 'INSP-084', tipo: 'Inspección de Bodega de Sustancias Peligrosas', area: 'Bodega Central', fecha: '18/08/2026', responsable: 'Patricia Vergara', estado: 'Realizada', hallazgos: 2 },
-  { id: 'INSP-085', tipo: 'Inspección Pre-Uso de Tacógrafos y Cabinas', area: 'Patio Troncal', fecha: '02/09/2026', responsable: 'Rodrigo Castillo', estado: 'Realizada', hallazgos: 1 },
-  { id: 'INSP-086', tipo: 'Inspección Semanal de Taller y Orden y Aseo (5S)', area: 'Taller Fosa 1 y 2', fecha: '11/09/2026', responsable: 'Patricia Vergara', estado: 'Realizada', hallazgos: 1 }
-];
+const mockInspecciones: any[] = [];
 
-const mockChecklists = [
-  { id: 'CHK-01', nombre: 'Checklist Pre-Uso Diario de Camión Tolva', categoria: 'Equipos Móviles', preguntas: 24, ultimaEdicion: '01/07/2026' },
-  { id: 'CHK-02', nombre: 'Pauta de Inspección de Fosa y Bloqueo LOTO', categoria: 'Mantenimiento', preguntas: 18, ultimaEdicion: '15/07/2026' },
-  { id: 'CHK-03', nombre: 'Auditoría Rápida de Sustancias Peligrosas y EPP', categoria: 'SSO y Medioambiente', preguntas: 32, ultimaEdicion: '10/08/2026' },
-  { id: 'CHK-04', nombre: 'Checklist de Extintores y Red Húmeda', categoria: 'Emergencias', preguntas: 15, ultimaEdicion: '01/09/2026' }
-];
+const mockChecklists: any[] = [];
 
 const InspeccionesSSO = () => {
   const [activeTab, setActiveTab] = useState<'inspecciones' | 'constructor'>('inspecciones');

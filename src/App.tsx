@@ -17,8 +17,10 @@ import FlotaAlertas from './pages/flota/Alertas';
 import Contratos from './pages/operaciones/Contratos';
 import CrearServicio from './pages/operaciones/CrearServicio';
 import Programacion from './pages/operaciones/Programacion';
+import ConfiguracionAlertas from './pages/configuracion/ConfiguracionAlertas';
+import MatrizEscalamiento from './pages/configuracion/MatrizEscalamiento';
 import Mantenedores from './pages/operaciones/Mantenedores';
-import Reservas from './pages/operaciones/Reservas';
+import ServiciosSpot from './pages/operaciones/ServiciosSpot';
 import ProduccionLayout from './pages/produccion/ProduccionLayout';
 import DashboardProduccion from './pages/produccion/DashboardProduccion';
 import ReportesDiariosPage from './pages/produccion/ReportesDiariosPage';
@@ -88,6 +90,7 @@ import ControlVelocidades from './pages/seguridad/ControlVelocidades';
 import ControlEventos from './pages/seguridad/ControlEventos';
 import ControlDocumentalSeguridad from './pages/seguridad/ControlDocumental';
 import DashboardSSO from './pages/seguridad/DashboardSSO';
+import GavalSeeder from './pages/GavalSeeder';
 import TrabajadoresSSO from './pages/seguridad/TrabajadoresSSO';
 import EmpresasContratistasSSO from './pages/seguridad/EmpresasContratistasSSO';
 import EppSSO from './pages/seguridad/EppSSO';
@@ -113,20 +116,27 @@ import { AuthProvider } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 
 import Login from './pages/Login';
+import LandingPage from './pages/LandingPage';
 
 const router = createBrowserRouter([
   {
-    path: "/login",
-    element: <Navigate to="/dashboard" replace />
+    path: "/",
+    element: <LandingPage />
   },
   {
-    path: "/",
+    path: "/landing",
+    element: <LandingPage />
+  },
+  {
+    path: "/login",
+    element: <Login />
+  },
+  {
     element: <ProtectedRoute />,
     children: [
       {
         element: <Layout />,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: "dashboard", element: <Dashboard /> },
       { path: "flota/alertas", element: <FlotaAlertas /> },
       { path: "operaciones/contratos", element: <Contratos /> },
@@ -144,7 +154,8 @@ const router = createBrowserRouter([
         { path: "trazabilidad", element: <TrazabilidadPage /> }
       ]},
 
-      { path: "operaciones/reservas", element: <Reservas /> },
+      { path: "operaciones/spot", element: <ServiciosSpot /> },
+      { path: "operaciones/reservas", element: <Navigate to="/operaciones/spot" replace /> },
       { path: "operaciones/mantenedores", element: <Mantenedores /> },
       { path: "operaciones/programacion", element: <Programacion /> },
       { path: "operaciones/gps", element: <GPS /> },
@@ -214,6 +225,7 @@ const router = createBrowserRouter([
       { path: "seguridad/trabajadores", element: <TrabajadoresSSO /> },
       { path: "seguridad/contratistas", element: <EmpresasContratistasSSO /> },
       { path: "seguridad/epp", element: <EppSSO /> },
+        { path: "gaval-seeder", element: <GavalSeeder /> },
       { path: "seguridad/charlas", element: <CharlasSSO /> },
       { path: "seguridad/capacitaciones", element: <CapacitacionesSSO /> },
       { path: "seguridad/riesgos", element: <GestionRiesgosSSO /> },
@@ -250,4 +262,5 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
 

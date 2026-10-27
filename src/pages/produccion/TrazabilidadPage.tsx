@@ -1,27 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useCompany } from '../../contexts/CompanyContext';
 import HistorialTrazabilidad from '../operaciones/produccion/HistorialTrazabilidad';
 import { Loader2 } from 'lucide-react';
-import { mockTrazabilidadUnified } from '../../lib/mockProduccion';
 
 export default function TrazabilidadPage() {
-  const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<any[]>(mockTrazabilidadUnified);
+  const { currentCompany } = useCompany();
+  const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchTrazabilidad();
-  }, []);
+    if (currentCompany?.id) fetchTrazabilidad();
+  }, [currentCompany]);
 
   const fetchTrazabilidad = async () => {
     setLoading(true);
     try {
       const { data: minaData } = await supabase
-        .from('produccion_registro_diario_mina')
-        .select('*');
+        .from('produccion_registro_diario_mina').select('*').eq('empresa_id', currentCompany?.id || '');
 
       const { data: transporteData } = await supabase
-        .from('produccion_registro_diario')
-        .select('*');
+        .from('produccion_registro_diario').select('*').eq('empresa_id', currentCompany?.id || '');
 
       const unifiedHistory: any[] = [];
 
@@ -68,14 +67,9 @@ export default function TrazabilidadPage() {
       // Sort by latest first
       unifiedHistory.sort((a, b) => b.timestamp - a.timestamp);
       
-      if (unifiedHistory.length === 0) {
-        setHistory(mockTrazabilidadUnified);
-      } else {
-        setHistory(unifiedHistory);
-      }
+      setHistory(unifiedHistory);
     } catch (error) {
       console.error(error);
-      setHistory(mockTrazabilidadUnified);
     } finally {
       setLoading(false);
     }

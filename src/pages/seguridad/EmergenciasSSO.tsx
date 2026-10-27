@@ -4,70 +4,9 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, Siren, FileText, Calendar, Users, Clock, AlertTriangle } from 'lucide-react';
 
-const mockPlanes = [
-  {
-    id: 'PLN-01',
-    nombre: 'Plan General de Contingencias y Evacuación Faena',
-    area: 'Taller Central y Patio de Maniobras',
-    actualizacion: '15/07/2026',
-    responsable: 'Patricia Vergara (Prevencionista)',
-    estado: 'Vigente'
-  },
-  {
-    id: 'PLN-02',
-    nombre: 'Protocolo de Emergencia ante Derrame de Hidrocarburos',
-    area: 'Isla de Diésel y Bodega de Lubricantes',
-    actualizacion: '02/08/2026',
-    responsable: 'Jorge Lagos (Jefe Taller)',
-    estado: 'Vigente'
-  },
-  {
-    id: 'PLN-03',
-    nombre: 'Plan de Rescate Vehicular y Accidentes en Ruta Cordillera',
-    area: 'Corredor Carretero Los Andes - Mina',
-    actualizacion: '20/08/2026',
-    responsable: 'Rodrigo Castillo / Brigada Faena',
-    estado: 'Vigente'
-  },
-  {
-    id: 'PLN-04',
-    nombre: 'Plan de Respuesta ante Condiciones Climáticas Extremas (Nevadas/Viento)',
-    area: 'Operaciones Mina Rajo Abierto',
-    actualizacion: '05/09/2026',
-    responsable: 'Comité de Emergencias Faena',
-    estado: 'En Revisión'
-  }
-];
+const mockPlanes: any[] = [];
 
-const mockSimulacros = [
-  {
-    id: 'SIM-01',
-    tipo: 'Evacuación General por Sismo Mayor (7.2 Richter)',
-    fecha: '18/07/2026',
-    area: 'Taller Mecánico y Oficinas Centrales',
-    participantes: 48,
-    tiempoEvacuacion: '4 min 12 seg',
-    resultado: 'Exitoso'
-  },
-  {
-    id: 'SIM-02',
-    tipo: 'Derrame de 500L de Combustible con Amago de Fuego',
-    fecha: '26/08/2026',
-    area: 'Estación de Carga de Diésel',
-    participantes: 16,
-    tiempoEvacuacion: '3 min 30 seg',
-    resultado: 'Exitoso'
-  },
-  {
-    id: 'SIM-03',
-    tipo: 'Volcamiento Simulado con Rescate de Conductor Atrapado',
-    fecha: '08/09/2026',
-    area: 'Circuito de Pruebas y Entrenamiento Ruta',
-    participantes: 22,
-    tiempoEvacuacion: '11 min 45 seg',
-    resultado: 'Con Observaciones'
-  }
-];
+const mockSimulacros: any[] = [];
 
 const EmergenciasSSO = () => {
   const [activeTab, setActiveTab] = useState<'planes' | 'simulacros'>('planes');

@@ -143,85 +143,42 @@ export default function PanelTco() {
     if (!activeCompanyId) return;
 
     const fetchRealData = async () => {
-      try {
-        // Combustible
-        const { data: cData } = await supabase.from('registro_combustible').select('vehiculo_id, costo_total, fecha').eq('empresa_id', activeCompanyId);
-        if (cData && cData.length > 0) {
-          setCombustibleData(cData);
-        } else {
-          setCombustibleData([
-            { vehiculo_id: 'veh-01', costo_total: 4326000, fecha: '2026-07-15' },
-            { vehiculo_id: 'veh-02', costo_total: 4042500, fecha: '2026-07-28' },
-            { vehiculo_id: 'veh-03', costo_total: 3360000, fecha: '2026-08-10' },
-            { vehiculo_id: 'veh-04', costo_total: 4179000, fecha: '2026-08-25' },
-            { vehiculo_id: 'veh-05', costo_total: 3045000, fecha: '2026-09-08' }
-          ]);
-        }
+      // Combustible
+      const { data: cData } = await supabase.from('registro_combustible').select('vehiculo_id, costo_total, fecha').eq('empresa_id', activeCompanyId);
+      if (cData) setCombustibleData(cData);
 
-        // Contratos
-        const { data: coData } = await supabase.from('operacion_contrato').select('valor_total, activo, fecha_inicio, fecha_termino').eq('empresa_id', activeCompanyId);
-        if (coData && coData.length > 0) {
-          setContratosData(coData);
-        } else {
-          setContratosData([
-            { valor_total: 245000000, activo: true, fecha_inicio: '2026-07-01', fecha_termino: '2026-12-31' },
-            { valor_total: 180000000, activo: true, fecha_inicio: '2026-07-15', fecha_termino: '2026-11-30' },
-            { valor_total: 95000000, activo: true, fecha_inicio: '2026-08-01', fecha_termino: '2026-10-31' }
-          ]);
-        }
+      // Contratos
+      const { data: coData } = await supabase.from('operacion_contrato').select('valor_total, activo, fecha_inicio, fecha_termino').eq('empresa_id', activeCompanyId);
+      if (coData) setContratosData(coData);
 
-        // Reservas
-        const { data: rData } = await supabase.from('operacion_reserva').select('monto_total, fecha_reserva, vehiculo_id').eq('empresa_id', activeCompanyId);
-        if (rData && rData.length > 0) setReservasData(rData);
-        
-        // Registros Financieros from vehiculo and empresa
-        let registrosExt: any[] = [];
-        const { data: vehData } = await supabase.from('vehiculo').select('id, detalles').eq('empresa_id', activeCompanyId);
-        if (vehData) {
-          vehData.forEach(v => {
-            if (v.detalles?.registros_financieros && Array.isArray(v.detalles.registros_financieros)) {
-              v.detalles.registros_financieros.forEach((rf: any) => {
-                if (rf.tipo === 'Gasto') {
-                  registrosExt.push({ ...rf, vehiculo_id: v.id });
-                }
-              });
-            }
-          });
-        }
-        
-        const { data: empData } = await supabase.from('empresa').select('id, detalles').eq('id', activeCompanyId).single();
-        if (empData && empData.detalles?.registros_financieros && Array.isArray(empData.detalles.registros_financieros)) {
-           empData.detalles.registros_financieros.forEach((rf: any) => {
+      // Reservas
+      const { data: rData } = await supabase.from('operacion_reserva').select('monto_total, fecha_reserva, vehiculo_id').eq('empresa_id', activeCompanyId);
+      if (rData) setReservasData(rData);
+      
+      // Registros Financieros from vehiculo and empresa
+      let registrosExt: any[] = [];
+      const { data: vehData } = await supabase.from('vehiculo').select('id, detalles').eq('empresa_id', activeCompanyId);
+      if (vehData) {
+        vehData.forEach(v => {
+          if (v.detalles?.registros_financieros && Array.isArray(v.detalles.registros_financieros)) {
+            v.detalles.registros_financieros.forEach((rf: any) => {
               if (rf.tipo === 'Gasto') {
-                 registrosExt.push({ ...rf, empresa_id: empData.id });
+                registrosExt.push({ ...rf, vehiculo_id: v.id });
               }
-           });
-        }
-        if (registrosExt.length > 0) {
-          setRegistrosFData(registrosExt);
-        } else {
-          setRegistrosFData([
-            { tipo: 'Gasto', categoria: 'Peajes', monto: 1840000, fecha: '2026-07-20', vehiculo_id: 'veh-01' },
-            { tipo: 'Gasto', categoria: 'Seguros', monto: 2600000, fecha: '2026-08-01', vehiculo_id: 'veh-02' },
-            { tipo: 'Gasto', categoria: 'Neumáticos', monto: 3400000, fecha: '2026-08-15', vehiculo_id: 'veh-03' },
-            { tipo: 'Gasto', categoria: 'Lubricantes', monto: 1250000, fecha: '2026-09-05', vehiculo_id: 'veh-04' }
-          ]);
-        }
-      } catch (e) {
-        setCombustibleData([
-          { vehiculo_id: 'veh-01', costo_total: 4326000, fecha: '2026-07-15' },
-          { vehiculo_id: 'veh-02', costo_total: 4042500, fecha: '2026-07-28' },
-          { vehiculo_id: 'veh-03', costo_total: 3360000, fecha: '2026-08-10' }
-        ]);
-        setContratosData([
-          { valor_total: 245000000, activo: true, fecha_inicio: '2026-07-01', fecha_termino: '2026-12-31' },
-          { valor_total: 180000000, activo: true, fecha_inicio: '2026-07-15', fecha_termino: '2026-11-30' }
-        ]);
-        setRegistrosFData([
-          { tipo: 'Gasto', categoria: 'Peajes', monto: 1840000, fecha: '2026-07-20', vehiculo_id: 'veh-01' },
-          { tipo: 'Gasto', categoria: 'Seguros', monto: 2600000, fecha: '2026-08-01', vehiculo_id: 'veh-02' }
-        ]);
+            });
+          }
+        });
       }
+      
+      const { data: empData } = await supabase.from('empresa').select('id, detalles').eq('id', activeCompanyId).single();
+      if (empData && empData.detalles?.registros_financieros && Array.isArray(empData.detalles.registros_financieros)) {
+         empData.detalles.registros_financieros.forEach((rf: any) => {
+            if (rf.tipo === 'Gasto') {
+               registrosExt.push({ ...rf, empresa_id: empData.id });
+            }
+         });
+      }
+      setRegistrosFData(registrosExt);
     };
 
     fetchRealData();

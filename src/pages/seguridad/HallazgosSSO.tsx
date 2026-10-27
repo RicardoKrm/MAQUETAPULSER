@@ -4,53 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, Target, AlertTriangle } from 'lucide-react';
 
-const mockHallazgos = [
-  {
-    id: 'HAL-2026-061',
-    origen: 'Inspección Patio',
-    descripcion: 'Baliza estroboscópica trasera de tolva TL-202 con ampolleta quemada.',
-    severidad: 'Media',
-    responsable: 'Carlos Venegas (Mantenimiento)',
-    vencimiento: '25/08/2026',
-    estado: 'Cerrado'
-  },
-  {
-    id: 'HAL-2026-069',
-    origen: 'Observación de Conducta',
-    descripcion: 'Camión estacionado en pendiente con solo un acuñador colocado en rueda motriz.',
-    severidad: 'Alta',
-    responsable: 'Patricia Vergara (SSO)',
-    vencimiento: '08/09/2026',
-    estado: 'Pendiente Validación'
-  },
-  {
-    id: 'HAL-2026-074',
-    origen: 'Auditoría Interna',
-    descripcion: 'Tubo fluorescente con parpadeo continuo en sector lubricantes de bodega.',
-    severidad: 'Media',
-    responsable: 'Héctor Muñoz (Bodega)',
-    vencimiento: '18/09/2026',
-    estado: 'En Tratamiento'
-  },
-  {
-    id: 'HAL-2026-077',
-    origen: 'Inspección Rutinaria',
-    descripcion: 'Cartel informativo de uso de respirador descolorido por radiación solar en tolva chancado.',
-    severidad: 'Baja',
-    responsable: 'Patricia Vergara (SSO)',
-    vencimiento: '20/09/2026',
-    estado: 'Abierto'
-  }
-];
+const mockHallazgos: any[] = [];
 
 const HallazgosSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredHallazgos = mockHallazgos.filter(h =>
-    h.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    h.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    h.responsable.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getSeveridadBadge = (severidad: string) => {
     switch (severidad) {
@@ -118,7 +75,7 @@ const HallazgosSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredHallazgos.map((hallazgo) => (
+                {mockHallazgos.map((hallazgo) => (
                   <tr key={hallazgo.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-300">
                       <div className="flex items-center gap-2">

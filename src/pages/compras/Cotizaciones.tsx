@@ -5,7 +5,6 @@ import { Modal } from '../../components/ui/Modal';
 import Swal from 'sweetalert2';
 import { useCompany } from '../../contexts/CompanyContext';
 import { supabase } from '../../lib/supabase';
-import { mockCotizacionesCompras } from '../../lib/mockData';
 
 interface Cotizacion {
   id: string;
@@ -25,7 +24,7 @@ interface Cotizacion {
 
 export default function Cotizaciones() {
   const { currentCompany } = useCompany();
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(mockCotizacionesCompras as any);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedoresDist, setProveedoresDist] = useState<any[]>([]);
@@ -55,7 +54,7 @@ export default function Cotizaciones() {
         .eq('empresa_id', currentCompany.id)
         .order('created_at', { ascending: false });
         
-      if (data && data.length > 0) {
+      if (data) {
           const parsed = data.map(c => ({
              id: c.folio,
              uuid: c.id,
@@ -72,8 +71,6 @@ export default function Cotizaciones() {
              observaciones: c.observaciones
           }));
           setCotizaciones(parsed as any);
-      } else {
-          setCotizaciones(mockCotizacionesCompras as any);
       }
   };
 

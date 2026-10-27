@@ -3,48 +3,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { FileText, Download, Printer, PieChart, Search, Calendar } from 'lucide-react';
 
-const mockReportes = [
-  {
-    id: 'REP-01',
-    nombre: 'Informe Consolidado SSO - Gestión Mensual Julio 2026',
-    fecha: '02/08/2026',
-    tipo: 'Gestión Mensual',
-    formato: 'PDF',
-    tamaño: '2.4 MB'
-  },
-  {
-    id: 'REP-02',
-    nombre: 'Informe Estadístico de Accidentabilidad y Siniestralidad ACHS - Julio 2026',
-    fecha: '03/08/2026',
-    tipo: 'Siniestralidad',
-    formato: 'Excel',
-    tamaño: '850 KB'
-  },
-  {
-    id: 'REP-03',
-    nombre: 'Informe Consolidado SSO - Gestión Mensual Agosto 2026',
-    fecha: '02/09/2026',
-    tipo: 'Gestión Mensual',
-    formato: 'PDF',
-    tamaño: '2.6 MB'
-  },
-  {
-    id: 'REP-04',
-    nombre: 'Auditoría de Control Documental y Cumplimiento Subcontratación Ley 20.123',
-    fecha: '05/09/2026',
-    tipo: 'Contratistas',
-    formato: 'PDF',
-    tamaño: '1.8 MB'
-  },
-  {
-    id: 'REP-05',
-    nombre: 'Avance Quincenal Programa SSO Septiembre 2026 (al 12 de Septiembre)',
-    fecha: '12/09/2026',
-    tipo: 'Avance Quincenal',
-    formato: 'PDF',
-    tamaño: '1.2 MB'
-  }
-];
+const mockReportes: any[] = [];
 
 const ReportesSSO = () => {
   return (

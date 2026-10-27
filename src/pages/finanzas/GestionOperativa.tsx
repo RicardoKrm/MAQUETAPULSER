@@ -4,16 +4,6 @@ import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import Swal from 'sweetalert2';
-import { mockVehiculosDB, mockRepuestos, mockOrdenesTrabajo } from '../../lib/mockData';
-
-const mockInsumosOtFallback = [
-  { orden_id: 'ot-01', repuesto_id: 'rep-01', cantidad: 2, costo_unitario_aplicado: 38500 },
-  { orden_id: 'ot-01', repuesto_id: 'rep-02', cantidad: 35, costo_unitario_aplicado: 7500 },
-  { orden_id: 'ot-02', repuesto_id: 'rep-03', cantidad: 4, costo_unitario_aplicado: 85000 },
-  { orden_id: 'ot-03', repuesto_id: 'rep-05', cantidad: 1, costo_unitario_aplicado: 450000 },
-  { orden_id: 'ot-04', repuesto_id: 'rep-04', cantidad: 2, costo_unitario_aplicado: 380000 },
-  { orden_id: 'ot-05', repuesto_id: 'rep-01', cantidad: 1, costo_unitario_aplicado: 38500 }
-];
 
 export default function GestionOperativa() {
   const { activeCompanyId } = useCompany();
@@ -24,8 +14,12 @@ export default function GestionOperativa() {
   const [insumosOt, setInsumosOt] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [fechaDesde, setFechaDesde] = useState<string>('2026-07-01');
-  const [fechaHasta, setFechaHasta] = useState<string>('2026-09-12');
+  const [fechaDesde, setFechaDesde] = useState<string>(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+  );
+  const [fechaHasta, setFechaHasta] = useState<string>(
+    new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]
+  );
   
   const [selectedVehiculoId, setSelectedVehiculoId] = useState<string>('');
 
@@ -52,30 +46,14 @@ export default function GestionOperativa() {
          supabase.from('detalle_insumo_ot').select('*')
       ]);
 
-      setEmpresa(empData || { razon_social: 'Imperia Transportes & Minería' });
-      setVehiculos(vehData && vehData.length > 0 ? vehData : mockVehiculosDB);
-      setRepuestos(repData && repData.length > 0 ? repData : mockRepuestos);
-      setOts(otData && otData.length > 0 ? otData : mockOrdenesTrabajo.map(o => ({
-        id: o.id,
-        vehiculo_id: o.vehiculoId,
-        fecha_creacion: o.fechaCreacion,
-        tipo: o.tipo,
-        estado: o.estado
-      })));
-      setInsumosOt(insData && insData.length > 0 ? insData : mockInsumosOtFallback);
+      if (empData) setEmpresa(empData);
+      if (vehData) setVehiculos(vehData);
+      if (repData) setRepuestos(repData);
+      if (otData) setOts(otData);
+      if (insData) setInsumosOt(insData);
       
     } catch (e) {
       console.error(e);
-      setVehiculos(mockVehiculosDB);
-      setRepuestos(mockRepuestos);
-      setOts(mockOrdenesTrabajo.map(o => ({
-        id: o.id,
-        vehiculo_id: o.vehiculoId,
-        fecha_creacion: o.fechaCreacion,
-        tipo: o.tipo,
-        estado: o.estado
-      })));
-      setInsumosOt(mockInsumosOtFallback);
     } finally {
       setLoading(false);
     }

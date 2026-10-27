@@ -3,7 +3,6 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { FileText, Building2, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
-import { mockRegistrosFinancieros } from '../../lib/mockData';
 
 export default function HistorialFacturacion() {
   const { activeCompanyId } = useCompany();
@@ -40,25 +39,11 @@ export default function HistorialFacturacion() {
          });
       }
 
-      if (allRegistros.length === 0) {
-        allRegistros = mockRegistrosFinancieros.map(r => ({
-          ...r,
-          origen: r.contrato?.includes('Unidad') || r.tipo === 'Costo/Egreso' ? 'Unidad / Operación' : 'Empresa',
-          origenDetalle: r.contrato || 'Contrato Minero'
-        }));
-      }
-
       allRegistros.sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       
       setRegistros(allRegistros);
     } catch (e) {
       console.error(e);
-      const fallback = mockRegistrosFinancieros.map(r => ({
-        ...r,
-        origen: r.contrato?.includes('Unidad') || r.tipo === 'Costo/Egreso' ? 'Unidad / Operación' : 'Empresa',
-        origenDetalle: r.contrato || 'Contrato Minero'
-      }));
-      setRegistros(fallback);
     } finally {
       setLoading(false);
     }

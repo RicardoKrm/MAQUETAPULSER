@@ -2,10 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Calendar, Truck, TrendingUp, AlertCircle, Droplet, FileSpreadsheet, Loader2, Plus, MessageSquarePlus, Edit2, Trash2, CheckSquare, Square } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useCompany } from '../../contexts/CompanyContext';
 import * as XLSX from 'xlsx';
 import Swal from 'sweetalert2';
 import { Modal } from '../../components/ui/Modal';
-import { mockProduccionTransporte } from '../../lib/mockProduccion';
 
 type TurnoDetalle = {
   id?: string;
@@ -34,6 +34,7 @@ type ReporteDia = {
 };
 
 export default function ReporteDiarioPanel() {
+  const { currentCompany } = useCompany();
   const [selectedDateId, setSelectedDateId] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [reportes, setReportes] = useState<ReporteDia[]>([]);
@@ -138,7 +139,7 @@ export default function ReporteDiarioPanel() {
     setUploading(true);
     try {
       const novedadStr = `${novForm.novedad} | Supervisor: ${novForm.supervisor}`;
-      const payload = {
+      const payload = { empresa_id: currentCompany?.id,
         fecha: novForm.fecha,
         turno: novForm.turno,
         novedades: novedadStr
@@ -161,24 +162,24 @@ export default function ReporteDiarioPanel() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      let dataRows: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from('produccion_registro_diario')
-          .select('*');
-        if (!error && data && data.length > 0) {
-          dataRows = data;
-        } else {
-          dataRows = mockProduccionTransporte;
-        }
-      } catch {
-        dataRows = mockProduccionTransporte;
+      const { data, error } = await supabase
+        .from('produccion_registro_diario').select('*').eq('empresa_id', currentCompany?.id || '');
+        
+      if (error) {
+         if (error.code === '42P01') {
+             throw new Error("La tabla 'produccion_registro_diario' no existe en la base de datos.");
+         }
+         throw new Error(error.message || "Error al cargar los reportes");
+      }
+      
+      if (!Array.isArray(data)) {
+         throw new Error("Formato de respuesta inválido");
       }
 
       // Group by date, then by turno
       const grouped: Record<string, Record<string, any[]>> = {};
       
-      dataRows.forEach(row => {
+      data.forEach(row => {
         const dateStr = row.fecha; // YYYY-MM-DD
         if (!grouped[dateStr]) grouped[dateStr] = {};
         
@@ -316,8 +317,7 @@ export default function ReporteDiarioPanel() {
       setLoading(true);
       try {
         const { error } = await supabase
-          .from('produccion_registro_diario')
-          .delete()
+          .from('produccion_registro_diario').delete().eq('empresa_id', currentCompany?.id || '')
           .in('id', turnoIds);
         if (error) throw error;
         setSelectedDetalleIds(prev => prev.filter(id => !turnoIds.includes(id)));
@@ -347,8 +347,7 @@ export default function ReporteDiarioPanel() {
       setLoading(true);
       try {
         const { error } = await supabase
-          .from('produccion_registro_diario')
-          .delete()
+          .from('produccion_registro_diario').delete().eq('empresa_id', currentCompany?.id || '')
           .eq('id', id);
         if (error) throw error;
         setSelectedDetalleIds(prev => prev.filter(x => x !== id));
@@ -362,9 +361,31 @@ export default function ReporteDiarioPanel() {
     }
   };
 
+  
+  // Temporary Migration Hook
   useEffect(() => {
-    fetchReportes();
-  }, []);
+    if (currentCompany?.id) {
+      supabase.from('produccion_registro_diario')
+        .update({ empresa_id: currentCompany.id })
+        .is('empresa_id', null)
+        .then(() => {
+           console.log("Migration produccion_registro_diario completed");
+           // Refresh data
+           if (typeof fetchReportes === 'function') fetchReportes();
+        });
+        
+      supabase.from('produccion_registro_diario_mina')
+        .update({ empresa_id: currentCompany.id })
+        .is('empresa_id', null)
+        .then(() => {
+           console.log("Migration produccion_registro_diario_mina completed");
+        });
+    }
+  }, [currentCompany?.id]);
+
+  useEffect(() => {
+    if (currentCompany?.id) fetchReportes();
+  }, [currentCompany]);
 
   const formatNumber = (num: number) => {
     return num.toLocaleString('es-CL', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -529,8 +550,7 @@ export default function ReporteDiarioPanel() {
       for (const combo of turnosAEliminar) {
          const [fecha, turno] = combo.split('|');
          await supabase
-           .from('produccion_registro_diario')
-           .delete()
+           .from('produccion_registro_diario').delete().eq('empresa_id', currentCompany?.id || '')
            .eq('fecha', fecha)
            .eq('turno', turno);
       }
@@ -675,8 +695,7 @@ export default function ReporteDiarioPanel() {
       for (const combo of turnosAEliminar) {
          const [fecha, turno] = combo.split('|');
          await supabase
-           .from('produccion_registro_diario')
-           .delete()
+           .from('produccion_registro_diario').delete().eq('empresa_id', currentCompany?.id || '')
            .eq('fecha', fecha)
            .eq('turno', turno);
       }

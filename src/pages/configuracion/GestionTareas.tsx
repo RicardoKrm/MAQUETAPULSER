@@ -124,9 +124,18 @@ export default function GestionTareas() {
           confirmButtonColor: '#4f46e5'
         });
       } else {
+        const newId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+          ? crypto.randomUUID() 
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+              const r = (Math.random() * 16) | 0;
+              const v = c === 'x' ? r : (r & 0x3) | 0x8;
+              return v.toString(16);
+            });
+
         const { data, error } = await supabase
           .from('mantenimiento_tarea')
           .insert([{
+            id: newId,
             empresa_id: currentCompany.id,
             descripcion,
             tiempo_estandar_minutos: tiempoEstandarMinutos || 0,

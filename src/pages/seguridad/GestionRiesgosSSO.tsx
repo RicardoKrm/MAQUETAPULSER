@@ -4,75 +4,9 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, AlertTriangle, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
 
-const mockRiesgos = [
-  {
-    id: 'RSG-01',
-    proceso: 'Transporte Carretero de Carga Pesada',
-    actividad: 'Conducción en ruta cordillerana con pendientes pronunciadas',
-    peligro: 'Curvas cerradas, hielo o baja visibilidad',
-    riesgo: 'Pérdida de control, desbarrancamiento o choque frontal',
-    riesgoInherente: 'Crítico',
-    riesgoResidual: 'Bajo'
-  },
-  {
-    id: 'RSG-02',
-    proceso: 'Mantenimiento Mecánico en Taller',
-    actividad: 'Intervención de motor y transmisión en fosa',
-    peligro: 'Energía mecánica, térmica y eléctrica remanente',
-    riesgo: 'Atrapamiento, quemaduras por fluidos a alta presión',
-    riesgoInherente: 'Alto',
-    riesgoResidual: 'Bajo'
-  },
-  {
-    id: 'RSG-03',
-    proceso: 'Abastecimiento de Combustible Diésel',
-    actividad: 'Carga de combustible en isla con dispensador de alto flujo',
-    peligro: 'Descarga electrostática y presencia de vapores inflamables',
-    riesgo: 'Ignición, amago de incendio o explosión localizada',
-    riesgoInherente: 'Crítico',
-    riesgoResidual: 'Bajo'
-  },
-  {
-    id: 'RSG-04',
-    proceso: 'Maniobras y Estacionamiento en Patio',
-    actividad: 'Retroceso de tractocamión hacia muelle de carga',
-    peligro: 'Puntos ciegos de la cabina y tránsito peatonal cruzado',
-    riesgo: 'Atropellamiento o colisión con instalaciones fijas',
-    riesgoInherente: 'Crítico',
-    riesgoResidual: 'Bajo'
-  }
-];
+const mockRiesgos: any[] = [];
 
-const mockControles = [
-  {
-    id: 'CTR-01',
-    riesgo: 'Pérdida de Control de Tractocamión en Bajada',
-    control: 'Sistema de telemetría GPS con corte automático por exceso y freno motor retardador activo',
-    responsable: 'Carlos Venegas (Mantenimiento)',
-    estado: 'Efectivo'
-  },
-  {
-    id: 'CTR-02',
-    riesgo: 'Atrapamiento en Intervención de Maquinaria',
-    control: 'Bloqueo y tarjeteo LOTO obligatorio con candado personal',
-    responsable: 'Jorge Lagos (Jefe Taller)',
-    estado: 'Efectivo'
-  },
-  {
-    id: 'CTR-03',
-    riesgo: 'Incendio en Carga de Diésel',
-    control: 'Puesta a tierra obligatoria con tenaza y extintor PQS 50kg certificado',
-    responsable: 'Héctor Muñoz (Bodega y Patio)',
-    estado: 'Efectivo'
-  },
-  {
-    id: 'CTR-04',
-    riesgo: 'Atropello en Patio de Maniobras',
-    control: 'Cámaras traseras 360°, sensor de proximidad sonoro y senda peatonal segregada',
-    responsable: 'Patricia Vergara (SSO)',
-    estado: 'Parcial'
-  }
-];
+const mockControles: any[] = [];
 
 const GestionRiesgosSSO = () => {
   const [activeTab, setActiveTab] = useState<'matriz' | 'criticos'>('matriz');

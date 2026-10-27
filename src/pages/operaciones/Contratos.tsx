@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
-import { mockVehiculosDB } from '../../lib/mockData';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(value);
@@ -22,57 +21,6 @@ type Contrato = {
   vehiculosAsignados: string[];
   maquinasAsignadas: string[];
 };
-
-const mockContratosOperaciones: Contrato[] = [
-  {
-    id: 'ct-pelambres-2026',
-    cliente: 'Minera Los Pelambres S.A.',
-    descripcion: 'Transporte de concentrado de cobre y retorno ruta Los Andes - Puerto Punta Chungo',
-    inicio: '2026-07-01',
-    termino: '2026-12-31',
-    valor: 245000000,
-    activo: true,
-    tipo: 'Transporte Carga Pesada',
-    vehiculosAsignados: ['KHLP-90', 'BRTH-44', 'JWRS-18'],
-    maquinasAsignadas: []
-  },
-  {
-    id: 'ct-codelco-2026',
-    cliente: 'Codelco División Andina',
-    descripcion: 'Transporte especializado de insumos y reactivos químicos críticos de alta montaña',
-    inicio: '2026-07-15',
-    termino: '2026-11-30',
-    valor: 180000000,
-    activo: true,
-    tipo: 'Sustancias Peligrosas',
-    vehiculosAsignados: ['PRTZ-33', 'HGZX-55'],
-    maquinasAsignadas: []
-  },
-  {
-    id: 'ct-anglo-2026',
-    cliente: 'Anglo American Sur S.A.',
-    descripcion: 'Apoyo logístico de faena y traslado de maquinaria en Los Bronces',
-    inicio: '2026-08-01',
-    termino: '2026-10-31',
-    valor: 95000000,
-    activo: true,
-    tipo: 'Maquinaria y Equipos',
-    vehiculosAsignados: ['FXLK-12'],
-    maquinasAsignadas: []
-  },
-  {
-    id: 'ct-sqm-2026',
-    cliente: 'Sociedad Química y Minera de Chile (SQM)',
-    descripcion: 'Distribución de repuestos pesados y lubricantes industriales en faenas salinas',
-    inicio: '2026-08-15',
-    termino: '2026-09-30',
-    valor: 62000000,
-    activo: true,
-    tipo: 'Distribución Repuestos',
-    vehiculosAsignados: ['KHLP-90', 'BRTH-44'],
-    maquinasAsignadas: []
-  }
-];
 
 export default function Contratos() {
   const { activeCompanyId } = useCompany();
@@ -136,7 +84,7 @@ export default function Contratos() {
 
       if (contratosError) throw contratosError;
 
-      let formatContratos: Contrato[] = (contratosData || []).map(c => {
+      const formatContratos: Contrato[] = (contratosData || []).map(c => {
         const vehiculos = c.operacion_contrato_vehiculo
           ? c.operacion_contrato_vehiculo.map((v: any) => v.vehiculo?.patente).filter(Boolean)
           : [];
@@ -154,10 +102,6 @@ export default function Contratos() {
         };
       });
 
-      if (formatContratos.length === 0) {
-        formatContratos = mockContratosOperaciones;
-      }
-
       setContratos(formatContratos);
 
       // Cargar vehículos
@@ -173,10 +117,8 @@ export default function Contratos() {
       
       const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery;
       
-      if (!vehiculosError && vehiculosData && vehiculosData.length > 0) {
+      if (!vehiculosError && vehiculosData) {
         setVehiculosDisponibles(vehiculosData);
-      } else {
-        setVehiculosDisponibles(mockVehiculosDB.map(v => ({ id: v.id, patente: v.patente, tipo: v.tipo })));
       }
 
       // Obtener lista de clientes únicos para autocompletar

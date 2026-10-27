@@ -3,22 +3,11 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Plus, Search, Filter, Shield, AlertTriangle, CheckCircle2, QrCode } from 'lucide-react';
-import { mockExtintores as rawExtintores } from '../../lib/mockSeguridad';
 
-const mockExtintores = rawExtintores.map(e => ({
-  ...e,
-  codigo: e.id,
-  proximaInspeccion: e.vencimiento,
-  estado: e.estado === 'Por Vencer' ? 'Observación' : 'Conforme'
-}));
+const mockExtintores: any[] = [];
 
 const ControlExtintoresSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredExtintores = mockExtintores.filter(e => 
-    e.codigo.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    e.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
@@ -56,19 +45,19 @@ const ControlExtintoresSSO = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Extintores</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">10</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Conformes</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">9</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Próximos a Vencer (30d)</p>
-            <p className="text-2xl font-bold text-orange-500 mt-1">1</p>
+            <p className="text-2xl font-bold text-orange-500 mt-1">0</p>
           </CardContent>
         </Card>
         <Card>
@@ -111,7 +100,7 @@ const ControlExtintoresSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredExtintores.map((extintor) => (
+                {mockExtintores.map((extintor) => (
                   <tr key={extintor.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-300">
                       <div className="flex items-center gap-2">

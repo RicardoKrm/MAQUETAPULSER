@@ -49,7 +49,6 @@ import {
   generateSampleDataset 
 } from '../../lib/horasMaquinaDB';
 import { parseHorasMaquinaExcel } from '../../lib/excelHorasMaquinaParser';
-import { mockHorasMaquinaRecords } from '../../lib/mockProduccion';
 import { 
   BarChart, 
   Bar, 
@@ -67,8 +66,8 @@ import {
 
 export default function HorasMaquinaPage() {
   const [activeTab, setActiveTab] = useState<'registro' | 'disponibilidad'>('registro');
-  const [records, setRecords] = useState<HorasMaquinaRecord[]>(mockHorasMaquinaRecords as any);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [records, setRecords] = useState<HorasMaquinaRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [uploading, setUploading] = useState<boolean>(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
 
@@ -80,8 +79,8 @@ export default function HorasMaquinaPage() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [dateFilterType, setDateFilterType] = useState<'todos' | 'dia' | 'semana' | 'mes' | 'rango'>('mes');
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
-  const [selectedMonth, setSelectedMonth] = useState<number>(9); // 1-12
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1); // 1-12
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -89,8 +88,8 @@ export default function HorasMaquinaPage() {
   const [selectedTurno, setSelectedTurno] = useState<string>('todos');
 
   // Tab 2 Filters
-  const [dispoYear, setDispoYear] = useState<number>(2026);
-  const [dispoMonth, setDispoMonth] = useState<string>('9'); // 'todos' or '1'..'12'
+  const [dispoYear, setDispoYear] = useState<number>(new Date().getFullYear());
+  const [dispoMonth, setDispoMonth] = useState<string>(String(new Date().getMonth() + 1)); // 'todos' or '1'..'12'
   const [baseHorasMes, setBaseHorasMes] = useState<number>(720); // standard 720 hrs
 
   // Tab 2 Multi-Select Vehicles Filter
@@ -129,16 +128,20 @@ export default function HorasMaquinaPage() {
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const data = await getAllHorasMaquina();
-      if (data && data.length > 0) {
-        setRecords(data);
+      // If records were generated mock data (REC-...), clear them so user starts completely clean
+      const hasOnlyMockData = data.length > 0 && data.every(r => r.id.startsWith('REC-'));
+      if (hasOnlyMockData) {
+        await clearHorasMaquinaRecords();
+        setRecords([]);
       } else {
-        setRecords(mockHorasMaquinaRecords as any);
+        setRecords(data || []);
       }
     } catch (err) {
       console.error('Error loading data:', err);
-      setRecords(mockHorasMaquinaRecords as any);
+      setRecords([]);
     } finally {
       setLoading(false);
     }

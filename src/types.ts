@@ -103,10 +103,24 @@ export interface Conductor {
 export interface Vehiculo {
   id: string;
   patente: string;
+  numero_interno?: string;
+  numeroInterno?: string;
   modelo?: string;
   marca?: string;
   ano?: number | string;
   vin?: string;
+  kilometrajeActual?: number;
+  kilometraje_actual?: number;
+  kmUltimaMantencion?: number;
+  km_ultima_mantencion?: number;
+  fechaUltimaMantencion?: string;
+  fecha_ultima_mantencion?: string;
+  tipoUltimoMant?: string;
+  tipo_ultimo_mant?: string;
+  tipoUltimaPauta?: string;
+  intervaloMantencionKm?: number;
+  intervalo_km?: number;
+  detalles?: any;
 }
 
 export interface Tarea {
@@ -186,6 +200,8 @@ export interface SolicitudRepuesto {
 export interface OrdenDeTrabajo {
   id: string;
   folio: string;
+  empresa_id?: string;
+  empresaId?: string;
   vehiculoId: string;
   vehiculo_id?: string;
   tecnicoResponsable?: string;
@@ -238,9 +254,21 @@ export interface OrdenDeTrabajo {
   costoInsumos: number;
   costoManoObraTareas: number;
   costoManoObraHH: number;
+  costoTotal?: number;
+  costo_total?: number;
   tiempoTrabajadoSegundos: number;
   historial: HistorialOT[];
   solicitudes?: SolicitudRepuesto[];
+  horasExtrasAutorizadas?: number;
+  solicitudHorasExtras?: {
+    solicitadas: number;
+    motivo: string;
+    estado: 'PENDIENTE' | 'APROBADA' | 'RECHAZADA';
+    solicitado_en?: string;
+    respondido_en?: string;
+    respondido_por?: string;
+  };
+  pausa_motivo?: string;
   firmaCertificado?: string;
 }
 

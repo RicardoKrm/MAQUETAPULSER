@@ -32,14 +32,27 @@ export function CrearTareaModal({ isOpen, onClose, onCrear }: CrearTareaModalPro
     'bg-fuchsia-500', 'bg-rose-500'
   ];
 
+  const generateUUID = () => {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!descripcion || !currentCompany?.id) return;
 
     try {
+      const newId = generateUUID();
       const { data, error } = await supabase
         .from('mantenimiento_tarea')
         .insert([{
+          id: newId,
           empresa_id: currentCompany.id,
           descripcion,
           tiempo_estandar_minutos: tiempoEstandarMinutos || 0,
@@ -75,7 +88,7 @@ export function CrearTareaModal({ isOpen, onClose, onCrear }: CrearTareaModalPro
       }
     } catch (err: any) {
        console.error("Error saving tarea:", err);
-       Swal.fire('Error', 'Hubo un error al guardar la tarea.', 'error');
+       Swal.fire('Error', err?.message || 'Hubo un error al guardar la tarea.', 'error');
     }
   };
 

@@ -3,7 +3,7 @@ import { PenTool, Send, CheckCircle2, TrendingUp, X, Filter, Calendar as Calenda
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { GlobalStats } from '../../../contexts/ProduccionContext';
 import { supabase } from '../../../lib/supabase';
-import { mockProduccionTransporte } from '../../../lib/mockProduccion';
+import { useCompany } from '../../../contexts/CompanyContext';
 
 interface Props {
   onReporteProduccion: (ext: number, mol: number, stock: number, fecha: string, hora: string) => void;
@@ -12,6 +12,7 @@ interface Props {
 }
 
 export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransporte, stats }: Props) {
+  const { currentCompany } = useCompany();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [vista, setVista] = useState<'chofer' | 'camion'>('chofer');
   const [selectedDataIndex, setSelectedDataIndex] = useState<number | null>(null);
@@ -36,12 +37,12 @@ export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransp
   const [transSuceso, setTransSuceso] = useState('Normal');
 
   // Filtros
-  const [dateRange, setDateRange] = useState<{ start: string, end: string }>({ start: '2026-07-01', end: '2026-09-12' });
+  const [dateRange, setDateRange] = useState<{ start: string, end: string }>({ start: '', end: '' });
   const [plazo, setPlazo] = useState<string>('todos');
   const [choferFiltro, setChoferFiltro] = useState<string>('todos');
 
   // Chart data
-  const [rawData, setRawData] = useState<any[]>(mockProduccionTransporte);
+  const [rawData, setRawData] = useState<any[]>([]);
   const [chartDataChofer, setChartDataChofer] = useState<any[]>([]);
   const [chartDataCamion, setChartDataCamion] = useState<any[]>([]);
   const [top5ChoferesPromedio, setTop5ChoferesPromedio] = useState<any[]>([]);
@@ -103,17 +104,12 @@ export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransp
   const fetchData = async () => {
     try {
       const { data, error } = await supabase
-        .from('produccion_registro_diario')
-        .select('*');
+        .from('produccion_registro_diario').select('*').eq('empresa_id', currentCompany?.id || '');
         
-      if (!error && data && data.length > 0) {
-        setRawData(data);
-      } else {
-        setRawData(mockProduccionTransporte);
-      }
+      if (error || !data) return;
+      setRawData(data);
     } catch (err) {
       console.error(err);
-      setRawData(mockProduccionTransporte);
     }
   };
 
@@ -284,7 +280,7 @@ export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransp
         
         // Optionally store to a different table for production if needed, but for now we just update charts.
         // Or we can save to the same table but without camion.
-        await supabase.from('produccion_registro_diario').insert({
+        await supabase.from('produccion_registro_diario').insert({ empresa_id: currentCompany?.id,
            fecha: fecha,
            turno: parseInt(hora.split(':')[0]) >= 12 ? 'Noche' : 'Día',
            camion: '-',
@@ -301,7 +297,7 @@ export default function ReporteYAnalitica({ onReporteProduccion, onReporteTransp
         const vuelta = parseInt(transVuelta) || 1;
         onReporteTransporte(transCamion || 'TR-X', transChofer || 'Operario', vuelta, ton, transTipo, transSuceso, notas, fecha, hora);
         
-        await supabase.from('produccion_registro_diario').insert({
+        await supabase.from('produccion_registro_diario').insert({ empresa_id: currentCompany?.id,
            fecha: fecha,
            turno: parseInt(hora.split(':')[0]) >= 12 ? 'Noche' : 'Día',
            camion: transCamion || 'TR-X',

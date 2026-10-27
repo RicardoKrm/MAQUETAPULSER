@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Loader2, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-
-import { mockProduccionTransporte } from '../../lib/mockProduccion';
+import { useCompany } from '../../contexts/CompanyContext';
 
 interface Trabajador {
   id: string;
@@ -23,20 +22,27 @@ interface TurnoInfo {
 }
 
 export default function ListaPorTurnos() {
+  const { currentCompany } = useCompany();
   const [turnos, setTurnos] = useState<TurnoInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rawData, setRawData] = useState<any[]>(mockProduccionTransporte);
-  const [selectedMonth, setSelectedMonth] = useState<string>('2026-09');
-  const [availableMonths, setAvailableMonths] = useState<string[]>(['2026-09', '2026-08', '2026-07']);
+  const [rawData, setRawData] = useState<any[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
 
   useEffect(() => {
+    if(!currentCompany?.id) return;
     const fetchData = async () => {
       try {
         const { data, error } = await supabase
-          .from('produccion_registro_diario')
-          .select('*');
+          .from('produccion_registro_diario').select('*').eq('empresa_id', currentCompany?.id || '');
 
-        const rows = (!error && data && data.length > 0) ? data : mockProduccionTransporte;
+        if (error) {
+          console.error("Error fetching data:", error);
+          setLoading(false);
+          return;
+        }
+        
+        const rows = data || [];
         setRawData(rows);
 
         const months = new Set<string>();
@@ -52,14 +58,13 @@ export default function ListaPorTurnos() {
         }
       } catch (err) {
         console.error("Unexpected error:", err);
-        setRawData(mockProduccionTransporte);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [currentCompany]);
 
   useEffect(() => {
     if (!rawData.length) {

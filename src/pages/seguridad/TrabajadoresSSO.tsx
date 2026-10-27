@@ -3,27 +3,11 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Plus, Search, Filter, Shield, AlertTriangle, FileText, CheckCircle2, XCircle } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
-import { mockTrabajadoresSSO } from '../../lib/mockSeguridad';
 
-const mockTrabajadores = mockTrabajadoresSSO.map(t => ({
-  id: t.id,
-  rut: t.rut,
-  nombre: t.nombre,
-  cargo: t.cargo,
-  empresa: t.empresa,
-  area: t.cargo.includes('Conductor') ? 'Operaciones Mina' : t.cargo.includes('Bodega') ? 'Logística' : 'Taller Central',
-  turno: 'Turno 7x7 (Día)',
-  estado: t.estado === 'Observación' ? 'Pendiente' : t.estado
-}));
+const mockTrabajadores: any[] = [];
 
 const TrabajadoresSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredTrabajadores = mockTrabajadores.filter(t =>
-    t.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.rut.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.cargo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
@@ -90,7 +74,7 @@ const TrabajadoresSSO = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredTrabajadores.map((trabajador) => (
+                {mockTrabajadores.map((trabajador) => (
                   <tr key={trabajador.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300 font-medium">{trabajador.rut}</td>
                     <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">{trabajador.nombre}</td>

@@ -64,27 +64,6 @@ export default function GestionNeumaticos() {
   );
 }
 
-const mockNeumaticosDB = [
-  { id: 'neu-01', codigo_interno: 'NEU-001', marca: 'Michelin', modelo: 'X Multiway 3D', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'KHLP-90', posicion: '1D (Direccional)', profundidad_actual: 12.5, costo: 420000, km_acumulados: 48500, created_at: '2026-07-02T10:00:00Z' },
-  { id: 'neu-02', codigo_interno: 'NEU-002', marca: 'Michelin', modelo: 'X Multiway 3D', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'KHLP-90', posicion: '1I (Direccional)', profundidad_actual: 12.0, costo: 420000, km_acumulados: 48500, created_at: '2026-07-02T10:00:00Z' },
-  { id: 'neu-03', codigo_interno: 'NEU-003', marca: 'Bridgestone', modelo: 'M729 Tracción', medida: '295/80 R22.5', estado: 'REGULAR', ubicacion: 'MONTADO', patente_asignada: 'KHLP-90', posicion: '2DI (Tracción)', profundidad_actual: 5.2, costo: 380000, km_acumulados: 78000, created_at: '2026-07-05T11:00:00Z' },
-  { id: 'neu-04', codigo_interno: 'NEU-004', marca: 'Bridgestone', modelo: 'M729 Tracción', medida: '295/80 R22.5', estado: 'CRITICO', ubicacion: 'MONTADO', patente_asignada: 'KHLP-90', posicion: '2DE (Tracción)', profundidad_actual: 2.8, costo: 380000, km_acumulados: 94200, created_at: '2026-07-05T11:00:00Z' },
-  { id: 'neu-05', codigo_interno: 'NEU-005', marca: 'Goodyear', modelo: 'KMAX D', medida: '295/80 R22.5', estado: 'NUEVO', ubicacion: 'BODEGA', patente_asignada: '', posicion: '', profundidad_actual: 16.0, costo: 395000, km_acumulados: 0, created_at: '2026-08-10T14:00:00Z' },
-  { id: 'neu-06', codigo_interno: 'NEU-006', marca: 'Goodyear', modelo: 'KMAX D', medida: '295/80 R22.5', estado: 'NUEVO', ubicacion: 'BODEGA', patente_asignada: '', posicion: '', profundidad_actual: 16.0, costo: 395000, km_acumulados: 0, created_at: '2026-08-10T14:00:00Z' },
-  { id: 'neu-07', codigo_interno: 'NEU-007', marca: 'Pirelli', modelo: 'FG01 On/Off', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'BRTH-44', posicion: '1D (Direccional)', profundidad_actual: 11.8, costo: 410000, km_acumulados: 35000, created_at: '2026-08-01T09:30:00Z' },
-  { id: 'neu-08', codigo_interno: 'NEU-008', marca: 'Pirelli', modelo: 'FG01 On/Off', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'BRTH-44', posicion: '1I (Direccional)', profundidad_actual: 11.5, costo: 410000, km_acumulados: 35000, created_at: '2026-08-01T09:30:00Z' },
-  { id: 'neu-09', codigo_interno: 'NEU-009', marca: 'Michelin', modelo: 'X Works HD', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'JWRS-18', posicion: '2DI (Tracción)', profundidad_actual: 9.2, costo: 435000, km_acumulados: 52000, created_at: '2026-07-20T16:00:00Z' },
-  { id: 'neu-10', codigo_interno: 'NEU-010', marca: 'Bridgestone', modelo: 'R268 Ecopia', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'BODEGA', patente_asignada: '', posicion: '', profundidad_actual: 14.5, costo: 375000, km_acumulados: 12000, created_at: '2026-08-18T10:15:00Z' },
-  { id: 'neu-11', codigo_interno: 'NEU-011', marca: 'Michelin', modelo: 'X Multiway 3D', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'PRTZ-33', posicion: '1D (Direccional)', profundidad_actual: 11.2, costo: 420000, km_acumulados: 38000, created_at: '2026-07-15T09:00:00Z' },
-  { id: 'neu-12', codigo_interno: 'NEU-012', marca: 'Michelin', modelo: 'X Multiway 3D', medida: '295/80 R22.5', estado: 'REGULAR', ubicacion: 'MONTADO', patente_asignada: 'PRTZ-33', posicion: '2DE (Tracción)', profundidad_actual: 4.8, costo: 420000, km_acumulados: 69000, created_at: '2026-07-15T09:00:00Z' },
-  { id: 'neu-13', codigo_interno: 'NEU-013', marca: 'Goodyear', modelo: 'KMAX S', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'HGZX-55', posicion: '1I (Direccional)', profundidad_actual: 13.0, costo: 405000, km_acumulados: 28000, created_at: '2026-08-01T11:00:00Z' },
-  { id: 'neu-14', codigo_interno: 'NEU-014', marca: 'Goodyear', modelo: 'KMAX D', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'CCKJ-82', posicion: '2DI (Tracción)', profundidad_actual: 8.5, costo: 395000, km_acumulados: 44000, created_at: '2026-08-05T14:30:00Z' },
-  { id: 'neu-15', codigo_interno: 'NEU-015', marca: 'Pirelli', modelo: 'FG01 On/Off', medida: '295/80 R22.5', estado: 'CRITICO', ubicacion: 'MONTADO', patente_asignada: 'LKJH-12', posicion: '1D (Direccional)', profundidad_actual: 2.9, costo: 410000, km_acumulados: 81000, created_at: '2026-07-10T10:00:00Z' },
-  { id: 'neu-16', codigo_interno: 'NEU-016', marca: 'Bridgestone', modelo: 'M729 Tracción', medida: '295/80 R22.5', estado: 'BUENO', ubicacion: 'MONTADO', patente_asignada: 'GFTR-99', posicion: '2DE (Tracción)', profundidad_actual: 10.4, costo: 380000, km_acumulados: 32000, created_at: '2026-08-15T15:00:00Z' },
-  { id: 'neu-17', codigo_interno: 'NEU-017', marca: 'Michelin', modelo: 'X Works HD', medida: '295/80 R22.5', estado: 'NUEVO', ubicacion: 'BODEGA', patente_asignada: '', posicion: '', profundidad_actual: 16.5, costo: 435000, km_acumulados: 0, created_at: '2026-09-01T08:00:00Z' },
-  { id: 'neu-18', codigo_interno: 'NEU-018', marca: 'Michelin', modelo: 'X Works HD', medida: '295/80 R22.5', estado: 'NUEVO', ubicacion: 'BODEGA', patente_asignada: '', posicion: '', profundidad_actual: 16.5, costo: 435000, km_acumulados: 0, created_at: '2026-09-01T08:00:00Z' }
-];
-
 function DashboardNeumaticos() {
   const [selectedKpi, setSelectedKpi] = useState<'cpk' | 'activos' | 'alertas' | 'ahorro' | null>(null);
   const [stats, setStats] = useState({
@@ -105,22 +84,13 @@ function DashboardNeumaticos() {
 
   useEffect(() => {
     const loadDashboardInfo = async () => {
-      let dataToUse: any[] = mockNeumaticosDB;
-      if (currentCompany) {
-        try {
-          const { data, error } = await supabase
-            .from('neumatico')
-            .select('*')
-            .eq('empresa_id', currentCompany.id);
+      if (!currentCompany) return;
+      const { data, error } = await supabase
+        .from('neumatico')
+        .select('*')
+        .eq('empresa_id', currentCompany.id);
 
-          if (!error && data && data.length > 0) {
-            dataToUse = data;
-          }
-        } catch (e) {}
-      }
-
-      {
-        const data = dataToUse;
+      if (!error && data) {
         let totalCost = 0;
         let totalKm = 0;
         let neumaticosMontados = 0;
@@ -458,24 +428,18 @@ function InventarioNeumaticos() {
 
   useEffect(() => {
     const fetchInventory = async () => {
+      if (!currentCompany) return;
       try {
         setLoading(true);
-        let sourceData: any[] = mockNeumaticosDB;
-        if (currentCompany) {
-          try {
-            const { data, error } = await supabase
-              .from('neumatico')
-              .select('*')
-              .eq('empresa_id', currentCompany.id)
-              .order('created_at', { ascending: false });
-            
-            if (!error && data && data.length > 0) {
-              sourceData = data;
-            }
-          } catch (e) {}
-        }
+        const { data, error } = await supabase
+          .from('neumatico')
+          .select('*')
+          .eq('empresa_id', currentCompany.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
 
-        const mappedData = sourceData.map(item => {
+        const mappedData = (data || []).map(item => {
           let statusColorStr = "text-slate-700 bg-slate-200";
           const e = (item.estado || '').toUpperCase();
           if (e === 'NUEVO') statusColorStr = "text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400";

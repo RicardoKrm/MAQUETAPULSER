@@ -3,9 +3,8 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Search, Filter, ClipboardList, Calendar, Target, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
-import { mockAuditoriasSSO } from '../../lib/mockSeguridad';
 
-const mockAuditorias = mockAuditoriasSSO;
+const mockAuditorias: any[] = [];
 
 const AuditoriasSSO = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,7 +40,7 @@ const AuditoriasSSO = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Auditorías Realizadas (Año)</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">4</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">0</p>
               </div>
             </div>
           </CardContent>
@@ -54,7 +53,7 @@ const AuditoriasSSO = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Promedio Cumplimiento</p>
-                <p className="text-2xl font-bold text-green-600">96.8%</p>
+                <p className="text-2xl font-bold text-green-600">0</p>
               </div>
             </div>
           </CardContent>
@@ -67,7 +66,7 @@ const AuditoriasSSO = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Hallazgos de Auditoría (Abiertos)</p>
-                <p className="text-2xl font-bold text-orange-500">1</p>
+                <p className="text-2xl font-bold text-orange-500">0</p>
               </div>
             </div>
           </CardContent>

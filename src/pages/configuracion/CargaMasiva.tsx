@@ -89,34 +89,27 @@ const parseCurrencyCLP = (val: any) => {
   const lastComma = str.lastIndexOf(',');
 
   if (lastDot > lastComma) {
-    // US Format: 1,500.00 -> dot is decimal
-    str = str.replace(/,/g, '');
-  } else if (lastComma > lastDot) {
-    // LatAm format: 1.500,00 -> comma is decimal
-    str = str.replace(/\./g, '');
-    str = str.replace(/,/g, '.');
-  } else {
-    // Only one type of separator or none
-    if (str.includes('.')) {
-      const parts = str.split('.');
-      if (parts[parts.length - 1].length === 3) {
-        str = str.replace(/\./g, '');
-      }
-    } else if (str.includes(',')) {
-      const parts = str.split(',');
-      if (parts[parts.length - 1].length === 3) {
-        str = str.replace(/,/g, '');
-      } else {
-        str = str.replace(/,/g, '.');
-      }
+    if (lastComma === -1 && str.length - lastDot - 1 === 3) {
+      str = str.replace(/\./g, '');
+    } else {
+      str = str.replace(/,/g, '');
     }
+  } else if (lastComma > lastDot) {
+    if (lastDot === -1 && str.length - lastComma - 1 === 3) {
+      str = str.replace(/,/g, '');
+    } else {
+      str = str.replace(/\./g, '');
+      str = str.replace(/,/g, '.');
+    }
+  } else {
+    str = str.replace(/[.,]/g, '');
   }
 
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : Math.round(num); // CLP does not use decimals in real life
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? 0 : Math.round(parsed);
 };
 
-const normalizeKey = (k: string) => (k || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeKey = (k: string) => String(k || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const getValByKey = (obj: any, possibleKeys: string[]) => {
   if (!obj || typeof obj !== 'object') return undefined;
@@ -184,7 +177,12 @@ const UPLOAD_MAPPING: Record<string, { table: string, matchKey: string | string[
           sueldo_base: parseCurrencyCLP(r.Sueldo_Base),
           valor_hh: parseCurrencyCLP(r['HH_$'] || r.Valor_HH),
           hh_extras: parseFloat((r.HH_Extras || '0').toString().replace(/[^0-9.-]+/g,"")),
-          prestador_de_servicio: r.Prestador_de_servicio || r.Prestador_de_s || ''
+          prestador_de_servicio: r.Prestador_de_servicio || r.Prestador_de_s || '',
+          tipoLicencia: r['TIPO LICENCIA'] || r['TIPO DE LICENCIA'] || '',
+          vencimientoLicencia: parseExcelDate(findKey(['VENCIMIENTO LICENCIA', 'VENC. LICENCIA'])),
+          vencimientoExamenes: parseExcelDate(findKey(['EXAMEN PREOCUPACIONAL', 'VENC. EXAMEN PREOC.'])),
+          estadoExamen: findKey(['ESTADO EXAMEN', 'ESTADO EXAMEN MEDICO']) || 'APTO',
+          fechaVacaciones: parseExcelDate(findKey(['INGRESO EMPRESA', 'FECHA INGRESO', 'INGRESO A LA EMPRESA']))
         }
       };
     }
@@ -192,47 +190,100 @@ const UPLOAD_MAPPING: Record<string, { table: string, matchKey: string | string[
   vehiculos: { 
     table: 'vehiculo', 
     matchKey: 'patente',
-    mapConfig: (r: any) => ({
-      numero_interno: r.numero_interno?.toString() || '',
-      patente: r.patente,
-      tipo_vehiculo: r.tipo_vehiculo || r.tipo_vehículo || r.tipo,
-      tipo: r.tipo_vehiculo || r.tipo_vehículo || r.tipo,
-      marca: r.marca,
-      modelo: r.modelo,
-      estado: r.estado || 'OPERATIVO',
-      kilometraje_actual: r.kilometraje_actual ? parseFloat(r.kilometraje_actual.toString().replace(/[^0-9.-]+/g,"")) : undefined,
-      norma_euro: r.norma_euro,
-      tipo_aceite: r.tipo_aceite,
-      chasis: r.chasis,
-      motor: r.motor,
-      razon_social: r.razon_social || r.empresa,
-      empresa_nombre: r.empresa || r.razon_social,
-      rut: r.rut,
-      capacidad_carga: r.capacidad_carga,
-      aplicacion: r.aplicacion,
-      intervalo_km: r.intervalo_km ? parseFloat(r.intervalo_km.toString().replace(/[^0-9.-]+/g,"")) : undefined,
-      km_ultima_mantencion: r.km_ultima_mantencion ? parseFloat(r.km_ultima_mantencion.toString().replace(/[^0-9.-]+/g,"")) : undefined,
-      km_ult_mantencion: r.km_ultima_mantencion ? parseFloat(r.km_ultima_mantencion.toString().replace(/[^0-9.-]+/g,"")) : undefined,
-      fecha_ultima_mantencion: parseExcelDate(r.fecha_ultima_mantencion),
-      fecha_ult_mantencion: parseExcelDate(r.fecha_ultima_mantencion),
-      tipo_ultimo_mant: r.tipo_ultimo_mant || r.tipo_ult_pauta,
-      tipo_ult_pauta: r.tipo_ultimo_mant || r.tipo_ult_pauta,
-      detalles: {}
-    })
+    mapConfig: (r: any) => {
+      let marca = getValByKey(r, ['marca', 'Marca', 'MARCA']);
+      let modelo = getValByKey(r, ['modelo', 'Modelo', 'MODELO']);
+      const marcaModeloCombined = getValByKey(r, [
+        'marca_modelo', 'marca / modelo', 'marca/modelo', 'marcamodelo', 
+        'marca y modelo', 'MARCA / MODELO', 'MARCA/MODELO', 'MARCA Y MODELO'
+      ]);
+
+      if (marcaModeloCombined) {
+        const str = String(marcaModeloCombined).trim();
+        if (str.includes('/')) {
+          const parts = str.split('/');
+          if (!marca) marca = parts[0]?.trim();
+          if (!modelo) modelo = parts.slice(1).join('/').trim();
+        } else if (str.includes('-')) {
+          const parts = str.split('-');
+          if (!marca) marca = parts[0]?.trim();
+          if (!modelo) modelo = parts.slice(1).join('-').trim();
+        } else {
+          if (!modelo) modelo = str;
+        }
+      }
+
+      // Desacoplar modelo si contiene '/' o la marca al inicio
+      if (modelo && String(modelo).includes('/')) {
+        const parts = String(modelo).split('/');
+        if (!marca) marca = parts[0]?.trim();
+        modelo = parts.slice(1).join('/').trim();
+      } else if (modelo && marca && String(modelo).toLowerCase().startsWith(String(marca).toLowerCase())) {
+        modelo = String(modelo).substring(String(marca).length).replace(/^[-/:\s]+/, '').trim();
+      }
+
+      const finalMarca = (marca || r.marca || '').toString().trim();
+      const finalModelo = (modelo || r.modelo || '').toString().trim();
+
+      return {
+        numero_interno: (getValByKey(r, ['numero_interno', 'numero interno', 'interno', 'NumeroInterno', 'n_interno']) || r.numero_interno)?.toString() || '',
+        patente: getValByKey(r, ['patente', 'Patente', 'PATENTE', 'ppu', 'PPU']) || r.patente,
+        tipo_vehiculo: getValByKey(r, ['tipo_vehiculo', 'tipo_vehículo', 'tipo', 'TipoVehiculo', 'Tipo']) || r.tipo_vehiculo || r.tipo_vehículo || r.tipo,
+        tipo: getValByKey(r, ['tipo_vehiculo', 'tipo_vehículo', 'tipo', 'TipoVehiculo', 'Tipo']) || r.tipo_vehiculo || r.tipo_vehículo || r.tipo,
+        marca: finalMarca,
+        modelo: finalModelo,
+        estado: getValByKey(r, ['estado', 'Estado']) || r.estado || 'OPERATIVO',
+        kilometraje_actual: r.kilometraje_actual ? parseFloat(r.kilometraje_actual.toString().replace(/[^0-9.-]+/g,"")) : undefined,
+        norma_euro: getValByKey(r, ['norma_euro', 'norma', 'NormaEuro', 'norma euro']) || r.norma_euro,
+        tipo_aceite: getValByKey(r, ['tipo_aceite', 'aceite', 'TipoAceite', 'tipo aceite']) || r.tipo_aceite,
+        chasis: getValByKey(r, ['chasis', 'vin', 'Chasis', 'VIN', 'n_chasis']) || r.chasis,
+        motor: getValByKey(r, ['motor', 'Motor', 'n_motor']) || r.motor,
+        razon_social: getValByKey(r, ['razon_social', 'empresa', 'RazonSocial', 'Empresa']) || r.razon_social || r.empresa,
+        empresa_nombre: getValByKey(r, ['empresa', 'razon_social', 'Empresa']) || r.empresa || r.razon_social,
+        rut: getValByKey(r, ['rut', 'RUT', 'Rut']) || r.rut,
+        capacidad_carga: getValByKey(r, ['capacidad_carga', 'CapacidadCarga', 'capacidad']) || r.capacidad_carga,
+        aplicacion: getValByKey(r, ['aplicacion', 'Aplicacion', 'operacion']) || r.aplicacion,
+        intervalo_km: r.intervalo_km ? parseFloat(r.intervalo_km.toString().replace(/[^0-9.-]+/g,"")) : undefined,
+        km_ultima_mantencion: r.km_ultima_mantencion ? parseFloat(r.km_ultima_mantencion.toString().replace(/[^0-9.-]+/g,"")) : undefined,
+        km_ult_mantencion: r.km_ultima_mantencion ? parseFloat(r.km_ultima_mantencion.toString().replace(/[^0-9.-]+/g,"")) : undefined,
+        fecha_ultima_mantencion: parseExcelDate(r.fecha_ultima_mantencion),
+        fecha_ult_mantencion: parseExcelDate(r.fecha_ultima_mantencion),
+        tipo_ultimo_mant: r.tipo_ultimo_mant || r.tipo_ult_pauta,
+        tipo_ult_pauta: r.tipo_ultimo_mant || r.tipo_ult_pauta,
+        detalles: {
+          marca: finalMarca,
+          modelo: finalModelo,
+          vencimientoRev: parseExcelDate(getValByKey(r, ['VENC. REVISION TECNICA', 'REVISION TECNICA', 'REV. TECNICA'])),
+          vencimientoPermisoCirculacion: parseExcelDate(getValByKey(r, ['VENC. PERMISO CIRCULACION', 'PERMISO CIRCULACION', 'VENC. PERMISO CIRC.'])),
+          vencimientoSeguro: parseExcelDate(getValByKey(r, ['VENC. SEGURO OBLIGATORIO', 'SEGURO OBLIGATORIO', 'VENC. SEGURO']))
+        }
+      };
+    }
   },
   inventario: { 
     table: 'logistica_repuestos', 
     matchKey: 'sku',
-    mapConfig: (r: any) => ({
-      sku: getValByKey(r, ['numero_parte', 'Codigo', 'SKU', 'numero', 'parte', 'nro_parte', 'codigo']),
-      nombre: getValByKey(r, ['nombre', 'Repuesto', 'descripcion']),
-      calidad: getValByKey(r, ['calidad']),
-      stock: getValByKey(r, ['stock_actual', 'StockInicial', 'Stock', 'stockinicial', 'stock']) || 0,
-      min_stock: getValByKey(r, ['stock_minim', 'stock_minimo', 'StockMinimo', 'minimo']) || 0,
-      ubicacion: getValByKey(r, ['ubicacion', 'Ubicacion']),
-      proveedor: getValByKey(r, ['proveedor_habitua', 'proveedor_habitual', 'ProveedorPrincipal', 'Proveedor']),
-      precio: parseCurrencyCLP(getValByKey(r, ['precio_unitario', 'PrecioUnitario', 'Precio', 'precio', 'valor_unitario', 'costo_unitario', 'valor', 'costo']))
-    }) 
+    mapConfig: (r: any) => {
+      const stock = Number(getValByKey(r, ['stock_actual', 'StockInicial', 'Stock', 'stockinicial', 'stock'])) || 0;
+      const minStockRaw = getValByKey(r, ['stock_minim', 'stock_minimo', 'StockMinimo', 'minimo', 'min', 'stock_min']);
+      const min_stock = minStockRaw !== undefined && minStockRaw !== '' ? (Number(minStockRaw) || 0) : 0;
+      const rawUbic = getValByKey(r, ['ubicacion', 'Ubicacion', 'posicion', 'estante']);
+      const rawPos = getValByKey(r, ['posicion', 'Posicion']);
+      const ubicacion = (rawUbic || rawPos || '').toString().trim() || 'Sin Ubicación';
+      const precio = parseCurrencyCLP(getValByKey(r, ['precio_unitario', 'PrecioUnitario', 'Precio Un.', 'precio_un', 'Precio', 'precio', 'valor_unitario', 'costo_unitario', 'valor', 'costo']));
+      return {
+        sku: String(getValByKey(r, ['numero_parte', 'Codigo', 'SKU', 'numero', 'parte', 'nro_parte', 'codigo']) || '').trim(),
+        nombre: String(getValByKey(r, ['nombre', 'Repuesto', 'descripcion']) || '').trim(),
+        calidad: String(getValByKey(r, ['calidad']) || 'ORIGINAL').trim().toUpperCase(),
+        stock,
+        min_stock,
+        ubicacion,
+        proveedor: String(getValByKey(r, ['proveedor_habitua', 'proveedor_habitual', 'ProveedorPrincipal', 'Proveedor']) || 'GENERAL').trim(),
+        precio,
+        valor_total: stock * precio,
+        estado: 'ACTIVO'
+      };
+    }
   },
   bodegas: { 
     table: 'logistica_bodegas', 
@@ -242,15 +293,19 @@ const UPLOAD_MAPPING: Record<string, { table: string, matchKey: string | string[
   pautas: { 
     table: 'mantenimiento_pauta', 
     matchKey: 'nombre',
-    mapConfig: (r: any) => ({ 
-      nombre: r.nombre_pauta || r.NombrePauta || r.Nombre, 
-      kilometraje_inicial: r.cronograma_en_km || r.KilometrajeInicial || 0,
-      intervalo_1: r.intervalo_km || r.Intervalo1 || 0,
-      intervalo_2: r['intervalo_km 2'] || r.intervalo_km_2 || r.Intervalo2 || null,
-      tipo_aplicacion: r.tipo_aplicacion || r.TipoAplicacion || r['descrip_1°_pauta'] || r.descrip_1_pauta,
-      tipo_aceite: r.tipo_aceite || r.TipoAceite,
-      _modelo_nombre: r.nombre_modelo_vehiculo || r.ModeloVehiculo
-    }) 
+    mapConfig: (r: any) => {
+      const rawKm = r.kilometraje_pauta !== undefined ? r.kilometraje_pauta : (r.cronograma_en_km !== undefined ? r.cronograma_en_km : (r.KilometrajeInicial !== undefined ? r.KilometrajeInicial : (r.kilometraje_inicial !== undefined ? r.kilometraje_inicial : 0)));
+      const parsedKm = typeof rawKm === 'number' ? rawKm : parseFloat(String(rawKm).replace(/[^0-9.-]+/g, '')) || 0;
+      return { 
+        nombre: r.nombre_pauta || r.NombrePauta || r.Nombre, 
+        kilometraje_inicial: parsedKm,
+        intervalo_1: r.intervalo_km || r.Intervalo1 || 0,
+        intervalo_2: r['intervalo_km 2'] || r.intervalo_km_2 || r.Intervalo2 || null,
+        tipo_aplicacion: r.tipo_aplicacion || r['tipo_aplicación'] || r.TipoAplicacion || r['descrip_1°_pauta'] || r.descrip_1_pauta,
+        tipo_aceite: r.tipo_aceite || r.TipoAceite,
+        _modelo_nombre: r.nombre_modelo_vehiculo || r.ModeloVehiculo
+      };
+    }
   },
   tareas: { 
     table: 'mantenimiento_tarea', 
@@ -328,7 +383,7 @@ const UPLOAD_MAPPING: Record<string, { table: string, matchKey: string | string[
   suministros: { 
     table: 'suministro', 
     matchKey: 'codigo_suministro',
-    mapConfig: (r: any) => ({ codigo_suministro: getValByKey(r, ['CodigoSuministro', 'codigo']), nombres: getValByKey(r, ['Nombres', 'nombre']), tipo: getValByKey(r, ['Tipo', 'tipo']), stock: getValByKey(r, ['Stock', 'stock_actual', 'stock']), precio_unitario: parseCurrencyCLP(getValByKey(r, ['PrecioUnitario', 'precio_unitario', 'precio', 'valor'])) }) 
+    mapConfig: (r: any) => ({ codigo_suministro: getValByKey(r, ['CodigoSuministro', 'codigo']), nombres: getValByKey(r, ['Nombres', 'nombre']), tipo: getValByKey(r, ['Tipo', 'tipo']), stock: getValByKey(r, ['Stock', 'stock_actual', 'stock']), min_stock: getValByKey(r, ['StockMinimo', 'stock_minimo', 'minimo']) || 0, precio_unitario: parseCurrencyCLP(getValByKey(r, ['PrecioUnitario', 'precio_unitario', 'precio', 'valor'])) }) 
   },
   ots: { 
     table: 'orden_de_trabajo', 
@@ -388,7 +443,7 @@ const MODULES: UploadModule[] = [
     description: 'Carga masiva de conductores, técnicos y administrativos desde archivo Excel.',
     icon: Users,
     template: [
-      { TRABAJADOR: 'Acuña Villagrán Claudio Andrés', RUT: '11.572.766-4', 'F. CONTRATO': '6/17/2026', CARGO: 'CONDUCTOR', 'F. CONTRATO_1': 'PLAZO FIJO', VENCIMIENTO: '10/31/2026', 'TURNO ASIGNADO': '7X7', DIRECCION: 'Av. Siempre Viva 742', TELEFONO: '+56912345678', EMPRESA: 'INVERSIONES IMPERIA SpA' }
+      { TRABAJADOR: 'Acuña Villagrán Claudio Andrés', RUT: '11.572.766-4', 'F. CONTRATO': '6/17/2026', CARGO: 'CONDUCTOR', 'F. CONTRATO_1': 'PLAZO FIJO', VENCIMIENTO: '10/31/2026', 'TURNO ASIGNADO': '7X7', DIRECCION: 'Av. Siempre Viva 742', TELEFONO: '+56912345678', EMPRESA: 'INVERSIONES IMPERIA SpA', 'TIPO LICENCIA': 'A4', 'VENCIMIENTO LICENCIA': '12/31/2026', 'EXAMEN PREOCUPACIONAL': '12/31/2026', 'ESTADO EXAMEN': 'APTO', 'INGRESO EMPRESA': '06/17/2026' }
     ]
   },
   {
@@ -399,22 +454,25 @@ const MODULES: UploadModule[] = [
     template: [
       {
         numero_interno: 1,
-        patente: 'SXDR14',
+        patente: 'DEMO-01',
         tipo_vehiculo: 'MINIBUS',
-        empresa: 'Transportes alvimar',
+        empresa: 'Transportes Gaval Demo',
         marca: 'M. BENZ',
         modelo: 'SPRINTER VS30.2',
         norma_euro: 'EURO V',
         tipo_aceite: 'SINTÉTICO',
-        chasis: '8AC907645RE232278',
-        motor: '651958W0153260',
-        razon_social: '76.506.145-8', 
+        chasis: 'WDB9066351S123456',
+        motor: '651958W9876543',
+        razon_social: '77.123.456-7', 
         kilometraje_actual: 153304,
         aplicacion: 'CARRETERA',
         intervalo_km: 10000,
         km_ultima_mantencion: 136100,
         fecha_ultima_mantencion: '15-07-25',
-        tipo_ultimo_mant: 'SM1'
+        tipo_ultimo_mant: 'SM1',
+          'VENC. REVISION TECNICA': '12/31/2026',
+          'VENC. PERMISO CIRCULACION': '03/31/2027',
+          'VENC. SEGURO OBLIGATORIO': '03/31/2027'
       }
     ]
   },
@@ -424,7 +482,7 @@ const MODULES: UploadModule[] = [
     description: 'Carga de catálogo de repuestos, precios, stock inicial y proveedores.',
     icon: Package,
     template: [
-      { nombre: 'ABRAZADERA 1"', numero_parte: 'N3540319:MBB', calidad: 'ORIGINAL', stock_actual: 100, stock_minimo: 2, ubicacion: 'Estante A-4', proveedor_habitual: 'KAUFMANN', precio_unitario: '$2.000' }
+      { nombre: 'ABRAZADERA 1 PULGADA', numero_parte: 'N3540319:MBB', calidad: 'ORIGINAL', stock_actual: 100, stock_minimo: 2, ubicacion: 'Estante A-4', proveedor_habitual: 'KAUFMANN', precio_unitario: 2000 }
     ]
   },
   {
@@ -505,7 +563,7 @@ const MODULES: UploadModule[] = [
     description: 'Carga de EPP, consumibles y materiales varios que requiere la operación.',
     icon: Box,
     template: [
-      { CodigoSuministro: 'EPP-001', Nombres: 'Casco de Seguridad', Tipo: 'EPP', Stock: 100, PrecioUnitario: 5000 }
+      { CodigoSuministro: 'EPP-001', Nombres: 'Casco de Seguridad', Tipo: 'EPP', Stock: 100, StockMinimo: 10, PrecioUnitario: 5000 }
     ]
   },
   {
@@ -700,15 +758,17 @@ export default function CargaMasiva() {
 
       if (config.matchKey && config.matchKey !== 'NONE') {
         const matchKeyStr = config.matchKey as string;
+        const isPautas = moduleId === 'pautas';
         
         let existingRecords: any[] = [];
         let fromIdx = 0;
         let keepFetching = true;
 
         while (keepFetching) {
+          const selectFields = isPautas ? 'id, nombre, modelo_vehiculo_id' : `id, "${matchKeyStr}"`;
           const { data, error: fetchErr } = await supabase
             .from(config.table)
-            .select(`id, "${matchKeyStr}"`)
+            .select(selectFields)
             .eq('empresa_id', currentCompany?.id)
             .range(fromIdx, fromIdx + 999);
             
@@ -732,14 +792,21 @@ export default function CargaMasiva() {
               .replace(/[^A-Z0-9]/g, ''); // Keep only alphanumeric
         };
 
+        const buildRecordKey = (r: any) => {
+          if (isPautas) {
+            const modId = r.modelo_vehiculo_id || '';
+            const nom = normalizeMatchKey(r.nombre);
+            return `${modId}_${nom}`;
+          }
+          return normalizeMatchKey(r[matchKeyStr]);
+        };
+
         const existingMap = new Map();
         if (existingRecords) {
            existingRecords.forEach(r => {
-              if (r[matchKeyStr] !== undefined && r[matchKeyStr] !== null) {
-                 const key = normalizeMatchKey(r[matchKeyStr]);
-                 if (key) {
-                   existingMap.set(key, r.id);
-                 }
+              const key = buildRecordKey(r);
+              if (key) {
+                existingMap.set(key, r.id);
               }
            });
         }
@@ -748,8 +815,7 @@ export default function CargaMasiva() {
         const toUpdate = [];
 
         for (const row of cleanData) {
-           const matchVal = row[matchKeyStr];
-           const key = normalizeMatchKey(matchVal);
+           const key = buildRecordKey(row);
            
            if (key && existingMap.has(key)) {
               toUpdate.push({ ...row, id: existingMap.get(key) });
@@ -772,11 +838,14 @@ export default function CargaMasiva() {
            const chunk = toUpdate.slice(i, i + chunkSize);
            const { error: updError } = await supabase.from(config.table).upsert(chunk, { onConflict: 'id' });
            if (updError) {
-              console.warn("Bulk upsert failed, falling back to sequential update", updError);
-              for (const uRow of chunk) {
-                 const { id, ...updateData } = uRow;
-                 const { error } = await supabase.from(config.table).update(updateData).eq('id', id);
-                 if (error) console.error(`Error updating record ${id}:`, error);
+              console.warn("Bulk upsert failed, executing concurrent batch updates", updError);
+              const batchParallel = 25;
+              for (let j = 0; j < chunk.length; j += batchParallel) {
+                 const sub = chunk.slice(j, j + batchParallel);
+                 await Promise.all(sub.map(async (uRow: any) => {
+                    const { id, ...updateData } = uRow;
+                    return supabase.from(config.table).update(updateData).eq('id', id);
+                 }));
               }
            }
            updateCount += chunk.length;
@@ -796,9 +865,99 @@ export default function CargaMasiva() {
         }
       }
 
+      let otsInicialesCreadas = 0;
+
+      if (moduleId === 'vehiculos' && currentCompany?.id) {
+        try {
+          // 1. Obtener vehículos de la empresa con km_ultima_mantencion > 0
+          const { data: vehsConMant } = await supabase
+            .from('vehiculo')
+            .select('id, numero_interno, patente, km_ultima_mantencion, fecha_ultima_mantencion, tipo_ultimo_mant')
+            .eq('empresa_id', currentCompany.id)
+            .gt('km_ultima_mantencion', 0);
+
+          if (vehsConMant && vehsConMant.length > 0) {
+            // 2. Obtener OTs existentes para no duplicar si el vehículo ya tiene OT
+            const { data: otsExistentes } = await supabase
+              .from('orden_de_trabajo')
+              .select('id, vehiculo_id, folio')
+              .eq('empresa_id', currentCompany.id);
+
+            const vehiculosConOT = new Set((otsExistentes || []).map(o => String(o.vehiculo_id)));
+            const vehiculosSinOT = vehsConMant.filter(v => !vehiculosConOT.has(String(v.id)));
+
+            if (vehiculosSinOT.length > 0) {
+              // 3. Determinar el mayor número correlativo de folio existente
+              let maxFolioNum = 0;
+              (otsExistentes || []).forEach(o => {
+                const match = String(o.folio || '').match(/OT-(\d+)/i);
+                if (match) {
+                  const num = parseInt(match[1], 10);
+                  if (!isNaN(num)) maxFolioNum = Math.max(maxFolioNum, num);
+                }
+              });
+
+              // 4. Construir las OTs de línea base
+              const otsNuevas = vehiculosSinOT.map(v => {
+                maxFolioNum++;
+                const folio = `OT-${String(maxFolioNum).padStart(4, '0')}`;
+                
+                let fechaOT = new Date().toISOString();
+                if (v.fecha_ultima_mantencion) {
+                  const d = new Date(v.fecha_ultima_mantencion);
+                  if (!isNaN(d.getTime())) {
+                    fechaOT = d.toISOString();
+                  }
+                }
+
+                const kmMant = Number(v.km_ultima_mantencion) || 0;
+                const pautaNombre = v.tipo_ultimo_mant || v.tipo_ult_pauta || 'SM1';
+
+                return {
+                  empresa_id: currentCompany.id,
+                  vehiculo_id: v.id,
+                  folio: folio,
+                  tipo: 'PREVENTIVA',
+                  estado: 'FINALIZADA',
+                  prioridad: 'NORMAL',
+                  kilometraje_apertura: kmMant,
+                  kilometraje_cierre: kmMant,
+                  fecha_creacion: fechaOT,
+                  fecha_programada: fechaOT,
+                  inicio_proceso: fechaOT,
+                  termino_proceso: fechaOT,
+                  pauta: pautaNombre,
+                  observacion_inicial: `Línea Base: Mantención ${pautaNombre} registrada a los ${kmMant.toLocaleString('es-CL')} km.`,
+                  observaciones: `Orden de trabajo generada automáticamente desde Carga Masiva de Flota para trazabilidad y línea base histórica.`,
+                  costo_insumos: 0,
+                  costo_mano_obra_tareas: 0,
+                  costo_mano_obra_hh: 0,
+                  tiempo_trabajado_segundos: 0
+                };
+              });
+
+              // 5. Insertar OTs iniciales en lotes
+              const chunkSizeOT = 500;
+              for (let i = 0; i < otsNuevas.length; i += chunkSizeOT) {
+                const chunkOT = otsNuevas.slice(i, i + chunkSizeOT);
+                const { error: otErr } = await supabase.from('orden_de_trabajo').insert(chunkOT);
+                if (otErr) {
+                  console.warn("Aviso al crear OTs iniciales de línea base:", otErr);
+                } else {
+                  otsInicialesCreadas += chunkOT.length;
+                }
+              }
+            }
+          }
+        } catch (otGenErr) {
+          console.error("Error en proceso de generación de OTs iniciales:", otGenErr);
+        }
+      }
+
       const msgParts = [];
       if (insertCount > 0) msgParts.push(`${insertCount} nuevos creados`);
       if (updateCount > 0) msgParts.push(`${updateCount} existentes actualizados`);
+      if (otsInicialesCreadas > 0) msgParts.push(`${otsInicialesCreadas} OTs iniciales de línea base generadas`);
       if (msgParts.length === 0) msgParts.push("No se modificaron datos");
 
       setResults(prev => ({ 

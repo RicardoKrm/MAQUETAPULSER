@@ -12,13 +12,14 @@ export function useSyncOdometers(activeCompanyId: string | null, setVehiculos?: 
       isSyncing.current = true;
       try {
          const [vehiculosRes, configRes] = await Promise.all([
-            supabase.from('vehiculo').select('id, patente, kilometraje_actual, detalles').eq('empresa_id', activeCompanyId),
+            supabase.from('vehiculo').select('id, patente, kilometraje_actual, km_ultima_mantencion, detalles, en_operacion_activa, estado').eq('empresa_id', activeCompanyId),
             supabase.from('empresa').select('detalles').eq('id', activeCompanyId).single()
          ]);
          
          if (!vehiculosRes.data || vehiculosRes.error) return;
          
          let configured = vehiculosRes.data.filter(v => {
+            if (v.en_operacion_activa === false || v.estado === 'DE_BAJA' || v.detalles?.activo === false) return false;
             if (v.detalles?.gps_proveedor) return true;
             return false;
          });
@@ -60,10 +61,36 @@ export function useSyncOdometers(activeCompanyId: string | null, setVehiculos?: 
             if (prov === 'traccar') {
                 const registro = gps2Data.find((x: any) => x.plateNumber === v.patente);
                 if (registro && registro.odometer) {
-                    const km = parseInt(registro.odometer);
-                    if (km > newKm) {
-                        newKm = km;
-                        hasUpdate = true;
+                    let km = parseFloat(registro.odometer);
+
+                    // 1. Detección automática de escala (hectómetros, metros o décimas de km)
+                    // Ej: Si el GPS reporta 881051 para un vehículo cuya mantención o rango está en ~84.484 km,
+                    // el valor real es 88105.1 km (escala x10 común en reportes GPS).
+                    const kmBaseRef = Number(v.km_ultima_mantencion || v.detalles?.km_ultima_mantencion || v.kilometraje_actual || 0);
+                    if (kmBaseRef > 1000 && km > (kmBaseRef * 4) && Math.abs((km / 10) - kmBaseRef) < kmBaseRef) {
+                        km = Math.round((km / 10) * 100) / 100;
+                    }
+
+                    // 2. Respetar calibración manual si el usuario ingresó un valor en la pizarra:
+                    const fechaManualStr = v.detalles?.fecha_odometro_manual;
+                    const fechaManual = fechaManualStr ? new Date(fechaManualStr) : null;
+                    const fechaGps = registro.timestamp ? new Date(registro.timestamp) : null;
+                    const esManualReciente = fechaManual && (!fechaGps || fechaGps <= fechaManual);
+
+                    if (esManualReciente && v.detalles?.km_manual) {
+                        const kmManualVal = Number(v.detalles.km_manual);
+                        const delta = km - kmManualVal;
+                        // Solo avanzar si el GPS reporta un recorrido incremental coherente posterior a la calibración
+                        if (delta > 0 && delta < 2000) {
+                            newKm = kmManualVal + delta;
+                            hasUpdate = true;
+                        }
+                    } else if (km > newKm) {
+                        // Evitar saltos anómalos imposibles (ej: más de 50.000 km de golpe)
+                        if (newKm <= 0 || (km - newKm) < 50000) {
+                            newKm = km;
+                            hasUpdate = true;
+                        }
                     }
                 }
             } else if (prov === 'dominio') {
@@ -102,9 +129,41 @@ export function useSyncOdometers(activeCompanyId: string | null, setVehiculos?: 
                   // silent
                }
             } else if (prov === 'gpsglobal' && apiKeys.gpsglobal) {
-                 // For gpsglobal, they don't seem to have odometer implemented in backend logic.
-                 // It just returns lat/lng.
-                 // Keep it as is
+               try {
+                   const res = await fetch('/api/gps/sync-gps1', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ patente: v.patente, token: apiKeys.gpsglobal })
+                   });
+                   if (res.ok) {
+                       const data = await res.json();
+                        if (Array.isArray(data) && data.length > 0) {
+                            // Filtrar puntos con odómetro válido > 0 para evitar congelamientos por paquetes en 0 (apagado/reinicio)
+                            const validosVehiculo = data.filter((p: any) => Number(p?.odometro_vehiculo) > 0);
+                            const validosGps = data.filter((p: any) => Number(p?.odometro_gps) > 0);
+                            const fuenteValida = validosVehiculo.length > 0 ? validosVehiculo : validosGps;
+
+                            if (fuenteValida.length > 0) {
+                                const ultimo = fuenteValida.reduce((max: any, item: any) => (!max || (item.fecha && item.fecha > max.fecha)) ? item : max, null);
+                                const odometro = ultimo?.odometro_vehiculo || ultimo?.odometro_gps;
+                                if (odometro) {
+                                    let km = parseFloat(String(odometro));
+                                    const kmBaseRef = Number(v.km_ultima_mantencion || v.detalles?.km_ultima_mantencion || v.kilometraje_actual || 0);
+                                    if (kmBaseRef > 1000 && km > (kmBaseRef * 4) && Math.abs((km / 10) - kmBaseRef) < kmBaseRef) {
+                                        km = Math.round((km / 10) * 100) / 100;
+                                    }
+                                    if (km > newKm && (newKm <= 0 || (km - newKm) < 50000)) {
+                                        newKm = km;
+                                        updatedTimestamp = ultimo.fecha;
+                                        hasUpdate = true;
+                                    }
+                                }
+                            }
+                        }
+                   }
+               } catch(e) {
+                   console.error("BG sync: Error fetching GPS Global para " + v.patente, e);
+               }
             }
 
             if (hasUpdate && !v.id.toString().startsWith('mock')) {
@@ -121,6 +180,7 @@ export function useSyncOdometers(activeCompanyId: string | null, setVehiculos?: 
                     } else {
                         detalles.fecha_actualizacion_km = new Date().toISOString();
                     }
+                    updates.fecha_actualizacion_km = detalles.fecha_actualizacion_km;
                 }
                 
                 const { error } = await supabase.from('vehiculo').update(updates).eq('id', v.id);
@@ -130,6 +190,16 @@ export function useSyncOdometers(activeCompanyId: string | null, setVehiculos?: 
                         setVehiculos(prev => prev.map(veh => veh.id === v.id ? { ...veh, kilometraje_actual: newKm, detalles: { ...veh.detalles, ...detalles } } : veh));
                     } else if (setVehiculos) {
                         setVehiculos(prev => prev.map(veh => veh.id === v.id ? { ...veh, detalles: { ...veh.detalles, ...detalles } } : veh));
+                    }
+
+                    if (typeof window !== 'undefined' && updates.kilometraje_actual) {
+                        window.dispatchEvent(new CustomEvent('vehiculo-actualizado', {
+                            detail: {
+                                vehiculoId: v.id,
+                                kmActual: newKm,
+                                fechaActualizacionKm: detalles.fecha_actualizacion_km
+                            }
+                        }));
                     }
                 }
             }

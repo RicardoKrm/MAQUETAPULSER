@@ -24,7 +24,6 @@ import { Modal } from '../../components/ui/Modal';
 import Swal from 'sweetalert2';
 import { useCompany } from '../../contexts/CompanyContext';
 import { supabase } from '../../lib/supabase';
-import { mockFacturasCompras } from '../../lib/mockData';
 
 interface Invoice {
   id: string;
@@ -39,7 +38,7 @@ interface Invoice {
 
 export default function IngresoFacturas() {
   const { currentCompany } = useCompany();
-  const [invoices, setInvoices] = useState<Invoice[]>(mockFacturasCompras);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [comprasOrdenes, setComprasOrdenes] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'lista' | 'nuevo'>('lista');
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,7 +66,7 @@ export default function IngresoFacturas() {
         .eq('empresa_id', currentCompany.id)
         .order('created_at', { ascending: false });
       
-      if (data && data.length > 0) {
+      if (data) {
           const parsed = data.map(f => ({
              id: f.folio_factura,
              uuid: f.id,
@@ -79,8 +78,6 @@ export default function IngresoFacturas() {
              oc: f.orden_folio || ''
           }));
           setInvoices(parsed);
-      } else {
-          setInvoices(mockFacturasCompras);
       }
   };
 

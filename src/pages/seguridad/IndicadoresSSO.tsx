@@ -4,17 +4,9 @@ import { Button } from '../../components/ui/Button';
 import { Download, TrendingUp, TrendingDown, Activity, ShieldAlert, HeartPulse } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 
-const dataAccidentabilidad: any[] = [
-  { mes: 'Julio', tasa: 0.0 },
-  { mes: 'Agosto', tasa: 0.0 },
-  { mes: 'Septiembre', tasa: 0.0 }
-];
+const dataAccidentabilidad: any[] = [];
 
-const dataPreventivos: any[] = [
-  { mes: 'Julio', observaciones: 42, inspecciones: 18, charlas: 42 },
-  { mes: 'Agosto', observaciones: 48, inspecciones: 20, charlas: 45 },
-  { mes: 'Septiembre', observaciones: 24, inspecciones: 10, charlas: 22 }
-];
+const dataPreventivos: any[] = [];
 
 const IndicadoresSSO = () => {
   return (
@@ -40,10 +32,10 @@ const IndicadoresSSO = () => {
               <Activity className="w-5 h-5 text-blue-500" />
             </div>
             <div className="flex items-end gap-2">
-              <h3 className="text-3xl font-bold text-emerald-600">0.0</h3>
+              <h3 className="text-3xl font-bold text-gray-900 dark:text-white">0</h3>
               <div className="flex items-center text-sm text-green-500 font-medium mb-1">
                 <TrendingDown className="w-4 h-4 mr-1" />
-                Meta Cero Daño
+                -0.3 vs mes ant.
               </div>
             </div>
           </CardContent>
@@ -56,10 +48,10 @@ const IndicadoresSSO = () => {
               <HeartPulse className="w-5 h-5 text-red-500" />
             </div>
             <div className="flex items-end gap-2">
-              <h3 className="text-3xl font-bold text-emerald-600">0.0</h3>
-              <div className="flex items-center text-sm text-green-500 font-medium mb-1">
-                <TrendingDown className="w-4 h-4 mr-1" />
-                0 días perdidos
+              <h3 className="text-3xl font-bold text-gray-900 dark:text-white">0</h3>
+              <div className="flex items-center text-sm text-red-500 font-medium mb-1">
+                <TrendingUp className="w-4 h-4 mr-1" />
+                +14 vs mes ant.
               </div>
             </div>
           </CardContent>
@@ -72,10 +64,10 @@ const IndicadoresSSO = () => {
               <ShieldAlert className="w-5 h-5 text-green-500" />
             </div>
             <div className="flex items-end gap-2">
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white">148</h3>
+              <h3 className="text-3xl font-bold text-gray-900 dark:text-white">0</h3>
               <div className="flex items-center text-sm text-green-500 font-medium mb-1">
                 <TrendingUp className="w-4 h-4 mr-1" />
-                +14 vs mes ant.
+                +12 vs mes ant.
               </div>
             </div>
             <p className="text-xs text-gray-400 mt-2">Suma de inspecciones, obs. y charlas</p>
@@ -89,7 +81,7 @@ const IndicadoresSSO = () => {
               <TrendingUp className="w-5 h-5 text-indigo-500" />
             </div>
             <div className="flex items-end gap-2">
-              <h3 className="text-3xl font-bold text-green-600">94.2%</h3>
+              <h3 className="text-3xl font-bold text-gray-900 dark:text-white">0</h3>
               <div className="flex items-center text-sm text-green-500 font-medium mb-1">
                 <TrendingUp className="w-4 h-4 mr-1" />
                 +4%
