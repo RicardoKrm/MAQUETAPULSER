@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   Truck, Wrench, Package, BarChart3, FileText, Navigation, 
   Shield, Clock, Users, Play, MessageCircle, Mail, Phone, 
-  CheckCircle, ArrowRight, X, Cpu, Fuel, Activity, Sparkles, Building2, ExternalLink
+  CheckCircle, ArrowRight, X, Cpu, Fuel, Activity, Sparkles, Building2, ExternalLink, Zap
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
