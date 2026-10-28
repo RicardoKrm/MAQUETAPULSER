@@ -31,6 +31,7 @@ import {
   Calendar,
   Zap,
   Clock,
+  HeartPulse,
   HelpCircle,
   MessageSquare,
   Link,
@@ -141,11 +142,12 @@ export const navigation = [
       { title: 'Contrato Proveedores', icon: Briefcase, href: '/compras/contratos' },
     ],
   },
-/* {
+  {
     title: 'Finanzas',
     icon: DollarSign,
     href: '/finanzas',
     submodules: [
+      { title: 'Dashboard Financiero', icon: BarChart3, href: '/finanzas' },
       { title: 'Estado de Pago', icon: ClipboardList, href: '/finanzas/estado-pago' },
       { title: 'Registros Financieros', icon: FileText, href: '/finanzas/registros-financieros' },
       { title: 'Gestión Operativa', icon: Activity, href: '/finanzas/gestion-operativa' },
@@ -155,15 +157,19 @@ export const navigation = [
       { title: 'Trazabilidad', icon: Activity, href: '/finanzas/trazabilidad' },
       { title: 'Evaluación Empresa', icon: Briefcase, href: '/finanzas/evaluacion-empresa' },
     ],
-  }, */
+  },
   {
     title: 'Recursos Humanos',
     icon: Users,
     href: '/recursos-humanos',
     submodules: [
+      { title: 'Panel RRHH', icon: Users, href: '/recursos-humanos' },
+      { title: 'Control Horario & 40h', icon: Clock, href: '/recursos-humanos/control-horario' },
+      { title: 'Licencias & Vacaciones', icon: HeartPulse, href: '/recursos-humanos/licencias-vacaciones' },
+      { title: 'Sueldos & Préstamos', icon: DollarSign, href: '/recursos-humanos/remuneraciones-prestamos' },
       { title: 'Personal', icon: Users, href: '/recursos-humanos/personal' },
-      { title: 'Asignación de Cargos', icon: UserCircle, href: '/recursos-humanos/permisos' },
       { title: 'Turnos', icon: CalendarClock, href: '/recursos-humanos/turnos' },
+      { title: 'Asignación de Cargos', icon: UserCircle, href: '/recursos-humanos/permisos' },
     ],
   },
 /* {

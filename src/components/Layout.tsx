@@ -689,34 +689,11 @@ export default function Layout() {
               />
             </div>
 
-            {/* Tenant Context Selector para Super Admin */}
-            {useCompany().isSuperAdmin && companies.length > 0 && (
-              <div className="hidden sm:flex items-center ml-2">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mr-2 flex flex-col items-end leading-none">
-                  <span>Super Admin</span>
-                  <span>Mode</span>
-                </div>
-                <div className="relative group">
-                  <select
-                    value={activeCompanyId}
-                    onChange={(e) => setActiveCompanyId(e.target.value)}
-                    className="appearance-none bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 py-1.5 pl-3 pr-8 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px] truncate cursor-pointer transition-colors"
-                    title="Cambiar empresa activa (Workspace)"
-                  >
-                    {companies.map((c) => (
-                      <option
-                        key={c.id}
-                        value={c.id}
-                        className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 font-medium"
-                      >
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Building className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 pointer-events-none" />
-                </div>
-              </div>
-            )}
+            {/* Contexto Empresa Activa Demo - Blindado para proteger confidencialidad comercial */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-sm">
+              <Building className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>Gaval Demo TMS</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2">

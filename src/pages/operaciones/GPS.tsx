@@ -133,69 +133,393 @@ function MapController({
 const geocercasMock = [
   {
     id: 1,
-    name: "Puerto Madero",
-    type: "Puerto",
-    allowedMinutes: 120,
-    lat: -20.6,
-    lng: -69.3,
-    radius: 800,
+    name: "Base Central Gaval (Pozo Almonte)",
+    type: "Base Operacional",
+    allowedMinutes: 240,
+    lat: -20.2597,
+    lng: -69.7850,
+    radius: 1200,
   },
   {
     id: 2,
-    name: "Planta Centro",
-    type: "Planta",
-    allowedMinutes: 60,
-    lat: -20.55,
-    lng: -69.35,
-    radius: 600,
+    name: "Terminal Portuario Patillos",
+    type: "Puerto Concentrado",
+    allowedMinutes: 180,
+    lat: -20.7500,
+    lng: -70.2000,
+    radius: 1500,
   },
   {
     id: 3,
-    name: "Pesaje Norte",
-    type: "Pesaje",
-    allowedMinutes: 20,
-    lat: -20.58,
-    lng: -69.32,
-    radius: 300,
+    name: "Garita Control Ujina (Collahuasi)",
+    type: "Faena Minera Cordillera",
+    allowedMinutes: 120,
+    lat: -20.9650,
+    lng: -68.6450,
+    radius: 2500,
   },
   {
     id: 4,
-    name: "Zona Espera B",
-    type: "Espera",
-    allowedMinutes: 180,
-    lat: -20.57,
-    lng: -69.34,
-    radius: 1000,
+    name: "Plataforma Faena Quebrada Blanca 2",
+    type: "Faena Alta Montaña",
+    allowedMinutes: 150,
+    lat: -20.9850,
+    lng: -68.8420,
+    radius: 2000,
+  },
+  {
+    id: 5,
+    name: "Control Pesaje Pintados (Ruta 5)",
+    type: "Pesaje & Inspección",
+    allowedMinutes: 25,
+    lat: -20.5500,
+    lng: -69.6500,
+    radius: 600,
+  },
+  {
+    id: 6,
+    name: "Terminal Portuario Iquique (ITI)",
+    type: "Puerto Embarque",
+    allowedMinutes: 200,
+    lat: -20.2110,
+    lng: -70.1490,
+    radius: 1100,
   },
 ];
 
 const mockRoutePlanificada: [number, number][] = [
-  [-20.6, -69.3],
-  [-20.58, -69.32],
-  [-20.55, -69.35],
+  [-20.2110, -70.1490], // Iquique
+  [-20.2680, -70.0950], // Alto Hospicio
+  [-20.2597, -69.7850], // Pozo Almonte
+  [-20.4450, -69.7120], // Ruta 5 Sur
+  [-20.5500, -69.6500], // Pintados
+  [-20.8920, -68.7180], // Acceso Cordillera
+  [-20.9650, -68.6450], // Collahuasi Ujina
 ];
 
 const mockRouteReal: [number, number][] = [
-  [-20.6, -69.3],
-  [-20.585, -69.31], // Deviation
-  [-20.58, -69.32],
-  [-20.55, -69.35],
+  [-20.2110, -70.1490],
+  [-20.2680, -70.0950],
+  [-20.2597, -69.7850],
+  [-20.3120, -69.7540],
+  [-20.4450, -69.7120],
+  [-20.5210, -69.6640],
+  [-20.5500, -69.6500],
+  [-20.8920, -68.7180],
+  [-20.9650, -68.6450],
+];
+
+const defaultMiningFleet = [
+  {
+    id: "gaval-gps-01",
+    patente: "LJ-PX-42",
+    modelo: "Volvo FH 540 6x4",
+    kmTracker: 342150,
+    lat: -20.3120,
+    lng: -69.7540,
+    velocidad: 78,
+    limite: 90,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Rodrigo Morales V.",
+    ruta: "Ruta 5 Norte Km 1820 -> Collahuasi",
+    gps_proveedor: "traccar",
+    salud: 96,
+    etaDestino: "16:45",
+    retrasoMin: 0,
+    cicloEstado: "En Ruta a Descarga",
+    tiempoCiclo: "2h 15m",
+    combustible: 82
+  },
+  {
+    id: "gaval-gps-02",
+    patente: "PR-ST-88",
+    modelo: "Scania R500 V8 Streamline",
+    kmTracker: 289410,
+    lat: -20.2850,
+    lng: -69.6920,
+    velocidad: 64,
+    limite: 80,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Héctor Valenzuela G.",
+    ruta: "Corredor Pozo Almonte -> Faena Pica",
+    gps_proveedor: "gpsglobal",
+    salud: 92,
+    etaDestino: "15:30",
+    retrasoMin: 0,
+    cicloEstado: "En Ruta a Descarga",
+    tiempoCiclo: "1h 40m",
+    combustible: 68
+  },
+  {
+    id: "gaval-gps-03",
+    patente: "KJ-RW-19",
+    modelo: "Mercedes-Benz Actros 2645",
+    kmTracker: 178600,
+    lat: -20.9650,
+    lng: -68.6450,
+    velocidad: 0,
+    limite: 40,
+    estado: "detenido",
+    condicion: "detenido",
+    conductor: "Carlos Colque M.",
+    ruta: "Garita Control Faena Ujina",
+    gps_proveedor: "dominio",
+    salud: 88,
+    etaDestino: "En Faena",
+    retrasoMin: 0,
+    cicloEstado: "En Espera Carguío",
+    tiempoCiclo: "3h 10m",
+    combustible: 91
+  },
+  {
+    id: "gaval-gps-04",
+    patente: "TF-VL-94",
+    modelo: "Volvo FMX 460 Batea",
+    kmTracker: 412330,
+    lat: -20.7520,
+    lng: -70.1980,
+    velocidad: 22,
+    limite: 40,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Juan Mamani F.",
+    ruta: "Acceso Terminal Puerto Patillos",
+    gps_proveedor: "traccar",
+    salud: 85,
+    etaDestino: "14:10",
+    retrasoMin: 5,
+    cicloEstado: "Maniobra Pesaje",
+    tiempoCiclo: "45m",
+    combustible: 54
+  },
+  {
+    id: "gaval-gps-05",
+    patente: "GH-ZK-33",
+    modelo: "Scania G440 6x2",
+    kmTracker: 310890,
+    lat: -20.2680,
+    lng: -70.0950,
+    velocidad: 46,
+    limite: 60,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Mauricio Tapia S.",
+    ruta: "Ruta A-16 Bajada Alto Hospicio",
+    gps_proveedor: "gpsglobal",
+    salud: 94,
+    etaDestino: "14:50",
+    retrasoMin: 0,
+    cicloEstado: "En Ruta a Descarga",
+    tiempoCiclo: "1h 15m",
+    combustible: 73
+  },
+  {
+    id: "gaval-gps-06",
+    patente: "DL-RP-12",
+    modelo: "Freightliner Cascadia DD15",
+    kmTracker: 521400,
+    lat: -20.2597,
+    lng: -69.7850,
+    velocidad: 0,
+    limite: 30,
+    estado: "detenido",
+    condicion: "ralenti",
+    conductor: "Patricio Araya B.",
+    ruta: "Base Central Pozo Almonte",
+    gps_proveedor: "dominio",
+    salud: 90,
+    etaDestino: "En Base",
+    retrasoMin: 0,
+    cicloEstado: "Espera Despacho",
+    tiempoCiclo: "50m",
+    combustible: 88
+  },
+  {
+    id: "gaval-gps-07",
+    patente: "BW-KC-77",
+    modelo: "Volvo FH 500 I-Shift",
+    kmTracker: 195220,
+    lat: -20.9850,
+    lng: -68.8420,
+    velocidad: 34,
+    limite: 50,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Nelson Carvajal R.",
+    ruta: "Corredor Faena Quebrada Blanca 2",
+    gps_proveedor: "traccar",
+    salud: 98,
+    etaDestino: "17:15",
+    retrasoMin: 0,
+    cicloEstado: "Circulación Faena",
+    tiempoCiclo: "2h 40m",
+    combustible: 61
+  },
+  {
+    id: "gaval-gps-08",
+    patente: "HR-TY-50",
+    modelo: "Mercedes Actros 3344",
+    kmTracker: 264100,
+    lat: -19.9980,
+    lng: -69.7720,
+    velocidad: 82,
+    limite: 90,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Sergio Fuentes C.",
+    ruta: "Ruta 5 Norte Cruce Huara",
+    gps_proveedor: "gpsglobal",
+    salud: 91,
+    etaDestino: "18:00",
+    retrasoMin: 0,
+    cicloEstado: "En Ruta a Descarga",
+    tiempoCiclo: "1h 55m",
+    combustible: 79
+  },
+  {
+    id: "gaval-gps-09",
+    patente: "FP-MN-61",
+    modelo: "Kenworth T800 Cummins ISX",
+    kmTracker: 602800,
+    lat: -20.2110,
+    lng: -70.1490,
+    velocidad: 0,
+    limite: 20,
+    estado: "detenido",
+    condicion: "detenido",
+    conductor: "Gonzalo Olivares T.",
+    ruta: "Terminal Muelle Puerto Iquique",
+    gps_proveedor: "dominio",
+    salud: 82,
+    etaDestino: "En Puerto",
+    retrasoMin: 18,
+    cicloEstado: "Descarga Granel Concentrado",
+    tiempoCiclo: "3h 45m",
+    combustible: 45
+  },
+  {
+    id: "gaval-gps-10",
+    patente: "ST-BC-28",
+    modelo: "Volvo FH 540 Globetrotter",
+    kmTracker: 147300,
+    lat: -20.5210,
+    lng: -69.6640,
+    velocidad: 58,
+    limite: 80,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Jorge Pizarro A.",
+    ruta: "Ruta A-685 Sector Pintados",
+    gps_proveedor: "traccar",
+    salud: 97,
+    etaDestino: "15:10",
+    retrasoMin: 0,
+    cicloEstado: "Retorno Vacío",
+    tiempoCiclo: "1h 05m",
+    combustible: 85
+  },
+  {
+    id: "gaval-gps-11",
+    patente: "VC-XZ-95",
+    modelo: "Scania R450 Retarder",
+    kmTracker: 388920,
+    lat: -20.4450,
+    lng: -69.7120,
+    velocidad: 104,
+    limite: 90,
+    estado: "movimiento",
+    condicion: "exceso_velocidad",
+    conductor: "Christian Godoy P.",
+    ruta: "Ruta 5 Norte Km 1845",
+    gps_proveedor: "gpsglobal",
+    salud: 89,
+    etaDestino: "16:00",
+    retrasoMin: 0,
+    cicloEstado: "En Ruta",
+    tiempoCiclo: "2h 00m",
+    combustible: 70
+  },
+  {
+    id: "gaval-gps-12",
+    patente: "MN-KL-40",
+    modelo: "Mercedes-Benz Arocs 3348",
+    kmTracker: 215600,
+    lat: -20.2620,
+    lng: -69.7410,
+    velocidad: 42,
+    limite: 60,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Claudio Barraza L.",
+    ruta: "Cruce Mamiña / Pozo Almonte",
+    gps_proveedor: "traccar",
+    salud: 95,
+    etaDestino: "14:40",
+    retrasoMin: 0,
+    cicloEstado: "Retorno Vacío",
+    tiempoCiclo: "55m",
+    combustible: 58
+  },
+  {
+    id: "gaval-gps-13",
+    patente: "JX-PQ-73",
+    modelo: "Volvo VM 330 6x4 Aljibe",
+    kmTracker: 184200,
+    lat: -20.8920,
+    lng: -68.7180,
+    velocidad: 36,
+    limite: 50,
+    estado: "movimiento",
+    condicion: "en_ruta",
+    conductor: "Andrés Castro E.",
+    ruta: "Camino de Acceso Cordillera Ujina",
+    gps_proveedor: "dominio",
+    salud: 93,
+    etaDestino: "16:20",
+    retrasoMin: 0,
+    cicloEstado: "Riego Caminos Faena",
+    tiempoCiclo: "3h 00m",
+    combustible: 65
+  },
+  {
+    id: "gaval-gps-14",
+    patente: "ZP-TR-15",
+    modelo: "Scania P360 Taller Móvil",
+    kmTracker: 122450,
+    lat: -20.2580,
+    lng: -69.7820,
+    velocidad: 0,
+    limite: 30,
+    estado: "detenido",
+    condicion: "detenido",
+    conductor: "Alexis Vilches H.",
+    ruta: "Base Taller Pozo Almonte",
+    gps_proveedor: "traccar",
+    salud: 99,
+    etaDestino: "En Taller",
+    retrasoMin: 0,
+    cicloEstado: "Asistencia en Terreno",
+    tiempoCiclo: "1h 10m",
+    combustible: 94
+  }
 ];
 
 export default function GPS() {
   const { activeCompanyId, currentCompany } = useCompany();
 
-  // Dynamic Base Coordinates per Tenant (Arica for Solon Chavez, Tarapaca for Araksaya/others)
+  // Dynamic Base Coordinates per Tenant (Arica for Solon Chavez, Tarapaca / Pozo Almonte para Gaval)
   const isArica = Boolean(
     currentCompany?.name?.toLowerCase().includes('solon') || 
     currentCompany?.name?.toLowerCase().includes('chavez') || 
     currentCompany?.name?.toLowerCase().includes('arica')
   );
-  const baseLat = isArica ? -18.4783 : -20.2167;
-  const baseLng = isArica ? -70.3126 : -70.1422;
+  const baseLat = isArica ? -18.4783 : -20.3500;
+  const baseLng = isArica ? -70.3126 : -69.7500;
 
   const [mapLayer, setMapLayer] = useState<'streets' | 'satellite'>('streets');
-  const [vehiculosGPS, setVehiculosGPS] = useState<any[]>([]);
+  const [vehiculosGPS, setVehiculosGPS] = useState<any[]>(defaultMiningFleet);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isGlobalMonitorOpen, setIsGlobalMonitorOpen] = useState(false);
 
@@ -203,7 +527,7 @@ export default function GPS() {
   const [centerEvent, setCenterEvent] = useState({
     lat: baseLat,
     lng: baseLng,
-    zoom: isArica ? 12 : 11,
+    zoom: 10,
     force: false,
     updateTick: 0,
   });
@@ -493,7 +817,11 @@ export default function GPS() {
         });
 
         const liveData = await Promise.all(liveDataPromises);
-        setVehiculosGPS(liveData);
+        if (liveData && liveData.length > 0) {
+          setVehiculosGPS(liveData);
+        } else {
+          setVehiculosGPS(defaultMiningFleet);
+        }
 
         // Emit non-forced update tick for following mechanic
         setCenterEvent((prev) => ({
@@ -513,24 +841,55 @@ export default function GPS() {
             setCenterEvent({
               lat: first.lat,
               lng: first.lng,
-              zoom: 11,
+              zoom: 10,
               force: true,
               updateTick: Date.now(),
             });
           }
         }
+      } else {
+        setVehiculosGPS(defaultMiningFleet);
       }
     } catch (e) {
       console.error("fetchGpsVehicles error:", e);
+      setVehiculosGPS(defaultMiningFleet);
     }
   };
+
+  // Simulación viva y continua en tiempo real: los vehículos en movimiento se desplazan sutilmente por las rutas mineras
+  useEffect(() => {
+    const motionInterval = setInterval(() => {
+      setVehiculosGPS((prev) => {
+        if (!prev || prev.length === 0) return defaultMiningFleet;
+        return prev.map((v) => {
+          if (v.estado === "movimiento") {
+            const deltaLat = (Math.random() - 0.49) * 0.0007;
+            const deltaLng = (Math.random() - 0.49) * 0.0007;
+            const newVel = Math.min(
+              v.limite + 12,
+              Math.max(25, v.velocidad + Math.floor(Math.random() * 5 - 2))
+            );
+            return {
+              ...v,
+              lat: v.lat + deltaLat,
+              lng: v.lng + deltaLng,
+              velocidad: newVel,
+              condicion: newVel > v.limite ? "exceso_velocidad" : "en_ruta",
+            };
+          }
+          return v;
+        });
+      });
+    }, 3500);
+    return () => clearInterval(motionInterval);
+  }, []);
 
   useEffect(() => {
     if (!activeCompanyId) return;
     setCenterEvent({
       lat: baseLat,
       lng: baseLng,
-      zoom: isArica ? 12 : 11,
+      zoom: isArica ? 12 : 10,
       force: true,
       updateTick: Date.now()
     });

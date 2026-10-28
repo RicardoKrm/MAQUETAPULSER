@@ -66,6 +66,10 @@ import IngresoFacturas from './pages/compras/IngresoFacturas';
 import Cotizaciones from './pages/compras/Cotizaciones';
 import ContratosProveedores from './pages/compras/ContratosProveedores';
 import PrecioCombustible from './pages/configuracion/PrecioCombustible';
+import DashboardRRHH from './pages/recursos-humanos/DashboardRRHH';
+import ControlHorario from './pages/recursos-humanos/ControlHorario';
+import LicenciasVacaciones from './pages/recursos-humanos/LicenciasVacaciones';
+import RemuneracionesPrestamos from './pages/recursos-humanos/RemuneracionesPrestamos';
 import Personal from './pages/recursos-humanos/Personal';
 import AsignacionPermisos from './pages/recursos-humanos/AsignacionPermisos';
 import Turnos from './pages/recursos-humanos/Turnos';
@@ -77,6 +81,7 @@ import GestionRutas from './pages/configuracion/GestionRutas';
 import Integraciones from './pages/soporte/Integraciones';
 import CentroAyuda from './pages/soporte/CentroAyuda';
 import ManualUso from './pages/soporte/ManualUso';
+import DashboardFinanzas from './pages/finanzas/DashboardFinanzas';
 import EstadoPago from './pages/finanzas/EstadoPago';
 import HistorialFacturacion from './pages/finanzas/HistorialFacturacion';
 import Trazabilidad from './pages/finanzas/Trazabilidad';
@@ -178,6 +183,10 @@ const router = createBrowserRouter([
       { path: "flota/neumaticos", element: <GestionNeumaticos /> },
       { path: "flota/combustible", element: <GestionCombustible /> },
       { path: "configuracion/pautas", element: <GestionPautas /> },
+      { path: "recursos-humanos", element: <DashboardRRHH /> },
+      { path: "recursos-humanos/control-horario", element: <ControlHorario /> },
+      { path: "recursos-humanos/licencias-vacaciones", element: <LicenciasVacaciones /> },
+      { path: "recursos-humanos/remuneraciones-prestamos", element: <RemuneracionesPrestamos /> },
       { path: "recursos-humanos/personal", element: <Personal /> },
       { path: "recursos-humanos/permisos", element: <AsignacionPermisos /> },
       { path: "recursos-humanos/turnos", element: <Turnos /> },
@@ -196,6 +205,7 @@ const router = createBrowserRouter([
       { path: "compras/proveedores", element: <GestionProveedores /> },
       { path: "compras/cotizaciones", element: <Cotizaciones /> },
       { path: "compras/contratos", element: <ContratosProveedores /> },
+      { path: "finanzas", element: <DashboardFinanzas /> },
       { path: "finanzas/estado-pago", element: <EstadoPago /> },
       { path: "finanzas/registros-financieros", element: <RegistrosFinancieros /> },
       { path: "finanzas/gestion-operativa", element: <GestionOperativa /> },

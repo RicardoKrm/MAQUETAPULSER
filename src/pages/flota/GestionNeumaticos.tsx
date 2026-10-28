@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Plus, Search, Activity, CircleDashed, BarChart3, Truck, Trash, ChevronDown, AlertCircle, ChevronUp, DollarSign, X, Info, TrendingUp, AlertTriangle, ChevronRight, Box, Printer } from 'lucide-react';
+import { Badge } from '../../components/ui/Badge';
+import { Plus, Search, Activity, CircleDashed, BarChart3, Truck, Trash, ChevronDown, AlertCircle, ChevronUp, DollarSign, X, Info, TrendingUp, AlertTriangle, ChevronRight, Box, Printer, Wrench, FileText, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Modal } from '../../components/ui/Modal';
 import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
+import { MOCK_NEUMATICOS, MOCK_OTS_NEUMATICOS, BENCHMARK_MARCAS, OrdenTrabajoNeumatico } from '../../lib/mockNeumaticosData';
 
 export default function GestionNeumaticos() {
   const queryParams = new URLSearchParams(window.location.search);
-  const initialTab = (queryParams.get('tab') as 'dashboard' | 'inventario' | 'inspeccion') || 'dashboard';
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventario' | 'inspeccion'>(initialTab);
+  const initialTab = (queryParams.get('tab') as 'dashboard' | 'inventario' | 'historial_ots' | 'inspeccion') || 'dashboard';
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventario' | 'historial_ots' | 'inspeccion'>(initialTab);
   const { currentCompany } = useCompany();
 
   return (
@@ -23,14 +25,14 @@ export default function GestionNeumaticos() {
             Gestión de Neumáticos y Rentabilidad
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            Sistema de trazabilidad, control de desgaste y cálculo de CPK ($/km)
+            Sistema de trazabilidad, control de desgaste, OTs y cálculo de CPK ($/km)
           </p>
         </div>
-        <div className="flex bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner border border-slate-200/50 dark:border-slate-800/50">
+        <div className="flex bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner border border-slate-200/50 dark:border-slate-800/50 flex-wrap gap-1">
           <button 
             onClick={() => setActiveTab('dashboard')}
             className={cn(
-               "flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all",
+               "flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all",
                activeTab === 'dashboard' ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/50 dark:border-slate-700/50" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
             )}
           >
@@ -39,16 +41,25 @@ export default function GestionNeumaticos() {
           <button 
             onClick={() => setActiveTab('inventario')}
             className={cn(
-               "flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all",
+               "flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all",
                activeTab === 'inventario' ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/50 dark:border-slate-700/50" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
             )}
           >
             <CircleDashed className="w-4 h-4" /> Neumáticos
           </button>
           <button 
+            onClick={() => setActiveTab('historial_ots')}
+            className={cn(
+               "flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all",
+               activeTab === 'historial_ots' ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-700/50" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
+            )}
+          >
+            <Wrench className="w-4 h-4" /> OTs Neumáticos
+          </button>
+          <button 
             onClick={() => setActiveTab('inspeccion')}
             className={cn(
-               "flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all",
+               "flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all",
                activeTab === 'inspeccion' ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/50 dark:border-emerald-900/30 ring-1 ring-emerald-500/20" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
             )}
           >
@@ -59,6 +70,7 @@ export default function GestionNeumaticos() {
 
       {activeTab === 'dashboard' && <DashboardNeumaticos />}
       {activeTab === 'inventario' && <InventarioNeumaticos />}
+      {activeTab === 'historial_ots' && <HistorialOTsNeumaticos />}
       {activeTab === 'inspeccion' && <FormularioInspeccion />}
     </div>
   );
@@ -84,77 +96,91 @@ function DashboardNeumaticos() {
 
   useEffect(() => {
     const loadDashboardInfo = async () => {
-      if (!currentCompany) return;
-      const { data, error } = await supabase
-        .from('neumatico')
-        .select('*')
-        .eq('empresa_id', currentCompany.id);
-
-      if (!error && data) {
-        let totalCost = 0;
-        let totalKm = 0;
-        let neumaticosMontados = 0;
-        let neumaticosBodega = 0;
-        let alertasCriticasList: any[] = [];
-        
-        const marcaStats: Record<string, { totalCosto: number; totalKm: number; count: number, maxKm: number }> = {};
-
-        data.forEach(d => {
-          if (d.ubicacion !== 'DESECHO') {
-            if (d.ubicacion === 'MONTADO') neumaticosMontados++;
-            if (d.ubicacion === 'BODEGA') neumaticosBodega++;
-            totalCost += Number(d.costo || 0);
-            totalKm += Number(d.km_acumulados || 0);
+      let tiresData: any[] = [];
+      try {
+        if (currentCompany) {
+          const { data, error } = await supabase
+            .from('neumatico')
+            .select('*')
+            .eq('empresa_id', currentCompany.id);
+          if (!error && data && data.length > 0) {
+            tiresData = data;
           }
-
-          if (d.profundidad_actual && d.profundidad_actual <= 3) {
-            alertasCriticasList.push({
-              pos: `${d.patente_asignada || 'N/A'} - ${d.posicion || 'N/A'}`,
-              desc: `Surco crítico (${d.profundidad_actual}mm)`
-            });
-          }
-          
-          const marca = d.marca || 'GENERICO';
-          if (!marcaStats[marca]) {
-            marcaStats[marca] = { totalCosto: 0, totalKm: 0, count: 0, maxKm: 0 };
-          }
-          marcaStats[marca].totalCosto += Number(d.costo || 0);
-          marcaStats[marca].totalKm += Number(d.km_acumulados || 0);
-          marcaStats[marca].count++;
-          if (Number(d.km_acumulados || 0) > marcaStats[marca].maxKm) {
-             marcaStats[marca].maxKm = Number(d.km_acumulados || 0);
-          }
-        });
-
-        const activeTires = neumaticosMontados + neumaticosBodega;
-        const cpkAverage = totalKm > 0 ? (totalCost / totalKm) : 0;
-        
-        const chartData = Object.keys(marcaStats).map(marca => {
-           const sc = marcaStats[marca];
-           const cpk = sc.totalKm > 0 ? (sc.totalCosto / sc.totalKm) : 0;
-           return {
-             name: marca,
-             cpk: Number(cpk.toFixed(2)),
-             maxKm: sc.maxKm,
-             count: sc.count
-           }
-        }).filter(d => d.count > 0).sort((a,b) => b.count - a.count).slice(0, 5);
-
-        setStats({
-          totalCosto: totalCost,
-          totalKm: totalKm,
-          cpkPromedio: cpkAverage,
-          neumaticosActivos: activeTires,
-          neumaticosMontados,
-          neumaticosBodega,
-          alertasCriticas: alertasCriticasList.length,
-          alertasCriticasList,
-          ahorroEstimado: totalCost * 0.12, // 12% total
-          ahorroRenuevo: totalCost * 0.08,
-          ahorroCombustible: totalCost * 0.04,
-          chartData
-        });
+        }
+      } catch (e) {
+        console.warn('Fallback a mock neumaticos:', e);
       }
+
+      // Si la BD no tiene neumáticos para Gaval demo, usar el dataset completo de 52 unidades
+      if (tiresData.length === 0) {
+        tiresData = MOCK_NEUMATICOS;
+      }
+
+      let totalCost = 0;
+      let totalKm = 0;
+      let neumaticosMontados = 0;
+      let neumaticosBodega = 0;
+      let alertasCriticasList: any[] = [];
+      
+      const marcaStats: Record<string, { totalCosto: number; totalKm: number; count: number, maxKm: number }> = {};
+
+      tiresData.forEach(d => {
+        if (d.ubicacion !== 'DESECHO') {
+          if (d.ubicacion === 'MONTADO') neumaticosMontados++;
+          if (d.ubicacion === 'BODEGA') neumaticosBodega++;
+          totalCost += Number(d.costo || d.costo_adquisicion || 0);
+          totalKm += Number(d.km_acumulados || d.km || 0);
+        }
+
+        const prof = Number(d.profundidad_actual || d.profActual || 0);
+        if (prof > 0 && prof <= 3) {
+          alertasCriticasList.push({
+            pos: `${d.patente_asignada || d.vehiculo || 'N/A'} - ${d.posicion || 'Eje'}`,
+            desc: `Surco crítico (${prof.toFixed(1)}mm) - ${d.marca} ${d.modelo || ''}`
+          });
+        }
+        
+        const marca = d.marca || 'GENERICO';
+        if (!marcaStats[marca]) {
+          marcaStats[marca] = { totalCosto: 0, totalKm: 0, count: 0, maxKm: 0 };
+        }
+        marcaStats[marca].totalCosto += Number(d.costo || d.costo_adquisicion || 0);
+        marcaStats[marca].totalKm += Number(d.km_acumulados || d.km || 0);
+        marcaStats[marca].count++;
+        const itemKm = Number(d.rendimiento_estimado_km || d.km_acumulados || d.km || 0);
+        if (itemKm > marcaStats[marca].maxKm) {
+           marcaStats[marca].maxKm = itemKm;
+        }
+      });
+
+      const activeTires = neumaticosMontados + neumaticosBodega;
+      const cpkAverage = totalKm > 0 ? (totalCost / totalKm) : 4.45;
+      
+      const chartData = Object.keys(marcaStats).map(marca => {
+         const sc = marcaStats[marca];
+         const cpk = sc.totalKm > 0 ? (sc.totalCosto / sc.totalKm) : 0;
+         return {
+           name: marca,
+           cpk: Number(cpk.toFixed(2)),
+           maxKm: sc.maxKm > 0 ? sc.maxKm : 140000,
+           count: sc.count
+         }
+      }).filter(d => d.count > 0).sort((a,b) => b.count - a.count).slice(0, 6);
+
+      setStats({
+        totalCosto: totalCost,
+        totalKm: totalKm,
+        cpkPromedio: cpkAverage,
+        neumaticosActivos: activeTires,
+        neumaticosMontados,
+        neumaticosBodega,
+        alertasCriticas: alertasCriticasList.length,
+        alertasCriticasList,
+        ahorroEstimado: totalCost * 0.18, // 18% ahorro potencial
+        ahorroRenuevo: totalCost * 0.12,
+        ahorroCombustible: totalCost * 0.06,
+        chartData
+      });
     };
     loadDashboardInfo();
   }, [currentCompany]);
@@ -289,6 +315,97 @@ function DashboardNeumaticos() {
           </Card>
         </div>
       </div>
+
+      {/* Matriz de Toma de Decisión $/Calidad por Marca */}
+      <Card className="shadow-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+        <CardHeader className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              Matriz de Toma de Decisión $/Calidad (Benchmark Comparativo)
+            </CardTitle>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Análisis comparativo de CPK real ($/km), potencial de recauchaje (Bandag / Recamic) y durabilidad en rutas y faenas de Chile.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Criterio:</span>
+            <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 font-bold text-xs border border-blue-200">
+              Costo Total del Ciclo de Vida (TCO)
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-100/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 text-xs uppercase font-bold tracking-wider border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-3 px-4">Marca & Segmento</th>
+                  <th className="py-3 px-4">CPK ($/km)</th>
+                  <th className="py-3 px-4">Vida Útil (km)</th>
+                  <th className="py-3 px-4">Recauchajes</th>
+                  <th className="py-3 px-4">Resistencia Cortes</th>
+                  <th className="py-3 px-4">Ahorro TCO</th>
+                  <th className="py-3 px-4">Recomendación Estratégica</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                {BENCHMARK_MARCAS.map((b, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-900 dark:text-white text-sm">{b.marca}</div>
+                      <div className="text-[11px] text-slate-500 font-medium">{b.calidad_tier}</div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="font-black text-slate-900 dark:text-white text-sm">
+                        ${b.cpk_promedio.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">/km</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500">Compra: ${b.costo_compra_promedio.toLocaleString('es-CL')}</div>
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                      {b.durabilidad_promedio_km.toLocaleString('es-CL')} km
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={cn(
+                        "inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[11px]",
+                        b.recauchajes_posibles >= 2 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                        b.recauchajes_posibles >= 1 ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" :
+                        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                      )}>
+                        {b.recauchajes_posibles} ciclos
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-16 bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                            className={cn("h-full rounded-full", b.resistencia_cortes_score >= 9 ? "bg-emerald-500" : b.resistencia_cortes_score >= 8 ? "bg-blue-500" : "bg-amber-500")}
+                            style={{ width: `${b.resistencia_cortes_score * 10}%` }}
+                          />
+                        </div>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{b.resistencia_cortes_score}/10</span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={cn(
+                        "font-black text-xs",
+                        b.ahorro_vida_util_pct > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                      )}>
+                        {b.ahorro_vida_util_pct > 0 ? `+${b.ahorro_vida_util_pct}% ahorro` : `${b.ahorro_vida_util_pct}% extra`}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 max-w-xs">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                        {b.recomendacion}
+                      </p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Sidebar KPI Details Layer */}
       {selectedKpi && (
@@ -428,18 +545,26 @@ function InventarioNeumaticos() {
 
   useEffect(() => {
     const fetchInventory = async () => {
-      if (!currentCompany) return;
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('neumatico')
-          .select('*')
-          .eq('empresa_id', currentCompany.id)
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
+        let items: any[] = [];
+        if (currentCompany) {
+          const { data, error } = await supabase
+            .from('neumatico')
+            .select('*')
+            .eq('empresa_id', currentCompany.id)
+            .order('created_at', { ascending: false });
+          
+          if (!error && data && data.length > 0) {
+            items = data;
+          }
+        }
 
-        const mappedData = (data || []).map(item => {
+        if (items.length === 0) {
+          items = MOCK_NEUMATICOS;
+        }
+
+        const mappedData = items.map(item => {
           let statusColorStr = "text-slate-700 bg-slate-200";
           const e = (item.estado || '').toUpperCase();
           if (e === 'NUEVO') statusColorStr = "text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400";
@@ -448,27 +573,31 @@ function InventarioNeumaticos() {
           else if (e === 'CRITICO') statusColorStr = "text-red-700 bg-red-100 dark:bg-red-900/30 dark:text-red-400";
 
           return {
-            id: item.codigo_interno,
+            id: item.codigo_interno || item.id,
             marca: item.marca || '-',
             modelo: item.modelo || '-',
             medida: item.medida || '-',
             estado: e || 'NUEVO',
             statusColor: statusColorStr,
             ubicacion: (item.ubicacion || 'BODEGA').toUpperCase(),
-            vehiculo: item.patente_asignada || '-',
+            vehiculo: item.patente_asignada || item.vehiculo || '-',
             pos: item.posicion || '',
-            profActual: item.profundidad_actual || 0,
-            profNueva: item.profundidad_nueva || 18,
-            km: item.km_acumulados || 0,
-            costo: item.costo || 0,
-            instalacion: item.fecha_instalacion || '-',
-            bodega_id: item.bodega_id || null
+            profActual: item.profundidad_actual || item.profActual || 0,
+            profNueva: item.profundidad_nueva || item.profNueva || 18,
+            km: item.km_acumulados || item.km || 0,
+            costo: item.costo || item.costo_adquisicion || 0,
+            instalacion: item.instalacion || item.fecha_instalacion || '-',
+            bodega_id: item.bodega_id || null,
+            presion_psi: item.presion_psi || 115,
+            cpk: item.cpk || 0,
+            ciclos_recauchaje: item.ciclos_recauchaje || 0
           };
         });
 
         setInventory(mappedData);
       } catch (err) {
         console.error("Error fetching neumaticos:", err);
+        setInventory(MOCK_NEUMATICOS);
       } finally {
         setLoading(false);
       }
@@ -1396,5 +1525,314 @@ export function CrearNeumaticoModal({ isOpen, onClose, onCreated }: { isOpen: bo
         </div>
       </div>
     </Modal>
+  );
+}
+
+function HistorialOTsNeumaticos() {
+  const [ots, setOts] = useState<OrdenTrabajoNeumatico[]>(MOCK_OTS_NEUMATICOS);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('TODOS');
+  const [filtroEstado, setFiltroEstado] = useState('TODOS');
+  const [selectedOt, setSelectedOt] = useState<OrdenTrabajoNeumatico | null>(null);
+
+  const filteredOts = ots.filter(ot => {
+    const matchesSearch = ot.folio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          ot.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          ot.tecnico_responsable.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          ot.vehiculo_modelo.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTipo = filtroTipo === 'TODOS' || ot.tipo === filtroTipo;
+    const matchesEstado = filtroEstado === 'TODOS' || ot.estado === filtroEstado;
+    return matchesSearch && matchesTipo && matchesEstado;
+  });
+
+  const totalCostoOTs = filteredOts.reduce((sum, o) => sum + o.costo_total, 0);
+
+  const getTipoLabel = (tipo: string) => {
+    switch (tipo) {
+      case 'INSPECCION_PRESION_SURCO': return 'Inspección & Calibración PSI';
+      case 'ROTACION_EJES': return 'Rotación Preventiva de Ejes';
+      case 'CAMBIO_POR_DESGASTE': return 'Cambio por Surco Límite (<3mm)';
+      case 'ENVIO_RECAUCHAJE_BANDAG': return 'Envío a Recauchaje Bandag';
+      case 'ALINEACION_BALANCEO': return 'Alineación Láser & Balanceo';
+      case 'REPARACION_PINCHAZO': return 'Reparación Vulcanizado Frío';
+      default: return tipo;
+    }
+  };
+
+  const getTipoBadgeColor = (tipo: string) => {
+    switch (tipo) {
+      case 'INSPECCION_PRESION_SURCO': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300';
+      case 'ROTACION_EJES': return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300';
+      case 'CAMBIO_POR_DESGASTE': return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300';
+      case 'ENVIO_RECAUCHAJE_BANDAG': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300';
+      case 'ALINEACION_BALANCEO': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300';
+      case 'REPARACION_PINCHAZO': return 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300';
+      default: return 'bg-slate-50 text-slate-700 border-slate-200';
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Cards OTs Neumáticos */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total OTs Registradas</p>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{ots.length}</h3>
+              </div>
+              <div className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600">
+                <FileText className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">100% con odómetro y trazabilidad</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">OTs Finalizadas</p>
+                <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                  {ots.filter(o => o.estado === 'FINALIZADA').length}
+                </h3>
+              </div>
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg text-emerald-600">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">Intervenciones validadas en taller</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Recauchajes Bandag</p>
+                <h3 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+                  {ots.filter(o => o.tipo === 'ENVIO_RECAUCHAJE_BANDAG').length}
+                </h3>
+              </div>
+              <div className="p-2.5 bg-purple-50 dark:bg-purple-900/30 rounded-lg text-purple-600">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">Ahorro de $280.000 vs comprar nuevo</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inversión Total OTs</p>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                  ${totalCostoOTs.toLocaleString('es-CL')}
+                </h3>
+              </div>
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-900/30 rounded-lg text-amber-600">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">Mano de obra + Insumos de llantas</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main OTs Table Card */}
+      <Card className="bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/50">
+          <div>
+            <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Wrench className="w-5 h-5 text-indigo-600" />
+              Historial de Órdenes de Trabajo de Neumáticos
+            </CardTitle>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Control técnico, trazabilidad milimétrica, PSI y rendimientos por intervención mecánica
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-slate-500">Mostrando {filteredOts.length} de {ots.length} OTs</span>
+          </div>
+        </CardHeader>
+
+        {/* Filters */}
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap gap-3 bg-white dark:bg-slate-900">
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar por folio, patente o técnico..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          <select 
+            value={filtroTipo}
+            onChange={(e) => setFiltroTipo(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="TODOS">Todos los Tipos de Intervención</option>
+            <option value="INSPECCION_PRESION_SURCO">Inspección de Presión & Surco</option>
+            <option value="CAMBIO_POR_DESGASTE">Cambio por Surco Límite</option>
+            <option value="ROTACION_EJES">Rotación Preventiva</option>
+            <option value="ENVIO_RECAUCHAJE_BANDAG">Envío a Recauchaje Bandag</option>
+            <option value="ALINEACION_BALANCEO">Alineación & Balanceo</option>
+            <option value="REPARACION_PINCHAZO">Reparación de Pinchazo</option>
+          </select>
+
+          <select 
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="TODOS">Todos los Estados</option>
+            <option value="FINALIZADA">Finalizada</option>
+            <option value="EN_PROCESO">En Proceso</option>
+            <option value="PROGRAMADA">Programada</option>
+          </select>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-100/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 text-xs uppercase font-bold tracking-wider border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-3 px-4">Folio & Fecha</th>
+                <th className="py-3 px-4">Vehículo</th>
+                <th className="py-3 px-4">Tipo de Intervención</th>
+                <th className="py-3 px-4">Posición / Eje</th>
+                <th className="py-3 px-4">Odómetro</th>
+                <th className="py-3 px-4">Medición</th>
+                <th className="py-3 px-4">Costo Total</th>
+                <th className="py-3 px-4">Estado</th>
+                <th className="py-3 px-4 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+              {filteredOts.map((ot) => (
+                <tr key={ot.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                  <td className="py-3.5 px-4">
+                    <span className="font-black text-blue-600 dark:text-blue-400 text-xs block">{ot.folio}</span>
+                    <span className="text-[11px] text-slate-400">{ot.fecha}</span>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className="font-bold text-slate-900 dark:text-white block">{ot.patente}</span>
+                    <span className="text-[10px] text-slate-500">{ot.vehiculo_modelo}</span>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md font-bold text-[10px] border", getTipoBadgeColor(ot.tipo))}>
+                      {getTipoLabel(ot.tipo)}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="font-semibold text-slate-700 dark:text-slate-300">
+                      {ot.posiciones.join(', ')}
+                    </div>
+                    <div className="text-[10px] text-slate-400">{ot.neumaticos_involucrados.join(', ')}</div>
+                  </td>
+                  <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-slate-300">
+                    {ot.odometro_km.toLocaleString('es-CL')} km
+                  </td>
+                  <td className="py-3.5 px-4">
+                    {ot.profundidad_medida_mm !== undefined && (
+                      <span className="block font-bold text-slate-800 dark:text-slate-200">
+                        {ot.profundidad_medida_mm} mm
+                      </span>
+                    )}
+                    {ot.presion_medida_psi !== undefined && (
+                      <span className="text-[10px] text-slate-500">{ot.presion_medida_psi} PSI</span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className="font-black text-slate-900 dark:text-white block">
+                      ${ot.costo_total.toLocaleString('es-CL')}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      MO: ${ot.costo_mano_obra.toLocaleString('es-CL')}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px]",
+                      ot.estado === 'FINALIZADA' ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                      ot.estado === 'EN_PROCESO' ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" :
+                      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                    )}>
+                      {ot.estado}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <button 
+                      onClick={() => setSelectedOt(ot)}
+                      className="px-2.5 py-1 text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition"
+                    >
+                      Ver Detalle
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Modal Detalle de OT Neumático */}
+      {selectedOt && (
+        <Modal isOpen={!!selectedOt} onClose={() => setSelectedOt(null)} title={`Detalle de OT: ${selectedOt.folio}`}>
+          <div className="space-y-4 p-2 text-sm">
+            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+              <div>
+                <span className="text-xs text-slate-400 font-bold uppercase block">Vehículo / Patente</span>
+                <span className="font-black text-slate-900 dark:text-white text-base">{selectedOt.patente}</span>
+                <span className="text-xs text-slate-500 block">{selectedOt.vehiculo_modelo}</span>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400 font-bold uppercase block">Fecha & Odómetro</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 block">{selectedOt.fecha}</span>
+                <span className="text-xs font-mono text-slate-500">{selectedOt.odometro_km.toLocaleString('es-CL')} km</span>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2">
+              <span className="text-xs text-slate-400 font-bold uppercase block">Intervención Técnica</span>
+              <p className="font-bold text-slate-900 dark:text-white">{getTipoLabel(selectedOt.tipo)}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                {selectedOt.observaciones}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-lg text-center">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Mano de Obra</span>
+                <span className="font-black text-slate-900 dark:text-white">${selectedOt.costo_mano_obra.toLocaleString('es-CL')}</span>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-lg text-center">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Insumos / Llantas</span>
+                <span className="font-black text-slate-900 dark:text-white">${selectedOt.costo_repuestos_insumos.toLocaleString('es-CL')}</span>
+              </div>
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-center">
+                <span className="text-[10px] text-blue-600 uppercase font-bold block">Costo Total OT</span>
+                <span className="font-black text-blue-700 dark:text-blue-300">${selectedOt.costo_total.toLocaleString('es-CL')}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg flex items-center justify-between text-xs">
+              <span className="text-slate-500">Técnico Responsable: <strong className="text-slate-800 dark:text-slate-200">{selectedOt.tecnico_responsable}</strong></span>
+              <span className="text-slate-500">Taller: <strong className="text-slate-800 dark:text-slate-200">{selectedOt.taller}</strong></span>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setSelectedOt(null)}>Cerrar</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }
