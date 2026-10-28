@@ -226,7 +226,7 @@ export default function GestionCombustible() {
       setLoading(true);
       const [vehiculoRes, cargasRes, preciosRes] = await Promise.all([
         supabase.from('vehiculo').select('*').eq('empresa_id', currentCompany.id),
-        supabase.from('registro_combustible').select('*, vehiculo:vehiculo_id(patente, detalles)').eq('empresa_id', currentCompany.id).order('fecha', { ascending: false }),
+        supabase.from('registro_combustible').select('*').eq('empresa_id', currentCompany.id).order('fecha', { ascending: false }),
         supabase.from('log_actividad').select('detalles').eq('empresa_id', currentCompany.id).eq('accion', 'PRECIO_COMBUSTIBLE').order('created_at', { ascending: false })
       ]);
       
@@ -250,7 +250,7 @@ export default function GestionCombustible() {
       // vincular automáticamente a las 90 cargas de combustible de Gaval Demo TMS para que el dashboard siempre muestre datos completos
       if (rawCargas.length === 0) {
         const [cargasFallback, vehiculosFallback] = await Promise.all([
-          supabase.from('registro_combustible').select('*, vehiculo:vehiculo_id(patente, detalles)').eq('empresa_id', '161a47ac-9c63-435d-ab55-a6163a6805ab').order('fecha', { ascending: false }),
+          supabase.from('registro_combustible').select('*').eq('empresa_id', '161a47ac-9c63-435d-ab55-a6163a6805ab').order('fecha', { ascending: false }),
           rawVehiculos.length === 0 ? supabase.from('vehiculo').select('*').eq('empresa_id', '161a47ac-9c63-435d-ab55-a6163a6805ab') : Promise.resolve({ data: rawVehiculos })
         ]);
         if (cargasFallback.data && cargasFallback.data.length > 0) {

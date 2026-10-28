@@ -37,6 +37,7 @@ import {
   Cell
 } from 'recharts';
 import { useCompany } from '../../contexts/CompanyContext';
+import { cn } from '../../lib/utils';
 
 export default function DashboardFinanzas() {
   const { currentCompany } = useCompany();
