@@ -158,24 +158,34 @@ export default function OrdenesTrabajoDetail() {
 
         if (row && isMounted) {
           const [tareasRes, insumosRes, histRes, solRes] = await Promise.all([
-            supabase.from('ot_tareas_realizadas').select('*').eq('orden_id', row.id),
+            supabase.from('ot_tareas_realizadas').select('*, tarea_estandar:tarea_estandar_id(*)').eq('orden_id', row.id),
             supabase.from('detalle_insumo_ot').select('*').eq('orden_id', row.id),
             supabase.from('historial_ot').select('*').eq('orden_id', row.id).order('created_at', { ascending: true }),
             supabase.from('solicitud_repuesto_ot').select('*').eq('orden_id', row.id).order('created_at', { ascending: true })
           ]);
 
-          const mappedTareas = (tareasRes.data || []).map((t: any) => ({
-            id: t.id,
-            orden_id: t.orden_id,
-            tarea_estandar_id: t.tarea_estandar_id,
-            tiempo_real_minutos: Number(t.tiempo_real_minutos || 0),
-            costo_real: Number(t.costo_real || 0),
-            tarea_estandar: t.tarea_estandar || {
-              id: t.tarea_estandar_id,
-              descripcion: 'Tarea',
-              costoManoObra: Number(t.costo_real || 0)
-            }
-          }));
+          const mappedTareas = (tareasRes.data || []).map((t: any) => {
+            const desc = t.tarea_estandar?.descripcion || t.tarea_estandar?.nombre || t.descripcion || t.nombre || (() => {
+              if (row.tipo_falla) return `Reparación: ${row.tipo_falla}`;
+              if (row.pauta) return `Ejecución de Pauta: ${row.pauta}`;
+              if ((row.tipo || '').toUpperCase().includes('NEUMAT')) return `Inspección y Reemplazo de Neumático`;
+              if (row.sintomas) return `Intervención técnica: ${row.sintomas}`;
+              return 'Servicio técnico especializado / intervención';
+            })();
+
+            return {
+              id: t.id,
+              orden_id: t.orden_id,
+              tarea_estandar_id: t.tarea_estandar_id,
+              tiempo_real_minutos: Number(t.tiempo_real_minutos || 0),
+              costo_real: Number(t.costo_real || 0),
+              tarea_estandar: {
+                id: t.tarea_estandar_id,
+                descripcion: desc,
+                costoManoObra: Number(t.costo_real || 0)
+              }
+            };
+          });
 
           const mappedInsumos = (insumosRes.data || []).map((i: any) => {
             const catalogRep = repuestos.find(r => r.id === i.repuesto_id);
@@ -1906,7 +1916,7 @@ export default function OrdenesTrabajoDetail() {
                             </div>
                             {ot.tareasRealizadas.map(t => (
                                 <div key={t.id} className="flex justify-between items-center p-2 border-b last:border-0 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-900/50 transition-colors">
-                                    <span className="flex-1 text-slate-800 dark:text-slate-200">{t.tarea_estandar?.descripcion || 'Tarea'}</span>
+                                    <span className="flex-1 text-slate-800 dark:text-slate-200 font-medium">{t.tarea_estandar?.descripcion || 'Servicio Técnico Especializado'}</span>
                                     <div className="flex items-center gap-4">
                                         {canViewCostos && <span className="font-mono text-slate-600 dark:text-slate-400">${t.costo_real.toLocaleString()}</span>}
                                         {canManageTareas && (

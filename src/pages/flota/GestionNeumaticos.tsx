@@ -12,8 +12,8 @@ import { MOCK_NEUMATICOS, MOCK_OTS_NEUMATICOS, BENCHMARK_MARCAS, OrdenTrabajoNeu
 
 export default function GestionNeumaticos() {
   const queryParams = new URLSearchParams(window.location.search);
-  const initialTab = (queryParams.get('tab') as 'dashboard' | 'inventario' | 'historial_ots' | 'inspeccion') || 'dashboard';
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventario' | 'historial_ots' | 'inspeccion'>(initialTab);
+  const initialTab = (queryParams.get('tab') as 'dashboard' | 'inventario') || 'dashboard';
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventario'>(initialTab === 'inventario' ? 'inventario' : 'dashboard');
   const { currentCompany } = useCompany();
 
   return (
@@ -25,7 +25,7 @@ export default function GestionNeumaticos() {
             Gestión de Neumáticos y Rentabilidad
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            Sistema de trazabilidad, control de desgaste, OTs y cálculo de CPK ($/km)
+            Sistema de trazabilidad, control de desgaste, toma de decisiones y cálculo de CPK ($/km)
           </p>
         </div>
         <div className="flex bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl shadow-inner border border-slate-200/50 dark:border-slate-800/50 flex-wrap gap-1">
@@ -47,31 +47,11 @@ export default function GestionNeumaticos() {
           >
             <CircleDashed className="w-4 h-4" /> Neumáticos
           </button>
-          <button 
-            onClick={() => setActiveTab('historial_ots')}
-            className={cn(
-               "flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all",
-               activeTab === 'historial_ots' ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-700/50" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
-            )}
-          >
-            <Wrench className="w-4 h-4" /> OTs Neumáticos
-          </button>
-          <button 
-            onClick={() => setActiveTab('inspeccion')}
-            className={cn(
-               "flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all",
-               activeTab === 'inspeccion' ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/50 dark:border-emerald-900/30 ring-1 ring-emerald-500/20" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
-            )}
-          >
-            <Activity className="w-4 h-4" /> Registrar Inspección
-          </button>
         </div>
       </div>
 
       {activeTab === 'dashboard' && <DashboardNeumaticos />}
       {activeTab === 'inventario' && <InventarioNeumaticos />}
-      {activeTab === 'historial_ots' && <HistorialOTsNeumaticos />}
-      {activeTab === 'inspeccion' && <FormularioInspeccion />}
     </div>
   );
 }

@@ -1,29 +1,20 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAppContext } from '../../context/AppContext';
-import { useAuth } from '../../context/AuthContext';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { Plus, Search, Filter, DollarSign, FileDown, Trash, Edit, RotateCcw, SlidersHorizontal, User } from 'lucide-react';
+import { Plus, Search, Filter, Wrench, Calendar, CheckCircle, Clock, AlertTriangle, FileDown, Eye, Edit, Trash, XCircle, RotateCcw, SlidersHorizontal, User } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAppContext } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { CrearOTModal } from '../../components/flota/CrearOTModal';
-import { usePermissions } from '../../hooks/usePermissions';
-import { exportToExcel } from '../../lib/excelExport';
 import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 
-export default function GestionOrdenesTrabajo() {
-  const { ordenesTrabajo, vehiculos, eliminarOrdenTrabajo, recargarOrdenesTrabajo } = useAppContext();
+export default function OrdenesTrabajo() {
+  const { ordenesTrabajo, vehiculos, eliminarOrdenTrabajo } = useAppContext();
   const { profile } = useAuth();
-  const { hasPermission } = usePermissions();
-  const canCrearOT = hasPermission('Módulo de Mantenimiento:Crear Órdenes');
-  const isMecanico = profile?.rol?.nombre === 'Mecánico' || profile?.rol?.nombre === 'Mecanico';
   const navigate = useNavigate();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [otToEdit, setOtToEdit] = useState<any>(null);
-
-  React.useEffect(() => {
-    recargarOrdenesTrabajo?.();
-  }, [recargarOrdenesTrabajo]);
+  const location = useLocation();
 
   const [filtroVehiculo, setFiltroVehiculo] = useState('Todos');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
@@ -31,28 +22,56 @@ export default function GestionOrdenesTrabajo() {
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
   const [mostrarAvanzados, setMostrarAvanzados] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [otToEdit, setOtToEdit] = useState<any>(null);
 
-  const handleLimpiarFiltros = () => {
-    setFiltroVehiculo('Todos');
-    setFiltroTipo('Todos');
-    setFiltroEstado('Todos');
-    setFiltroDesde('');
-    setFiltroHasta('');
-    setPaginaActual(1);
-  };
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const estadoParam = params.get('estado');
+    const vehiculoParam = params.get('vehiculo');
+    const tipoParam = params.get('tipo');
 
-  const otsFiltradas = ordenesTrabajo.filter(ot => {
-    // Seguridad de vistas (Roles)
-    if (isMecanico && ot.responsable_id !== profile?.id) return false;
+    if (estadoParam) setFiltroEstado(estadoParam);
+    if (vehiculoParam) setFiltroVehiculo(vehiculoParam);
+    if (tipoParam) setFiltroTipo(tipoParam);
+    if (params.get('nuevo') === '1') {
+      setOtToEdit(null);
+      setIsModalOpen(true);
+    }
+  }, [location.search]);
 
+  const otsFiltradas = ordenesTrabajo.filter((ot) => {
     const vehiculo = vehiculos.find(v => String(v.id) === String(ot.vehiculoId));
+    
     const matchVehiculo = filtroVehiculo === 'Todos' || 
+      (ot.vehiculoId === filtroVehiculo || String(ot.vehiculoId) === filtroVehiculo) ||
       (vehiculo && (vehiculo.patente === filtroVehiculo || String(vehiculo.id) === filtroVehiculo));
 
     const matchTipo = (() => {
       if (filtroTipo === 'Todos') return true;
       const otTipo = (ot.tipo || '').toUpperCase().trim();
       const fTipo = filtroTipo.toUpperCase().trim();
+
+      if (fTipo === 'PREVENTIVA') {
+        return otTipo.includes('PREVENTIV') || otTipo.includes('INSPECC') || otTipo.includes('DIAGNOST');
+      }
+      if (fTipo === 'PREVENTIVA_MANTENIMIENTO') {
+        return (otTipo.includes('PREVENTIV') && !otTipo.includes('NEUMAT')) || Boolean(ot.pauta);
+      }
+      if (fTipo === 'PREVENTIVA_INSPECCION_NEUMATICOS') {
+        return otTipo.includes('NEUMAT') || Boolean(ot.inspeccionTrenMotriz) || otTipo === 'PREVENTIVA_INSPECCION_NEUMATICOS';
+      }
+      if (fTipo === 'PREVENTIVA_DIAGNOSTICO') {
+        return otTipo.includes('DIAGNOST') || (Boolean(ot.diagnosticoEvaluacion) && !otTipo.includes('CORRECTIV'));
+      }
+
+      if (fTipo === 'CORRECTIVA') {
+        return otTipo.includes('CORRECTIV') || otTipo.includes('REPARAC');
+      }
+      if (fTipo === 'CORRECTIVA_REPARACION') {
+        return otTipo.includes('CORRECTIV') || otTipo.includes('REPARAC') || Boolean(ot.tipoFalla);
+      }
+
       return otTipo.includes(fTipo) || fTipo.includes(otTipo);
     })();
 
@@ -122,12 +141,39 @@ export default function GestionOrdenesTrabajo() {
     .filter(ot => (ot.tipo || '').toUpperCase().includes('CORRECTIV'))
     .reduce((acc, ot) => acc + getOtCosto(ot), 0);
 
-  const costoEvaluativas = otsFiltradas
+  const costoNeumaticos = otsFiltradas
     .filter(ot => {
       const t = (ot.tipo || '').toUpperCase();
-      return t.includes('EVALUA') || t.includes('INSPECC');
+      return t.includes('NEUMAT') || Boolean(ot.inspeccionTrenMotriz);
     })
     .reduce((acc, ot) => acc + getOtCosto(ot), 0);
+
+  const getTipoLabel = (tipoRaw: string) => {
+    const raw = (tipoRaw || '').toUpperCase();
+    if (raw === 'PREVENTIVA_MANTENIMIENTO') return 'Preventiva (Mantenimiento)';
+    if (raw === 'PREVENTIVA_INSPECCION_NEUMATICOS') return 'Preventiva (Insp. Neumáticos)';
+    if (raw === 'PREVENTIVA_DIAGNOSTICO') return 'Preventiva (Diagnóstico)';
+    if (raw === 'CORRECTIVA_REPARACION') return 'Correctiva (Reparación)';
+    if (raw.includes('PREVENTIVA') && raw.includes('NEUMAT')) return 'Preventiva (Insp. Neumáticos)';
+    if (raw.includes('CORRECTIVA') && raw.includes('NEUMAT')) return 'Correctiva (Reparación Neumáticos)';
+    if (raw.includes('PREVENTIV')) return 'Preventiva';
+    if (raw.includes('CORRECTIV')) return 'Correctiva';
+    if (raw.includes('INSPECC')) return 'Preventiva (Inspección)';
+    if (raw.includes('EVALUA')) return 'Preventiva (Diagnóstico)';
+    return tipoRaw ? tipoRaw.replace(/_/g, ' ') : 'General';
+  };
+
+  const getTrabajoDetalle = (ot: any) => {
+    if (ot.pauta) return `Pauta: ${ot.pauta}`;
+    if (ot.tipoFalla) return `Falla: ${ot.tipoFalla}${ot.sintomas ? ` (${ot.sintomas})` : ''}`;
+    if (ot.sintomas) return `Síntomas: ${ot.sintomas}`;
+    if (ot.diagnosticoEvaluacion) return `Diagnóstico: ${ot.diagnosticoEvaluacion}`;
+    if (ot.inspeccionTrenMotriz) return `Tren Motriz: ${ot.inspeccionTrenMotriz}${ot.eje ? ` (Eje ${ot.eje})` : ''}`;
+    if ((ot.tipo || '').toUpperCase().includes('NEUMAT')) return `Inspección / Cambio de Neumáticos`;
+    if (ot.observacionInicial && !ot.observacionInicial.includes('Falla reportada en operación')) return ot.observacionInicial;
+    if (ot.observacionInicial) return ot.observacionInicial;
+    return 'Servicio de mantenimiento';
+  };
 
   const getEstadoColor = (estado: string) => {
     switch(estado) {
@@ -178,55 +224,91 @@ export default function GestionOrdenesTrabajo() {
     if (otsFiltradas.length === 0) {
       Swal.fire({
         icon: 'info',
-        title: 'Sin datos',
-        text: 'No hay órdenes de trabajo para exportar con los filtros seleccionados.',
-        confirmButtonColor: '#0891b2',
+        title: 'Sin datos para exportar',
+        text: 'No hay órdenes de trabajo que coincidan con los filtros actuales.',
+        confirmButtonColor: '#0891b2'
       });
       return;
     }
 
-    const dataToExport = otsFiltradas.map((ot) => {
-      const vehiculo = vehiculos.find((v) => v.id === ot.vehiculoId);
-      const costoInsumos = Number(ot.costoInsumos) || 0;
-      const costoMO = (Number(ot.costoManoObraTareas) || 0) + (Number(ot.costoManoObraHH) || 0);
-      const rawTotal = Number(ot.costoTotal || (ot as any).costo_total);
-      const costoTotalOT = (!isNaN(rawTotal) && rawTotal > 0) ? rawTotal : (costoInsumos + costoMO);
-
+    const dataParaExcel = otsFiltradas.map((ot) => {
+      const vehiculo = vehiculos.find(v => String(v.id) === String(ot.vehiculoId));
+      const costoFila = (ot.costoInsumos || 0) + (ot.costoManoObraTareas || 0) + (ot.costoManoObraHH || 0);
+      const fechaCreacion = ot.fechaCreacion || (ot as any).created_at || (ot as any).fecha_creacion;
+      
       return {
-        'Folio': ot.folio || 'S/F',
-        'Vehículo (Patente)': vehiculo?.patente || 'N/A',
-        'Marca': vehiculo?.marca || 'N/A',
+        'Folio': ot.folio,
+        'Vehículo (Patente)': vehiculo?.patente || ot.vehiculoId || 'N/A',
+        'N° Interno': vehiculo?.numero || 'S/N',
         'Modelo': vehiculo?.modelo || 'N/A',
-        'Tipo de OT': (ot.tipo || '').replace(/_/g, ' '),
-        'Estado': (ot.estado || '').replace(/_/g, ' '),
+        'Tipo OT': getTipoLabel(ot.tipo),
+        'Trabajo / Detalle': getTrabajoDetalle(ot),
+        'Estado': ot.estado ? ot.estado.replace(/_/g, ' ') : 'N/A',
         'Prioridad': ot.prioridad || 'MEDIA',
-        'Técnico Responsable': ot.tecnicoResponsable || ot.externo_nombre || 'Sin asignar',
-        'Personal Operativo': ot.personalOperativo || '',
-        'Fecha Creación': ot.fechaCreacion ? new Date(ot.fechaCreacion).toLocaleDateString('es-CL') : '',
-        'Fecha Programada': ot.fechaProgramada || '',
-        'Hora Inicio': ot.horaInicioProgramada || '',
-        'Hora Término': ot.horaTerminoProgramada || '',
-        'KM Apertura': ot.kilometrajeApertura || ot.kilometraje_apertura || 0,
-        'KM Cierre': ot.kilometrajeCierre || ot.kilometraje_cierre || 0,
-        'Pauta': ot.pauta || 'N/A',
-        'Tipo de Falla': ot.tipoFalla || 'N/A',
-        'Observación': ot.observacionInicial || ot.observaciones || '',
-        'Costo Insumos ($)': costoInsumos,
-        'Costo Mano de Obra ($)': costoMO,
-        'Costo Total ($)': costoTotalOT,
+        'Técnico Responsable': ot.tecnicoResponsable || 'Sin asignar',
+        'KM Apertura': ot.kilometrajeApertura || 0,
+        'Costo Insumos ($)': ot.costoInsumos || 0,
+        'Costo MO Tareas ($)': ot.costoManoObraTareas || 0,
+        'Costo MO Horas ($)': ot.costoManoObraHH || 0,
+        'Costo Total ($)': costoFila,
+        'Fecha Creación': fechaCreacion ? new Date(fechaCreacion).toLocaleDateString('es-CL') : 'N/A',
+        'Fecha Programada': ot.fechaProgramada || 'N/A',
+        'Observación Inicial': ot.observacionInicial || 'N/A'
       };
     });
 
+    const worksheet = XLSX.utils.json_to_sheet(dataParaExcel);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Órdenes de Trabajo');
+
+    const columnWidths = [
+      { wch: 16 }, // Folio
+      { wch: 20 }, // Vehiculo
+      { wch: 12 }, // N Interno
+      { wch: 18 }, // Modelo
+      { wch: 26 }, // Tipo
+      { wch: 35 }, // Detalle
+      { wch: 15 }, // Estado
+      { wch: 12 }, // Prioridad
+      { wch: 22 }, // Tecnico
+      { wch: 14 }, // KM
+      { wch: 16 }, // Costo Insumos
+      { wch: 18 }, // Costo MO Tareas
+      { wch: 18 }, // Costo MO Horas
+      { wch: 16 }, // Costo Total
+      { wch: 15 }, // Fecha Creacion
+      { wch: 16 }, // Fecha Programada
+      { wch: 35 }  // Observacion
+    ];
+    worksheet['!cols'] = columnWidths;
+
     const fechaHoy = new Date().toISOString().split('T')[0];
-    exportToExcel(dataToExport, `Reporte_Ordenes_Trabajo_${fechaHoy}`, 'OrdenesDeTrabajo');
+    XLSX.writeFile(workbook, `Ordenes_Trabajo_${fechaHoy}.xlsx`);
 
     Swal.fire({
       toast: true,
       position: 'top-end',
       icon: 'success',
-      title: `Se exportaron ${dataToExport.length} órdenes de trabajo a Excel`,
+      title: 'Reporte Excel generado con éxito',
       showConfirmButton: false,
-      timer: 2500,
+      timer: 2500
+    });
+  };
+
+  const handleLimpiarFiltros = () => {
+    setFiltroVehiculo('Todos');
+    setFiltroTipo('Todos');
+    setFiltroEstado('Todos');
+    setFiltroDesde('');
+    setFiltroHasta('');
+    setPaginaActual(1);
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'info',
+      title: 'Filtros restablecidos',
+      showConfirmButton: false,
+      timer: 1500
     });
   };
 
@@ -260,6 +342,8 @@ export default function GestionOrdenesTrabajo() {
     });
   };
 
+  const canCrearOT = true;
+
   return (
     <div className="space-y-6">
       {/* Header con Título y Botones de Acción */}
@@ -286,7 +370,7 @@ export default function GestionOrdenesTrabajo() {
         </div>
       </div>
 
-      {/* Casillas de Costos según Filtros Aplicados (Total, Preventivas, Correctivas y Evaluativas) */}
+      {/* Casillas de Costos según Filtros Aplicados */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Costo Total OTs */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
@@ -342,20 +426,20 @@ export default function GestionOrdenesTrabajo() {
           </div>
         </div>
 
-        {/* Evaluativas */}
+        {/* Neumáticos & Inspección */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-950/70 border border-purple-300 dark:border-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold text-xl shrink-0">
-            📋
+          <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xl shrink-0">
+            🛞
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-              Mant. Evaluativas
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              OTs Neumáticos
             </p>
             <p className="text-xl md:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 truncate">
-              ${costoEvaluativas.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${costoNeumaticos.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <span className="text-[11px] text-slate-500 font-medium">
-              {otsFiltradas.filter(ot => (ot.tipo || '').toUpperCase().includes('EVALUA') || (ot.tipo || '').toUpperCase().includes('INSPECC')).length} órdenes
+              {otsFiltradas.filter(ot => (ot.tipo || '').toUpperCase().includes('NEUMAT') || Boolean(ot.inspeccionTrenMotriz)).length} órdenes
             </span>
           </div>
         </div>
@@ -409,18 +493,21 @@ export default function GestionOrdenesTrabajo() {
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Tipo</label>
             <select 
-              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500" 
+              className="w-full p-2.5 border rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500 font-medium" 
               value={filtroTipo} 
               onChange={(e) => { setFiltroTipo(e.target.value); setPaginaActual(1); }}
             >
               <option value="Todos">Todos los Tipos</option>
-              <option value="PREVENTIVA">Preventiva</option>
-              <option value="CORRECTIVA">Correctiva</option>
-              <option value="EVALUATIVA">Evaluativa</option>
-              <option value="INSPECCION">Inspección</option>
-              <option value="PREVENTIVA_NEUMATICOS">Preventiva Neumáticos</option>
-              <option value="CORRECTIVA_NEUMATICOS">Correctiva Neumáticos</option>
-              <option value="EVALUATIVA_NEUMATICOS">Evaluativa Neumáticos</option>
+              <optgroup label="── PREVENTIVAS ──">
+                <option value="PREVENTIVA">Todas las Preventivas</option>
+                <option value="PREVENTIVA_MANTENIMIENTO">↳ Servicio de Mantenimiento (Pautas periódicas)</option>
+                <option value="PREVENTIVA_INSPECCION_NEUMATICOS">↳ Inspección de Neumáticos (Pauta de Inspección)</option>
+                <option value="PREVENTIVA_DIAGNOSTICO">↳ Diagnóstico (Síntomas no detienen equipo)</option>
+              </optgroup>
+              <optgroup label="── CORRECTIVAS ──">
+                <option value="CORRECTIVA">Todas las Correctivas</option>
+                <option value="CORRECTIVA_REPARACION">↳ Servicio de Reparación (Fallas / Cambio componentes & neumáticos)</option>
+              </optgroup>
             </select>
           </div>
 
@@ -432,12 +519,12 @@ export default function GestionOrdenesTrabajo() {
               onChange={(e) => { setFiltroEstado(e.target.value); setPaginaActual(1); }}
             >
               <option value="Todos">Todos los Estados</option>
-              <option value="PENDIENTE">Pendiente</option>
-              <option value="PROGRAMADA">Programada</option>
+              <option value="PENDIENTE">Pendientes / Abiertas</option>
+              <option value="PROGRAMADA">Programadas</option>
               <option value="EN_PROCESO">En Proceso</option>
-              <option value="PAUSADA">Pausada</option>
-              <option value="FINALIZADA">Finalizada</option>
-              <option value="CANCELADA">Cancelada</option>
+              <option value="PAUSADA">Pausadas</option>
+              <option value="FINALIZADA">Finalizadas / Cerradas</option>
+              <option value="CANCELADA">Canceladas</option>
             </select>
           </div>
 
@@ -486,7 +573,7 @@ export default function GestionOrdenesTrabajo() {
                     <tr>
                         <th className="p-4">Folio</th>
                         <th className="p-4">Vehículo</th>
-                        <th className="p-4">Tipo</th>
+                        <th className="p-4">Tipo y Trabajo</th>
                         <th className="p-4">Estado</th>
                         <th className="p-4 text-right">Costo Total</th>
                         <th className="p-4 text-right">Acciones</th>
@@ -512,7 +599,18 @@ export default function GestionOrdenesTrabajo() {
                                     </div>
                                     {vehiculo?.modelo && <div className="text-xs text-slate-500">{vehiculo.modelo}</div>}
                                 </td>
-                                <td className="p-4"><Badge className={`${getTipoColor(ot.tipo)} border dark:border-slate-800`}>{ot.tipo ? ot.tipo.replace(/_/g, ' ') : ''}</Badge></td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <div>
+                                      <Badge className={`${getTipoColor(ot.tipo)} border dark:border-slate-800 text-[11px] font-bold`}>
+                                        {getTipoLabel(ot.tipo)}
+                                      </Badge>
+                                    </div>
+                                    <div className="text-xs text-slate-600 dark:text-slate-400 font-medium line-clamp-1 max-w-[280px]" title={getTrabajoDetalle(ot)}>
+                                      {getTrabajoDetalle(ot)}
+                                    </div>
+                                  </div>
+                                </td>
                                 <td className="p-4"><Badge className={`${getEstadoColor(ot.estado)} border dark:border-slate-800`}>{ot.estado ? ot.estado.replace(/_/g, ' ') : ''}</Badge></td>
                                 <td className="p-4 text-right font-mono font-medium text-slate-800 dark:text-slate-200">
                                   ${costoFila.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -530,9 +628,25 @@ export default function GestionOrdenesTrabajo() {
             
             {totalPaginas > 1 && (
                 <div className="flex justify-center items-center gap-2 p-4 border-t dark:border-slate-800">
-                    <Button variant="outline" size="sm" disabled={paginaActual === 1} onClick={() => setPaginaActual(p => p - 1)}>Anterior</Button>
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Página {paginaActual} de {totalPaginas}</span>
-                    <Button variant="outline" size="sm" disabled={paginaActual === totalPaginas} onClick={() => setPaginaActual(p => p + 1)}>Siguiente</Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      disabled={paginaActual === 1}
+                      onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-xs text-slate-500">
+                      Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      disabled={paginaActual === totalPaginas}
+                      onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+                    >
+                      Siguiente
+                    </Button>
                 </div>
             )}
         </div>

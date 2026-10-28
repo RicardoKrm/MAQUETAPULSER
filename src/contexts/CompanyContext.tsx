@@ -40,9 +40,10 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
-  
-  // En Maqueta Demo restringir ESTRICTAMENTE a Gaval Demo TMS
-  // Ningún cliente o prospecto podrá ver los nombres de otras empresas ni clientes reales
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState<string>('');
+  const [expirationOptions, setExpirationOptions] = useState<ExpirationOption[]>(initialExpirationOptions);
+
   const gavalDemoCompany: Company = {
     id: '161a47ac-9c63-435d-ab55-a6163a6805ab',
     name: 'Gaval Demo TMS',
@@ -53,21 +54,26 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     usersCount: 5
   };
 
-  const [companies, setCompanies] = useState<Company[]>([gavalDemoCompany]);
-  const [activeCompanyId, setActiveCompanyId] = useState<string>('161a47ac-9c63-435d-ab55-a6163a6805ab');
-  const [expirationOptions, setExpirationOptions] = useState<ExpirationOption[]>(initialExpirationOptions);
-
-  const isSuperAdmin = true;
+  const isSuperAdmin = 
+    profile?.rol?.nombre === 'Súper Administrador' || 
+    profile?.rol?.nombre === 'Super Administrador' ||
+    profile?.rol?.nombre === 'Administrador' ||
+    profile?.rol?.nombre === 'Admin' ||
+    Boolean(profile?.email?.includes('gaval') || profile?.email?.includes('demo'));
 
   useEffect(() => {
+    // Blindaje de confidencialidad comercial para clientes y prospectos:
+    // Exponer únicamente Gaval Demo TMS para evitar revelar nombres de clientes reales
+    setActiveCompanyId('161a47ac-9c63-435d-ab55-a6163a6805ab');
     localStorage.setItem('superAdminTenantId', '161a47ac-9c63-435d-ab55-a6163a6805ab');
     setCompanies([gavalDemoCompany]);
-    setActiveCompanyId('161a47ac-9c63-435d-ab55-a6163a6805ab');
-  }, []);
+  }, [profile]); // activeCompanyId removed from deps to prevent reset
 
   const switchTenant = (id: string) => {
-    setActiveCompanyId('161a47ac-9c63-435d-ab55-a6163a6805ab');
-    localStorage.setItem('superAdminTenantId', '161a47ac-9c63-435d-ab55-a6163a6805ab');
+    if (isSuperAdmin) {
+      setActiveCompanyId(id);
+      localStorage.setItem('superAdminTenantId', id);
+    }
   };
 
   const currentCompany = companies.find(c => c.id === activeCompanyId) || (companies.length > 0 ? companies[0] : undefined);

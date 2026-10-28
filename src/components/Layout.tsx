@@ -23,7 +23,6 @@ import {
   LogOut,
   Lock,
   ExternalLink,
-  RotateCcw,
 } from "lucide-react";
 import { navigation } from "../config/navigation";
 import { cn } from "../lib/utils";
@@ -36,7 +35,7 @@ import { supabase, logActividad } from "../lib/supabase";
 import Swal from "sweetalert2";
 
 export default function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -415,14 +414,20 @@ export default function Layout() {
 
   // Filter navigation based on user permissions
   const filteredNavigation = React.useMemo(() => {
+    // Determine the role name based on the authenticated profile
+    // If Supabase profile exists but has no role, it shouldn't default to Super Admin
     let roleName = profile ? profile.rol?.nombre : currentUser?.cargo;
+
+    // If no role at all, they shouldn't see full nav, just empty or basic
+    if (!roleName) return [];
+
     const perms = profile?.rol?.permisos || [];
 
-    // En Maqueta Demo o para Administradores / Super Administradores, mostrar navegación completa
-    const isFullAccess = 
-      !roleName || 
-      ["Súper Administrador", "Super Administrador", "Administrador"].includes(roleName) ||
-      (typeof perms === 'object' && perms !== null && !Array.isArray(perms) && (perms as any).all === true);
+    // Admins y Super Admins ven toda la navegación por defecto
+    const isFullAccess =
+      !roleName ||
+      ["Súper Administrador", "Super Administrador", "Administrador", "Admin", "Gerencia"].includes(roleName) ||
+      (typeof perms === 'object' && perms !== null && !Array.isArray(perms) && ((perms as any).all === true || (perms as any)['*'] === true));
 
     if (isFullAccess) {
       return navigation.map((item) => {
@@ -689,7 +694,7 @@ export default function Layout() {
               />
             </div>
 
-            {/* Contexto Empresa Activa Demo - Blindado para proteger confidencialidad comercial */}
+            {/* Contexto Empresa Activa - Blindado para proteger confidencialidad comercial */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-sm">
               <Building className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
               <span>Gaval Demo TMS</span>
@@ -697,28 +702,17 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2">
-            {/* Indicador Entorno Demo */}
-            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 text-xs font-bold shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Modo Demo Gaval</span>
-            </div>
-
-            {/* Botón Restablecer Datos Demo */}
-            <button
-              onClick={() => {
-                if (window.confirm('¿Deseas reiniciar los datos de prueba al estado original de la maqueta?')) {
-                  localStorage.removeItem('pulser_ordenes_trabajo_' + activeCompanyId);
-                  localStorage.removeItem('pulser_ots_' + activeCompanyId);
-                  localStorage.removeItem('pulser_ordenes_trabajo');
-                  window.location.reload();
-                }
-              }}
-              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
-              title="Restablecer datos originales"
+            {/* Acceso directo a Pulser Clásico */}
+            <a
+              href="https://alvimar.pulser.cl/dashboard/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-cyan-300 border border-slate-200 dark:border-cyan-500/30 text-xs font-bold transition-all hover:scale-105 shadow-sm"
+              title="Abrir plataforma anterior de Pulser Alvimar"
             >
-              <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
-              <span>Restablecer</span>
-            </button>
+              <ExternalLink className="w-3.5 h-3.5 text-cyan-500" />
+              <span>Pulser Clásico</span>
+            </a>
 
             <button
               onClick={toggleTheme}
@@ -914,6 +908,17 @@ export default function Layout() {
                       <LifeBuoy className="h-4 w-4 text-slate-500 dark:text-slate-400" />{" "}
                       Centro de Soporte
                     </button>
+                  </div>
+
+                  <div className="p-1 border-t border-slate-200 dark:border-slate-700">
+                    <a
+                      href="https://alvimar.pulser.cl/dashboard/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-cyan-600 dark:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors font-medium"
+                    >
+                      <ExternalLink className="h-4 w-4" /> Ir a Pulser Clásico
+                    </a>
                   </div>
 
                   <div className="p-1 border-t border-slate-200 dark:border-slate-700">

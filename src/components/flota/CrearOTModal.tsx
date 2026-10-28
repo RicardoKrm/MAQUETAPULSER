@@ -117,27 +117,30 @@ export const CrearOTModal: React.FC<CrearOTModalProps> = ({ isOpen, onClose, veh
 
     let autoInstruccion = '';
     switch(formData.tipo) {
+      case 'PREVENTIVA_MANTENIMIENTO':
       case 'PREVENTIVA':
-      case 'PREVENTIVA_NEUMATICOS':
-          autoInstruccion = `Mantenimiento preventivo. Pauta a realizar: ${formData.pauta || 'No especificada'}.`;
+          autoInstruccion = `Servicio de Mantenimiento preventivo. Pauta a realizar: ${formData.pauta || 'No especificada'}.`;
           if (formData.kitRepuestos) autoInstruccion += ` Utilizar Kit: ${formData.kitRepuestos}.`;
           break;
-      case 'CORRECTIVA':
-      case 'EVALUATIVA':
-          autoInstruccion = `Revisión/Reparación. Falla reportada: ${formData.tipoFalla || 'No especificada'}. Síntomas: ${formData.sintomas || 'No especificados'}.`;
-          break;
+      case 'PREVENTIVA_INSPECCION_NEUMATICOS':
       case 'INSPECCION':
-          autoInstruccion = `Realizar inspección general del vehículo.`;
-          break;
       case 'EVALUATIVA_NEUMATICOS':
-          autoInstruccion = `Inspección de Neumáticos/Tren Motriz. Configuración Ejes: ${formData.inspeccionTrenMotriz || 'No especificada'}, Eje afectado: ${formData.eje || 'No especificado'}.`;
+      case 'PREVENTIVA_NEUMATICOS':
+          autoInstruccion = `Pauta de Inspección y Desgaste de Neumáticos. Tren Motriz: ${formData.inspeccionTrenMotriz || 'Estándar'}${formData.eje ? `, Eje: ${formData.eje}` : ''}.`;
+          if (formData.presionNeumatico) autoInstruccion += ` Calibración a: ${formData.presionNeumatico} PSI.`;
           break;
+      case 'PREVENTIVA_DIAGNOSTICO':
+      case 'EVALUATIVA':
+          autoInstruccion = `Diagnóstico y evaluación preventiva. Síntomas reportados que no detienen operación: ${formData.sintomas || 'Revisión en taller'}.`;
+          break;
+      case 'CORRECTIVA_REPARACION':
+      case 'CORRECTIVA':
       case 'CORRECTIVA_NEUMATICOS':
-          autoInstruccion = `Reparación correctiva de neumáticos.`;
-          if (formData.presionNeumatico) autoInstruccion += ` Ajustar presión a: ${formData.presionNeumatico} PSI.`;
+          autoInstruccion = `Servicio de Reparación correctiva (Detención / Falla). Falla reportada: ${formData.tipoFalla || 'Falla operacional'}. Síntomas: ${formData.sintomas || 'Detención de equipo'}.`;
+          if (formData.presionNeumatico) autoInstruccion += ` Presión neumático: ${formData.presionNeumatico} PSI.`;
           break;
       default:
-          autoInstruccion = 'Revisar vehículo según requerimiento.';
+          autoInstruccion = 'Revisar vehículo según requerimiento operativo.';
     }
 
     const pd = new Date(formData.fechaProgramada || new Date().toISOString());
@@ -313,14 +316,15 @@ export const CrearOTModal: React.FC<CrearOTModalProps> = ({ isOpen, onClose, veh
             </div>
             <div>
               <label className="block text-sm font-medium">Tipo OT</label>
-              <select name="tipo" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.tipo} onChange={handleChange}>
-                <option value="PREVENTIVA">PREVENTIVA</option>
-                <option value="CORRECTIVA">CORRECTIVA</option>
-                <option value="EVALUATIVA">EVALUATIVA</option>
-                <option value="INSPECCION">INSPECCION</option>
-                <option value="PREVENTIVA_NEUMATICOS">PREVENTIVA NEUMATICOS</option>
-                <option value="CORRECTIVA_NEUMATICOS">CORRECTIVA NEUMATICOS</option>
-                <option value="EVALUATIVA_NEUMATICOS">EVALUATIVA NEUMATICOS</option>
+              <select name="tipo" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 font-medium" value={formData.tipo} onChange={handleChange}>
+                <optgroup label="PREVENTIVAS">
+                  <option value="PREVENTIVA_MANTENIMIENTO">Servicio de Mantenimiento (Pautas periódicas)</option>
+                  <option value="PREVENTIVA_INSPECCION_NEUMATICOS">Inspección de Neumáticos (Pauta de Inspección)</option>
+                  <option value="PREVENTIVA_DIAGNOSTICO">Diagnóstico (Síntomas no detienen equipo)</option>
+                </optgroup>
+                <optgroup label="CORRECTIVAS">
+                  <option value="CORRECTIVA_REPARACION">Servicio de Reparación (Fallas / Cambio componentes & neumáticos)</option>
+                </optgroup>
               </select>
             </div>
             <div>
@@ -340,7 +344,7 @@ export const CrearOTModal: React.FC<CrearOTModalProps> = ({ isOpen, onClose, veh
 
         {renderSection("DETALLES TÉCNICOS", (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(formData.tipo === 'PREVENTIVA' || formData.tipo === 'PREVENTIVA_NEUMATICOS') && (
+            {(formData.tipo === 'PREVENTIVA_MANTENIMIENTO' || formData.tipo === 'PREVENTIVA') && (
               <>
                   <div>
                     <label className="block text-sm font-medium">Pauta Mantenimiento</label>
@@ -358,44 +362,56 @@ export const CrearOTModal: React.FC<CrearOTModalProps> = ({ isOpen, onClose, veh
                   </div>
               </>
             )}
-            {(formData.tipo.includes('CORRECTIVA') || formData.tipo.includes('EVALUATIVA')) && formData.tipo !== 'EVALUATIVA_NEUMATICOS' && (
-               <>
-                <div>
-                  <label className="block text-sm font-medium">Tipo de Falla</label>
-                  <select name="tipoFalla" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.tipoFalla || ''} onChange={handleChange}>
-                      <option value="">---------</option>
-                      {filteredTiposFalla.map(tf => <option key={tf.id} value={tf.nombre}>{tf.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Síntomas</label>
-                  <input type="text" name="sintomas" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.sintomas || ''} onChange={handleChange} />
-                </div>
-               </>
-            )}
-            {formData.tipo === 'EVALUATIVA_NEUMATICOS' && (
+            {(formData.tipo === 'PREVENTIVA_INSPECCION_NEUMATICOS' || formData.tipo.includes('NEUMATICOS')) && (
               <>
                 <div>
-                  <label className="block text-sm font-medium">Inspección Tren Motriz</label>
-                  <select name="inspeccionTrenMotriz" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.inspeccionTrenMotriz || ''} onChange={handleChange}>
-                     <option value="">Configuración Ejes...</option>
+                  <label className="block text-sm font-medium">Configuración Tren Motriz</label>
+                  <select name="inspeccionTrenMotriz" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.inspeccionTrenMotriz || '6x4'} onChange={handleChange}>
                      <option value="4x2">4x2 (6 Ruedas)</option>
                      <option value="6x2">6x2 (8 Ruedas)</option>
-                     <option value="6x4">6x4 (10 Ruedas)</option>
-                     <option value="8x4">8x4 (12 Ruedas)</option>
+                     <option value="6x4">6x4 (10 Ruedas - Faena Minera)</option>
+                     <option value="8x4">8x4 (12 Ruedas - Minería Pesada)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Eje</label>
-                  <input type="text" name="eje" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.eje || ''} onChange={handleChange} />
+                  <label className="block text-sm font-medium">Eje / Posición Neumático</label>
+                  <input type="text" name="eje" placeholder="Ej: 1D (Direccional) o 2DE (Tracción Ext)" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.eje || ''} onChange={handleChange} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Presión Calibrada (PSI)</label>
+                  <input type="number" name="presionNeumatico" placeholder="Ej: 110" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.presionNeumatico || ''} onChange={handleChange} />
                 </div>
               </>
             )}
-            {(formData.tipo.includes('NEUMATICOS')) && (
+            {(formData.tipo === 'PREVENTIVA_DIAGNOSTICO') && (
+              <>
                 <div>
-                    <label className="block text-sm font-medium">Presión Neumático (PSI)</label>
-                    <input type="number" name="presionNeumatico" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.presionNeumatico || ''} onChange={handleChange} />
+                  <label className="block text-sm font-medium">Síntomas / Anomalía Detectada</label>
+                  <input type="text" name="sintomas" placeholder="Síntomas que no detienen operación" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.sintomas || ''} onChange={handleChange} />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium">Diagnóstico Preliminar</label>
+                  <input type="text" name="diagnosticoEvaluacion" placeholder="Observación del mecánico o conductor" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.diagnosticoEvaluacion || ''} onChange={handleChange} />
+                </div>
+              </>
+            )}
+            {(formData.tipo === 'CORRECTIVA_REPARACION' || formData.tipo.includes('CORRECTIVA')) && (
+               <>
+                <div>
+                  <label className="block text-sm font-medium">Tipo de Falla / Componente Afectado</label>
+                  <select name="tipoFalla" className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.tipoFalla || ''} onChange={handleChange}>
+                      <option value="">---------</option>
+                      {filteredTiposFalla.map(tf => <option key={tf.id} value={tf.nombre}>{tf.nombre}</option>)}
+                      <option value="Cambio de Neumático por Desgaste Severo">Cambio de Neumático por Desgaste Severo</option>
+                      <option value="Rotación y Balanceo de Neumáticos">Rotación y Balanceo de Neumáticos</option>
+                      <option value="Reparación de Corte / Pinchazo Neumático">Reparación de Corte / Pinchazo Neumático</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Síntomas que Detienen Operación</label>
+                  <input type="text" name="sintomas" placeholder="Falla mecánica, pinchazo, alerta tablero..." className="w-full p-2 border rounded rounded-md dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100" value={formData.sintomas || ''} onChange={handleChange} />
+                </div>
+               </>
             )}
           </div>
         ))}
