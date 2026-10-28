@@ -23,6 +23,7 @@ import {
   LogOut,
   Lock,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 import { navigation } from "../config/navigation";
 import { cn } from "../lib/utils";
@@ -724,6 +725,23 @@ export default function Layout() {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Modo Demo Gaval</span>
             </div>
+
+            {/* Botón Restablecer Datos Demo */}
+            <button
+              onClick={() => {
+                if (window.confirm('¿Deseas reiniciar los datos de prueba al estado original de la maqueta?')) {
+                  localStorage.removeItem('pulser_ordenes_trabajo_' + activeCompanyId);
+                  localStorage.removeItem('pulser_ots_' + activeCompanyId);
+                  localStorage.removeItem('pulser_ordenes_trabajo');
+                  window.location.reload();
+                }
+              }}
+              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
+              title="Restablecer datos originales"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
+              <span>Restablecer</span>
+            </button>
 
             <button
               onClick={toggleTheme}
