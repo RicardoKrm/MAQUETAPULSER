@@ -25,8 +25,41 @@ export default function Trazabilidad() {
         .eq('empresa_id', activeCompanyId)
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
          setServicios(data);
+      } else {
+         setServicios([
+           {
+             id: 'srv-01',
+             nombre: 'Transporte Concentrado Ujina - Cordillera',
+             estado: 'En Operación',
+             cliente: 'Minera Doña Inés de Collahuasi SCM',
+             created_at: '2026-10-01T08:00:00Z',
+             operacion_programacion: [
+               { id: 'prog-01', estado: 'Completado', conductor: { nombre: 'Gabriel Avalos Valdés' }, vehiculo: { patente: 'DEMO23' } }
+             ]
+           },
+           {
+             id: 'srv-02',
+             nombre: 'Movimiento Concentrado y Áridos Alta Montaña QB2',
+             estado: 'En Operación',
+             cliente: 'Teck Quebrada Blanca S.A.',
+             created_at: '2026-10-01T08:00:00Z',
+             operacion_programacion: [
+               { id: 'prog-02', estado: 'Completado', conductor: { nombre: 'Alfredo Jimenez' }, vehiculo: { patente: 'DEMO03' } }
+             ]
+           },
+           {
+             id: 'srv-03',
+             nombre: 'Embarque y Transferencia Spot Terminal Puerto Patillos',
+             estado: 'Liquidado',
+             cliente: 'Consorcio Portuario Patillos SpA',
+             created_at: '2026-10-01T08:00:00Z',
+             operacion_programacion: [
+               { id: 'prog-03', estado: 'Completado', conductor: { nombre: 'Roberto Sanhueza' }, vehiculo: { patente: 'DEMO08' } }
+             ]
+           }
+         ]);
       }
     } catch (e) {
       console.error(e);

@@ -40,7 +40,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const { companies, activeCompanyId, setActiveCompanyId } = useCompany();
+  const { companies, activeCompanyId, setActiveCompanyId, isDemoMode } = useCompany();
   const { currentUser, usuarios, setCurrentUser, ordenesTrabajo, repuestos, vehiculos, personal } =
     useAppContext();
   const { signOut, user, profile } = useAuth();
@@ -694,11 +694,37 @@ export default function Layout() {
               />
             </div>
 
-            {/* Contexto Empresa Activa - Blindado para proteger confidencialidad comercial */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-sm">
-              <Building className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>Gaval Demo TMS</span>
-            </div>
+            {/* Contexto de Empresa: En Modo Demo muestra solo Gaval Demo TMS; en Pulser Oficial muestra selector para Super Admin y Admin */}
+            {isDemoMode ? (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-sm">
+                <Building className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>Gaval Demo TMS</span>
+              </div>
+            ) : (
+              companies.length > 0 && (
+                <div className="hidden sm:flex items-center ml-2">
+                  <div className="relative group flex items-center">
+                    <select
+                      value={activeCompanyId}
+                      onChange={(e) => setActiveCompanyId(e.target.value)}
+                      className="appearance-none bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 py-1.5 pl-3 pr-8 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[220px] truncate cursor-pointer transition-colors shadow-sm"
+                      title="Cambiar empresa activa (Workspace)"
+                    >
+                      {companies.map((c) => (
+                        <option
+                          key={c.id}
+                          value={c.id}
+                          className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 font-medium text-xs"
+                        >
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Building className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-500 pointer-events-none" />
+                  </div>
+                </div>
+              )
+            )}
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2">

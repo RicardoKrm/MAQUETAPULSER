@@ -137,6 +137,10 @@ const router = createBrowserRouter([
     element: <Login />
   },
   {
+    path: "/demo",
+    element: <Navigate to="/dashboard?demo=true" replace />
+  },
+  {
     element: <ProtectedRoute />,
     children: [
       {
