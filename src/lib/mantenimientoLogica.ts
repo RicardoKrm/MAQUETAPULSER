@@ -94,12 +94,19 @@ export function limpiarNombreModelo(modelo: any): string {
 /**
  * Obtiene la secuencia consolidada y ordenada de pautas de mantenimiento para un vehículo específico,
  * resolviendo compatibilidad de modelo y tipo/viscosidad de aceite.
+ * 
+ * Si el vehículo cuenta con un intervalo personalizado (ej: editado en su ficha técnica de 10.000 a 15.000 km),
+ * el sistema preserva el orden cronológico estricto de las pautas del cronograma (SM1, SM2, SM1, SM3...)
+ * y proyecta los KMs de los futuros hitos sumando el nuevo intervalo al número redondo del último mantenimiento realizado.
  */
 export function obtenerPautasSecuenciaParaVehiculo(
     vehiculoModelo: any,
     vehiculoAceite: any,
     kmsActuales: number,
-    todasLasPautas: any[]
+    todasLasPautas: any[],
+    intervaloCustomKm?: number,
+    kmUltimaMantencion?: number,
+    tipoUltimaPauta?: string
 ): HitoSecuencia[] {
     if (!todasLasPautas || todasLasPautas.length === 0) return [];
 
@@ -160,13 +167,91 @@ export function obtenerPautasSecuenciaParaVehiculo(
 
     // Desduplicar conservando el primer hito de cada KM
     const uniqueKms = new Set<number>();
-    return pautasSecuencia.filter(item => {
+    const secuenciaBase = pautasSecuencia.filter(item => {
         if (!uniqueKms.has(item.iteracion_km)) {
             uniqueKms.add(item.iteracion_km);
             return true;
         }
         return false;
     });
+
+    // Si no hay intervalo personalizado o la secuencia base está vacía, retornar la base
+    if (!intervaloCustomKm || intervaloCustomKm <= 0 || secuenciaBase.length === 0) {
+        return secuenciaBase;
+    }
+
+    // --- RECALCULAR HITOS FUTUROS CON INTERVALO PERSONALIZADO Y NÚMERO REDONDO BASE ---
+    const kmUltimo = kmUltimaMantencion || 0;
+    let kmRoundBase = 0;
+
+    if (kmUltimo > 0) {
+        // Encontrar el hito redondo teórico del último mantenimiento realizado.
+        // Si el camión entró al taller a 101.547 km, su hito redondo programado era 100.000 km.
+        let closest = secuenciaBase[0]?.iteracion_km || 0;
+        let minDiff = Math.abs(closest - kmUltimo);
+        for (const p of secuenciaBase) {
+            const diff = Math.abs(p.iteracion_km - kmUltimo);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = p.iteracion_km;
+            }
+        }
+        // Si la diferencia con el hito más cercano es razonable, usar ese hito redondo;
+        // de lo contrario, redondear al múltiplo más cercano del intervalo
+        if (minDiff <= (intervaloCustomKm * 1.5)) {
+            kmRoundBase = closest;
+        } else {
+            kmRoundBase = Math.round(kmUltimo / intervaloCustomKm) * intervaloCustomKm;
+        }
+    }
+
+    // Extraer el ciclo cronológico de pautas (sin pautas de rodaje/inicial única vez)
+    const cicloPautas = secuenciaBase
+        .filter(p => {
+            const n = (p.nombre || '').toUpperCase().trim();
+            return !(n.startsWith('SI') || n.startsWith('SL') || n.startsWith('R') || n.includes('INICIAL'));
+        })
+        .map(p => p.nombre);
+
+    if (cicloPautas.length === 0) {
+        return secuenciaBase;
+    }
+
+    // Determinar la posición en el ciclo para continuar la rotación cronológica estricta
+    let idxUltima = -1;
+    if (tipoUltimaPauta) {
+        const cleanTipo = tipoUltimaPauta.split('-')[0].trim().toUpperCase();
+        idxUltima = cicloPautas.findIndex(n => n.toUpperCase().split('-')[0].trim() === cleanTipo);
+    }
+    if (idxUltima === -1 && kmRoundBase > 0) {
+        const hitoAtBase = secuenciaBase.find(p => p.iteracion_km === kmRoundBase);
+        if (hitoAtBase) {
+            idxUltima = cicloPautas.findIndex(n => n === hitoAtBase.nombre);
+        }
+    }
+    if (idxUltima === -1) {
+        idxUltima = 0;
+    }
+
+    // Preservar los hitos pasados hasta el número redondo del último mantenimiento
+    const pasados = secuenciaBase.filter(p => p.iteracion_km <= kmRoundBase);
+
+    // Proyectar los hitos futuros sumando el nuevo intervalo al número redondo base
+    const futuros: HitoSecuencia[] = [];
+    let currentKm = kmRoundBase;
+    let cycleIdx = idxUltima;
+    const limiteKm = Math.max(kmsActuales, kmRoundBase) + 500000;
+
+    while (currentKm < limiteKm) {
+        currentKm += intervaloCustomKm;
+        cycleIdx = (cycleIdx + 1) % cicloPautas.length;
+        futuros.push({
+            iteracion_km: currentKm,
+            nombre: cicloPautas[cycleIdx]
+        });
+    }
+
+    return [...pasados, ...futuros];
 }
 
 // 1. Datos de entrada (Lo que viene de tu Base de Datos)
@@ -395,9 +480,23 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
     
     kmProximo = proximoHitoVencimiento > 0 ? proximoHitoVencimiento : null;
 
-    // --- 2. CÁLCULO DE CUMPLIMIENTO (Tolerancia del 10%) ---
+    // --- 2. CÁLCULO DE CUMPLIMIENTO (Tolerancia del 10% respecto al hito redondo teórico) ---
     if (kmUltimo > 0 && intervalo > 0) {
-        const hitoIdeal = Math.round(kmUltimo / intervalo) * intervalo;
+        let hitoIdeal = Math.round(kmUltimo / intervalo) * intervalo;
+        if (vehiculo.pautasSecuencia && vehiculo.pautasSecuencia.length > 0) {
+            let closest = vehiculo.pautasSecuencia[0].iteracion_km;
+            let minDiff = Math.abs(closest - kmUltimo);
+            for (const p of vehiculo.pautasSecuencia) {
+                const diff = Math.abs(p.iteracion_km - kmUltimo);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closest = p.iteracion_km;
+                }
+            }
+            if (minDiff <= (intervalo * 1.5)) {
+                hitoIdeal = closest;
+            }
+        }
         const tolerancia = intervalo * 0.10; // 10% de tolerancia
 
         if (kmUltimo < (hitoIdeal - tolerancia)) {
@@ -557,7 +656,15 @@ export function mapearVehiculoDB(v: any, pautasData: any[], ordenesTrabajo: any[
 
   const vehOil = v.tipo_aceite || detalles.tipo_aceite || '';
   const pautasSecuencia: HitoSecuencia[] = pautasData
-    ? obtenerPautasSecuenciaParaVehiculo(v.modelo || detalles.modelo, vehOil, kmsActuales, pautasData)
+    ? obtenerPautasSecuenciaParaVehiculo(
+        v.modelo || detalles.modelo, 
+        vehOil, 
+        kmsActuales, 
+        pautasData,
+        kmInterv,
+        kmUltMant,
+        pautasSecuenciaStr
+      )
     : [];
 
   // Deducción automática de última pauta si venía vacía, como inicial o no reconocida:

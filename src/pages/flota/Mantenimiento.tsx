@@ -67,6 +67,8 @@ export default function PizarraMantenimiento() {
     norma: '',
     aplicacion: '',
     tipoAceite: '',
+    intervaloMantenimiento: 10000,
+    tipoIntervalo: 'KM',
     enOperacionActiva: true
   });
 
@@ -83,6 +85,8 @@ export default function PizarraMantenimiento() {
         norma: fichaTecnicaVehiculo.norma || '',
         aplicacion: fichaTecnicaVehiculo.aplicacion || '',
         tipoAceite: fichaTecnicaVehiculo.tipoAceite || '',
+        intervaloMantenimiento: fichaTecnicaVehiculo.intervaloMantencionKm || fichaTecnicaVehiculo.intervaloMantenimiento || fichaTecnicaVehiculo.detalles?.intervalo_mantencion_km || 10000,
+        tipoIntervalo: fichaTecnicaVehiculo.tipoIntervalo || 'KM',
         enOperacionActiva: fichaTecnicaVehiculo.en_operacion_activa !== false && fichaTecnicaVehiculo.estado !== 'DE_BAJA' && fichaTecnicaVehiculo.detalles?.activo !== false
       });
     }
@@ -545,6 +549,8 @@ export default function PizarraMantenimiento() {
       }
 
       const isActivo = editFichaData.enOperacionActiva !== false;
+      const nuevoIntervalo = parseInt(String(editFichaData.intervaloMantenimiento || '10000').replace(/[^0-9]+/g, ''), 10) || 10000;
+      const nuevoTipoIntervalo = editFichaData.tipoIntervalo || 'KM';
 
       const payload: any = {
         marca: cleanMarca,
@@ -555,6 +561,9 @@ export default function PizarraMantenimiento() {
         norma_euro: editFichaData.norma,
         aplicacion: editFichaData.aplicacion,
         tipo_aceite: editFichaData.tipoAceite,
+        intervalo_mantencion_km: nuevoIntervalo,
+        intervalo_km: nuevoIntervalo,
+        tipo_intervalo: nuevoTipoIntervalo,
         en_operacion_activa: isActivo,
         estado: isActivo ? 'OPERATIVO' : 'DE_BAJA',
         detalles: {
@@ -570,6 +579,10 @@ export default function PizarraMantenimiento() {
           aplicacion: editFichaData.aplicacion,
           tipoAceite: editFichaData.tipoAceite,
           tipo_aceite: editFichaData.tipoAceite,
+          intervalo_mantencion_km: nuevoIntervalo,
+          intervalo_km: nuevoIntervalo,
+          intervaloMantenimiento: nuevoIntervalo,
+          tipo_intervalo: nuevoTipoIntervalo,
           fecha_matriculacion: editFichaData.fechaMatriculacion,
           en_operacion_activa: isActivo,
           activo: isActivo
@@ -595,6 +608,9 @@ export default function PizarraMantenimiento() {
         norma: editFichaData.norma,
         aplicacion: editFichaData.aplicacion,
         tipoAceite: editFichaData.tipoAceite,
+        intervaloMantencionKm: nuevoIntervalo,
+        intervaloMantenimiento: nuevoIntervalo,
+        tipoIntervalo: nuevoTipoIntervalo,
         fecha_matriculacion: editFichaData.fechaMatriculacion,
         en_operacion_activa: isActivo,
         estado: isActivo ? 'OPERATIVO' : 'DE_BAJA',
@@ -2037,7 +2053,7 @@ export default function PizarraMantenimiento() {
                       className="w-full p-2 border rounded rounded-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" 
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Tipo de Aceite</label>
                     <input 
                       type="text" 
@@ -2045,6 +2061,37 @@ export default function PizarraMantenimiento() {
                       onChange={(e) => setEditFichaData({ ...editFichaData, tipoAceite: e.target.value })} 
                       className="w-full p-2 border rounded rounded-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" 
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase mb-1 flex items-center justify-between">
+                      <span>Intervalo Mantención</span>
+                      <span className="text-[10px] lowercase text-slate-400 font-normal">({editFichaData.tipoIntervalo || 'KM'})</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="number" 
+                        step="1000"
+                        min="1000"
+                        value={editFichaData.intervaloMantenimiento} 
+                        onChange={(e) => setEditFichaData({ ...editFichaData, intervaloMantenimiento: e.target.value })} 
+                        className="w-full p-2 border-2 border-blue-200 dark:border-blue-800 rounded rounded-md dark:bg-slate-800 dark:text-slate-100 font-bold text-blue-700 dark:text-blue-300 focus:ring-2 focus:ring-blue-500" 
+                        placeholder="Ej: 10000 o 15000"
+                      />
+                      <select
+                        value={editFichaData.tipoIntervalo || 'KM'}
+                        onChange={(e) => setEditFichaData({ ...editFichaData, tipoIntervalo: e.target.value })}
+                        className="p-2 border rounded rounded-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 text-xs font-bold"
+                      >
+                        <option value="KM">KM</option>
+                        <option value="Horas">Horas</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="col-span-2 px-3 py-2 bg-blue-50/70 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                    <Wrench className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <span>
+                      <b>Recálculo Inteligente:</b> Al editar el intervalo, el sistema mantiene intacto el orden cronológico de las pautas del cronograma por marca/modelo y recalcula los KMs futuros proyectándolos desde el número redondo del último mantenimiento.
+                    </span>
                   </div>
                 </div>
 
