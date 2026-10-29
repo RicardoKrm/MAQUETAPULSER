@@ -563,7 +563,6 @@ export default function PizarraMantenimiento() {
         tipo_aceite: editFichaData.tipoAceite,
         intervalo_mantencion_km: nuevoIntervalo,
         intervalo_km: nuevoIntervalo,
-        tipo_intervalo: nuevoTipoIntervalo,
         en_operacion_activa: isActivo,
         estado: isActivo ? 'OPERATIVO' : 'DE_BAJA',
         detalles: {
@@ -596,7 +595,7 @@ export default function PizarraMantenimiento() {
 
       if (error) throw error;
 
-      // Update local state
+      // Update local modal state
       setFichaTecnicaVehiculo({
         ...fichaTecnicaVehiculo,
         marca: cleanMarca,
@@ -617,12 +616,32 @@ export default function PizarraMantenimiento() {
         detalles: payload.detalles
       });
       
+      // Update dataFlota reactively (0 ms) with newly recalculated future milestones
+      setDataFlota(prev => prev.map(item => {
+        if (String(item.id) === String(fichaTecnicaVehiculo.id)) {
+          const vehiculoActualizado = mapearVehiculoDB(
+            {
+              ...fichaTecnicaVehiculo,
+              ...payload,
+              id: fichaTecnicaVehiculo.id,
+              intervalo_mantencion_km: nuevoIntervalo,
+              intervalo_km: nuevoIntervalo,
+              detalles: payload.detalles
+            },
+            listaPautas || [],
+            otsDirectasEmpresa || []
+          );
+          return calcularDatosPizarra(vehiculoActualizado);
+        }
+        return item;
+      }));
+
       setIsEditingFicha(false);
 
       Swal.fire({
         title: 'Ficha Guardada',
         text: isActivo 
-          ? 'Ficha técnica actualizada exitosamente.' 
+          ? `Ficha técnica actualizada. Nuevo intervalo de ${nuevoIntervalo.toLocaleString('es-CL')} KM aplicado al cronograma.` 
           : 'El vehículo ha sido dado de baja. Ya no aparecerá en la pizarra activa ni generará cálculos de costos o GPS.',
         icon: 'success',
         timer: 2500,
@@ -633,6 +652,11 @@ export default function PizarraMantenimiento() {
       fetchVehiculos();
     } catch (e: any) {
       console.error('Error saving technical sheet:', e);
+      Swal.fire({
+        title: 'Error al Guardar',
+        text: e.message || 'No se pudieron guardar los cambios en la base de datos.',
+        icon: 'error'
+      });
     }
   };
 
