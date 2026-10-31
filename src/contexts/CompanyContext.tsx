@@ -34,6 +34,8 @@ interface CompanyContextType {
   expirationOptions: ExpirationOption[];
   addExpirationOption: (option: ExpirationOption) => void;
   isSuperAdmin: boolean;
+  isDemoMode: boolean;
+  setDemoMode: (isDemo: boolean) => void;
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -41,7 +43,7 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [activeCompanyId, setActiveCompanyId] = useState<string>('');
+  const [activeCompanyId, setActiveCompanyId] = useState<string>('161a47ac-9c63-435d-ab55-a6163a6805ab');
   const [expirationOptions, setExpirationOptions] = useState<ExpirationOption[]>(initialExpirationOptions);
 
   const gavalDemoCompany: Company = {
@@ -54,12 +56,10 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     usersCount: 5
   };
 
-  const isSuperAdmin = 
-    profile?.rol?.nombre === 'Súper Administrador' || 
-    profile?.rol?.nombre === 'Super Administrador' ||
-    profile?.rol?.nombre === 'Administrador' ||
-    profile?.rol?.nombre === 'Admin' ||
-    Boolean(profile?.email?.includes('gaval') || profile?.email?.includes('demo'));
+  // En la maqueta demo distribuida a prospectos, Super Admin está estrictamente inhabilitado
+  const isSuperAdmin = false;
+  const isDemoMode = true;
+  const setDemoMode = (_isDemo: boolean) => {};
 
   useEffect(() => {
     // Blindaje de confidencialidad comercial para clientes y prospectos:
@@ -67,13 +67,10 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     setActiveCompanyId('161a47ac-9c63-435d-ab55-a6163a6805ab');
     localStorage.setItem('superAdminTenantId', '161a47ac-9c63-435d-ab55-a6163a6805ab');
     setCompanies([gavalDemoCompany]);
-  }, [profile]); // activeCompanyId removed from deps to prevent reset
+  }, [profile]);
 
-  const switchTenant = (id: string) => {
-    if (isSuperAdmin) {
-      setActiveCompanyId(id);
-      localStorage.setItem('superAdminTenantId', id);
-    }
+  const switchTenant = (_id: string) => {
+    // Bloqueado en demo para impedir cambiar a clientes reales
   };
 
   const currentCompany = companies.find(c => c.id === activeCompanyId) || (companies.length > 0 ? companies[0] : undefined);
@@ -111,7 +108,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       toggleCompanyStatus, 
       expirationOptions, 
       addExpirationOption,
-      isSuperAdmin
+      isSuperAdmin,
+      isDemoMode,
+      setDemoMode
     }}>
       {children}
     </CompanyContext.Provider>

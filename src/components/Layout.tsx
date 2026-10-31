@@ -429,18 +429,21 @@ export default function Layout() {
       ["Súper Administrador", "Super Administrador", "Administrador", "Admin", "Gerencia"].includes(roleName) ||
       (typeof perms === 'object' && perms !== null && !Array.isArray(perms) && ((perms as any).all === true || (perms as any)['*'] === true));
 
+    const baseNav = (isDemoMode
+      ? navigation.filter((item) => item.title !== "Super Administrador" && !item.href?.includes("super-admin"))
+      : navigation
+    ).map((item) => {
+      if (item.submodules) {
+        return {
+          ...item,
+          submodules: item.submodules.filter((sub) => !sub.href?.includes("reservas")),
+        };
+      }
+      return item;
+    });
+
     if (isFullAccess) {
-      return navigation.map((item) => {
-        if (item.submodules) {
-          return {
-            ...item,
-            submodules: item.submodules.filter(
-              (sub) => sub.title !== "Crear Servicio",
-            ),
-          };
-        }
-        return item;
-      });
+      return baseNav;
     }
 
     // Explicit permissions configured in DB

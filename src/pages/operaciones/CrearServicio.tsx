@@ -26,7 +26,8 @@ type Servicio = {
 };
 
 export default function CrearServicio() {
-  const { activeCompanyId } = useCompany();
+  const { activeCompanyId, currentCompany } = useCompany();
+  const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
   const { profile } = useAuth();
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [contratosDisponibles, setContratosDisponibles] = useState<{ id: string; cliente: string }[]>([]);
@@ -125,7 +126,7 @@ export default function CrearServicio() {
 
       if (error) throw error;
 
-      const formattedServices: Servicio[] = (data || []).map((s: any) => ({
+      let formattedServices: Servicio[] = (data || []).map((s: any) => ({
         id: s.id,
         codigo: s.codigo || 'S-S/N',
         contrato: s.operacion_contrato?.cliente_razon_social || 'Sin contrato',
@@ -143,6 +144,72 @@ export default function CrearServicio() {
         ingreso: parseFloat(s.ingreso_esperado) || 0,
         costo: parseFloat(s.costo_estimado) || 0
       }));
+
+      if (isGavalDemo && formattedServices.length <= 1) {
+        const demoServices: Servicio[] = [
+          {
+            id: 'demo-srv-01',
+            codigo: 'SRV-INT-101',
+            contrato: 'Contrato Transporte Interurbano Troncal',
+            tipo: 'Traslado de Pasajeros',
+            subtipo: 'Interurbano Pasajeros',
+            origen: 'Terminal Los Héroes (Santiago)',
+            destino: 'Terminal Rodoviario (Antofagasta)',
+            fecha: new Date(Date.now() + 86400000).toISOString(),
+            conductor: 'Juan Carlos Pérez (A2/A3)',
+            unidad: 'PRYL49 - Bus Salón Cama',
+            estado: 'Programado',
+            ingreso: 3850000,
+            costo: 1920000
+          },
+          {
+            id: 'demo-srv-02',
+            codigo: 'SRV-MIN-204',
+            contrato: 'Contrato Minera Doña Inés de Collahuasi',
+            tipo: 'Minero (Turnos / Faena)',
+            subtipo: 'Turno Minero 7x7',
+            origen: 'Calama Centro',
+            destino: 'Campamento Mina Ujina (Collahuasi)',
+            fecha: new Date(Date.now() + 43200000).toISOString(),
+            conductor: 'Rodrigo Araya (A2/Ex. Altura)',
+            unidad: 'JPHK19 - Bus Minero Climatizado 4x4',
+            estado: 'En Ruta',
+            ingreso: 4200000,
+            costo: 2150000
+          },
+          {
+            id: 'demo-srv-03',
+            codigo: 'SRV-ESP-305',
+            contrato: 'Servicio Especial / Cotización Directa',
+            tipo: 'Servicios Especiales / Turismo',
+            subtipo: 'Servicio Especial Privado',
+            origen: 'Iquique Costanera',
+            destino: 'San Pedro de Atacama',
+            fecha: new Date(Date.now() + 172800000).toISOString(),
+            conductor: 'Mauricio Silva (A2)',
+            unidad: 'KRTC90 - Minibús Ejecutivo',
+            estado: 'Cotizado',
+            ingreso: 2450000,
+            costo: 980000
+          },
+          {
+            id: 'demo-srv-04',
+            codigo: 'SRV-INT-102',
+            contrato: 'Contrato Transporte Pasajeros Norte',
+            tipo: 'Traslado de Pasajeros',
+            subtipo: 'Interurbano Pasajeros',
+            origen: 'La Serena',
+            destino: 'Calama',
+            fecha: new Date(Date.now() - 86400000).toISOString(),
+            conductor: 'Carlos Valenzuela (A3)',
+            unidad: 'VSCG61 - Bus Doble Piso',
+            estado: 'Finalizado',
+            ingreso: 3400000,
+            costo: 1750000
+          }
+        ];
+        formattedServices = [...demoServices, ...formattedServices];
+      }
 
       setServicios(formattedServices);
 
@@ -649,21 +716,27 @@ export default function CrearServicio() {
                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Tipo de Carga</label>
                           <select value={newTipoCarga} onChange={e => setNewTipoCarga(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white">
                             <option value="">Seleccionar tipo...</option>
-                            <option value="Minero">Minero</option>
+                            <option value="Traslado de Pasajeros">Traslado de Pasajeros</option>
+                            <option value="Minero (Turnos / Faena)">Minero (Turnos / Faena)</option>
+                            <option value="Interurbano / Larga Distancia">Interurbano / Larga Distancia</option>
+                            <option value="Servicios Especiales / Turismo">Servicios Especiales / Turismo</option>
                             <option value="General / Logística">General / Logística</option>
                             <option value="Peligrosa / MATPEL">Peligrosa / MATPEL</option>
                             <option value="Sobredimensionada">Sobredimensionada</option>
-                            <option value="Personal">Personal</option>
                           </select>
                         </div>
                         <div>
                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Subtipo Operativo</label>
                           <select value={newSubtipo} onChange={e => setNewSubtipo(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white">
                             <option value="">Seleccionar subtipo...</option>
-                            <option value="Interprovincial">Interprovincial</option>
-                            <option value="Urbano">Urbano</option>
+                            <option value="Interurbano Pasajeros">Interurbano Pasajeros</option>
+                            <option value="Turno Minero 7x7">Turno Minero 7x7</option>
+                            <option value="Servicio Especial Privado">Servicio Especial Privado</option>
+                            <option value="Transfer / Turismo Aeropuerto">Transfer / Turismo Aeropuerto</option>
+                            <option value="Interprovincial Troncal">Interprovincial Troncal</option>
+                            <option value="Interno Faena Mina">Interno Faena Mina</option>
+                            <option value="Urbano / Última Milla">Urbano / Última Milla</option>
                             <option value="Internacional">Internacional</option>
-                            <option value="Interno Mina">Interno Mina</option>
                           </select>
                         </div>
                       </div>

@@ -773,7 +773,7 @@ export default function PizarraProgramacion() {
 
   const atrasadasOts = ordenesTrabajo.filter(ot => {
     if (ot.estado === 'FINALIZADA' || ot.estado === 'CERRADA_POR_MECANICO' || ot.estado === 'TERMINADA') return false;
-    const progDate = ot.fechaProgramada || ot.fechaCreacion;
+    const progDate = ot.fechaProgramada;
     if (!progDate) return false;
     const otDate = new Date(progDate.includes('T') ? progDate : `${progDate}T23:59:59`);
     return otDate.getTime() < new Date().getTime();

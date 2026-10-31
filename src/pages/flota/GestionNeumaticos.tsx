@@ -315,7 +315,8 @@ function DashboardNeumaticos() {
         </div>
       </div>
 
-      {/* Matriz de Toma de Decisión $/Calidad por Marca */}
+      {/* Matriz de Toma de Decisión $/Calidad por Marca (Exclusiva para Gaval Demo TMS) */}
+      {isGavalDemo && (
       <Card className="shadow-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
         <CardHeader className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -405,6 +406,7 @@ function DashboardNeumaticos() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Sidebar KPI Details Layer */}
       {selectedKpi && (

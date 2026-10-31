@@ -6,7 +6,8 @@ import { useCompany } from '../../contexts/CompanyContext';
 import Swal from 'sweetalert2';
 
 export default function GestionOperativa() {
-  const { activeCompanyId } = useCompany();
+  const { activeCompanyId, currentCompany } = useCompany();
+  const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
   const [empresa, setEmpresa] = useState<any>(null);
   const [vehiculos, setVehiculos] = useState<any[]>([]);
   const [repuestos, setRepuestos] = useState<any[]>([]);
@@ -168,7 +169,7 @@ export default function GestionOperativa() {
      let finalGasto = gasto;
      let finalInmovilizado = inmovilizado;
 
-     if (finalRRanking.length === 0) {
+     if (finalRRanking.length === 0 && isGavalDemo) {
         finalGasto = 16010000;
         finalInmovilizado = 45800000;
         finalRRanking = [
@@ -183,7 +184,7 @@ export default function GestionOperativa() {
         ];
      }
 
-     if (finalVRanking.length === 0 && vehiculos.length > 0) {
+     if (finalVRanking.length === 0 && vehiculos.length > 0 && isGavalDemo) {
         finalVRanking = vehiculos.slice(0, 8).map((v, idx) => ({
            id: v.id,
            patente: v.patente || `Unidad ${idx + 1}`,
@@ -250,8 +251,8 @@ export default function GestionOperativa() {
     document.body.removeChild(link);
   };
 
-  const totalPresupuesto = parseFloat(empresa?.detalles?.presupuesto_mensual || 0);
-  const cajaDisponible = totalPresupuesto - gastoReal;
+  const totalPresupuesto = parseFloat(empresa?.detalles?.presupuesto_mensual || 0) || (isGavalDemo ? 25000000 : 0);
+  const cajaDisponible = totalPresupuesto > 0 ? (totalPresupuesto - gastoReal) : 0;
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] xl:h-[calc(100vh-100px)]">

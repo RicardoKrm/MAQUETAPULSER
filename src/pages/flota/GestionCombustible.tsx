@@ -276,6 +276,8 @@ export default function GestionCombustible() {
           return String(valA).localeCompare(String(valB), undefined, { numeric: true });
         });
         setVehiculos(dataSorted);
+      } else {
+        setVehiculos([]);
       }
 
       if (rawCargas.length > 0) {
@@ -300,6 +302,8 @@ export default function GestionCombustible() {
           };
         });
         setCargasRegistradas(cargasNormalizadas);
+      } else {
+        setCargasRegistradas([]);
       }
     } catch (error) {
       console.error("Error fetching fuel data:", error);

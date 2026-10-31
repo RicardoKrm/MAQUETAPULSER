@@ -40,34 +40,24 @@ interface AppContextType {
 }
 
 const getStorageKeyOTs = (empresaId?: string | null) =>
-  empresaId ? `pulser_ordenes_trabajo_${empresaId}` : 'pulser_ordenes_trabajo';
+  empresaId ? `pulser_ordenes_trabajo_${empresaId}` : '';
 
 const loadLocalOTs = (empresaId?: string | null): OrdenDeTrabajo[] => {
+  if (!empresaId) return [];
   try {
-    if (empresaId) {
-      const cached = localStorage.getItem(getStorageKeyOTs(empresaId));
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) return parsed.filter((o: any) => !o.empresa_id || o.empresa_id === empresaId);
-      }
-      return [];
-    }
-    const cached = localStorage.getItem('pulser_ordenes_trabajo');
+    const cached = localStorage.getItem(`pulser_ordenes_trabajo_${empresaId}`);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.filter((o: any) => o.empresa_id === empresaId);
     }
   } catch (e) {}
   return [];
 };
 
 const saveLocalOTs = (ots: OrdenDeTrabajo[], empresaId?: string | null) => {
+  if (!empresaId) return;
   try {
-    if (empresaId) {
-      localStorage.setItem(getStorageKeyOTs(empresaId), JSON.stringify(ots));
-    } else {
-      localStorage.setItem('pulser_ordenes_trabajo', JSON.stringify(ots));
-    }
+    localStorage.setItem(`pulser_ordenes_trabajo_${empresaId}`, JSON.stringify(ots));
   } catch (e) {}
 };
 
@@ -399,7 +389,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const localOTs = loadLocalOTs(companyId);
         const merged: OrdenDeTrabajo[] = [...mappedDbOts];
         localOTs.forEach(lot => {
-          if ((!lot.empresa_id || lot.empresa_id === companyId) && !merged.some(m => m.id === lot.id || (lot.folio && m.folio === lot.folio))) {
+          if (lot.empresa_id === companyId && !merged.some(m => m.id === lot.id || (lot.folio && m.folio === lot.folio))) {
             const extraInsumos = insumosAll.filter((i: any) => i.orden_id === lot.id).map((i: any) => ({
               id: i.id,
               orden_id: i.orden_id,

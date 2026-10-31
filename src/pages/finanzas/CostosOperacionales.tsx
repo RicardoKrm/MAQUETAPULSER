@@ -6,7 +6,9 @@ import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 
 export default function CostosOperacionales() {
-  const { activeCompanyId } = useCompany();
+  const { activeCompanyId, currentCompany } = useCompany();
+  const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
+  const isAlvimar = currentCompany?.name?.toLowerCase().includes('alvimar');
   const [vehiculosStats, setVehiculosStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -90,7 +92,7 @@ export default function CostosOperacionales() {
 
            const ingresos = filteredRegistros.filter((r: any) => r.tipo === 'Ingreso');
            
-           if (gastosBase.length === 0) {
+           if (gastosBase.length === 0 && isGavalDemo) {
               gastosBase.push(
                  { nombre: 'Combustible Diésel Operacional', monto: 1318000 },
                  { nombre: 'Remuneraciones & Viáticos Conductor', monto: 690000 },
@@ -104,13 +106,16 @@ export default function CostosOperacionales() {
            
            const costoTotal = gastosBase.reduce((sum: number, r: any) => sum + r.monto, 0);
            const ingresoCalc = ingresos.reduce((sum: number, r: any) => sum + Number(r.monto || 0), 0);
-           const ingresoTotal = ingresoCalc > 0 ? ingresoCalc : 4950000;
+           const ingresoTotal = ingresoCalc > 0 
+              ? ingresoCalc 
+              : (isGavalDemo ? 4950000 : (isAlvimar ? 5500000 : 0));
            const ganancia = ingresoTotal - costoTotal;
            
            let estado = 'normal';
            if (costoTotal > ingresoTotal && ingresoTotal > 0) estado = 'alerta';
-           else if (ganancia > costoTotal * 1.5) estado = 'excelente';
+           else if (ganancia > costoTotal * 1.5 && costoTotal > 0) estado = 'excelente';
            else if (costoTotal > 0 && ingresoTotal === 0) estado = 'regular';
+           else if (costoTotal === 0 && ingresoTotal === 0) estado = 'normal';
            
            return {
              id: v.id,

@@ -47,17 +47,6 @@ import {
 
 export const navigation = [
   {
-    title: 'Super Administrador',
-    icon: Settings,
-    href: '/super-admin',
-    submodules: [
-      { title: 'Gestión de Empresas', icon: Briefcase, href: '/super-admin/empresas' },
-      { title: 'Gestión de Perfiles y Permisos', icon: Users, href: '/super-admin/perfiles' },
-      { title: 'Visión de Evolución', icon: TrendingUp, href: '/super-admin/vision-evolucion' },
-      { title: 'Log de Actividad', icon: Activity, href: '/super-admin/actividad' },
-    ],
-  },
-  {
     title: 'Dashboard & Estrategia',
     icon: BarChart3,
     href: '/dashboard',
@@ -76,7 +65,7 @@ export const navigation = [
     href: '/operaciones',
     submodules: [
       { title: 'Contratos Clientes', icon: Briefcase, href: '/operaciones/contratos' },
-      { title: 'Crear Servicio', icon: ClipboardList, href: '/operaciones/servicios' },
+      { title: 'Programación de Servicios', icon: ClipboardList, href: '/operaciones/servicios' },
       { title: 'Servicios SPOT & Rental', icon: Zap, href: '/operaciones/spot' },
       { title: 'Mantenedores', icon: ClipboardList, href: '/operaciones/mantenedores' },
       { title: 'Programación', icon: CalendarClock, href: '/operaciones/programacion' },
