@@ -73,6 +73,7 @@ function DashboardNeumaticos() {
     chartData: [] as any[]
   });
   const { currentCompany } = useCompany();
+  const isGavalDemo = currentCompany?.id === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
 
   useEffect(() => {
     const loadDashboardInfo = async () => {
@@ -91,9 +92,27 @@ function DashboardNeumaticos() {
         console.warn('Fallback a mock neumaticos:', e);
       }
 
-      // Si la BD no tiene neumáticos para Gaval demo, usar el dataset completo de 52 unidades
-      if (tiresData.length === 0) {
+      // Si la BD no tiene neumáticos para Gaval demo, usar el dataset completo de 52 unidades ÚNICAMENTE si es Demo
+      if (tiresData.length === 0 && isGavalDemo) {
         tiresData = MOCK_NEUMATICOS;
+      }
+
+      if (tiresData.length === 0) {
+        setStats({
+          totalCosto: 0,
+          totalKm: 0,
+          cpkPromedio: 0,
+          neumaticosActivos: 0,
+          neumaticosMontados: 0,
+          neumaticosBodega: 0,
+          alertasCriticas: 0,
+          alertasCriticasList: [],
+          ahorroEstimado: 0,
+          ahorroRenuevo: 0,
+          ahorroCombustible: 0,
+          chartData: []
+        });
+        return;
       }
 
       let totalCost = 0;
@@ -513,6 +532,7 @@ function InventarioNeumaticos() {
   const [filtroEstado, setFiltroEstado] = useState('Todos los estados');
   const [searchTerm, setSearchTerm] = useState('');
   const { currentCompany } = useCompany();
+  const isGavalDemo = currentCompany?.id === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
 
   useEffect(() => {
     const fetchBodegas = async () => {
@@ -540,7 +560,7 @@ function InventarioNeumaticos() {
           }
         }
 
-        if (items.length === 0) {
+        if (items.length === 0 && isGavalDemo) {
           items = MOCK_NEUMATICOS;
         }
 
@@ -577,7 +597,7 @@ function InventarioNeumaticos() {
         setInventory(mappedData);
       } catch (err) {
         console.error("Error fetching neumaticos:", err);
-        setInventory(MOCK_NEUMATICOS);
+        setInventory(isGavalDemo ? MOCK_NEUMATICOS : []);
       } finally {
         setLoading(false);
       }

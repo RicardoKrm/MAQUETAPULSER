@@ -44,8 +44,10 @@ export default function DashboardFinanzas() {
   const [periodo, setPeriodo] = useState('2026-10'); // Octubre 2026
   const [moneda, setMoneda] = useState<'CLP' | 'UF'>('CLP');
 
-  // Datos financieros consolidados del mes de Octubre 2026 (Transporte Minero)
-  const metricas = {
+  const isGavalDemo = currentCompany?.id === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
+
+  // Datos financieros consolidados del mes de Octubre 2026 (Transporte Minero) - Solo para Gaval Demo
+  const metricas = isGavalDemo ? {
     ingresosTotales: 148500000,
     costosOperacionales: 94200000,
     margenBruto: 54300000,
@@ -59,10 +61,24 @@ export default function DashboardFinanzas() {
     margenPorKm: 432,
     litrosCombustible: 48600,
     rendimientoCombustible: 2.59 // km/L
+  } : {
+    ingresosTotales: 0,
+    costosOperacionales: 0,
+    margenBruto: 0,
+    margenBrutoPct: 0,
+    gastosGA: 0,
+    ebitda: 0,
+    ebitdaPct: 0,
+    kmTotalesMes: 0,
+    costoPorKm: 0,
+    ingresoPorKm: 0,
+    margenPorKm: 0,
+    litrosCombustible: 0,
+    rendimientoCombustible: 0
   };
 
   // Desglose de Ingresos por Contrato Minero
-  const ingresosPorContrato = [
+  const ingresosPorContrato = isGavalDemo ? [
     {
       contrato: 'Minera Doña Inés de Collahuasi',
       faena: 'Cordillera / Ujina',
@@ -90,20 +106,20 @@ export default function DashboardFinanzas() {
       estado: 'Al Día',
       cumplimiento: 95.0
     }
-  ];
+  ] : [];
 
   // Desglose de Costos Directos OPEX
-  const desgloseOpex = [
+  const desgloseOpex = isGavalDemo ? [
     { item: 'Combustible Diésel (ENAP / Copec)', monto: 39560000, porcentaje: 42.0, color: '#3b82f6' },
     { item: 'Remuneraciones & Viáticos Tripulación', monto: 20720000, porcentaje: 22.0, color: '#10b981' },
     { item: 'Mantenimiento Preventivo & Correctivo OTs', monto: 16010000, porcentaje: 17.0, color: '#f59e0b' },
     { item: 'Neumáticos Nuevos & Recauchaje Bandag', monto: 10360000, porcentaje: 11.0, color: '#8b5cf6' },
     { item: 'Peajes, TAG & Pesajes MOP', monto: 4710000, porcentaje: 5.0, color: '#ec4899' },
     { item: 'Seguros de Flota & Permisos Mineros', monto: 2840000, porcentaje: 3.0, color: '#64748b' }
-  ];
+  ] : [];
 
   // Tendencia Mensual Histórica Enero - Octubre 2026
-  const evolucionMensual = [
+  const evolucionMensual = isGavalDemo ? [
     { mes: 'Ene', ingresos: 122000000, costos: 81000000, margen: 41000000, ebitda: 31000000 },
     { mes: 'Feb', ingresos: 128000000, costos: 83500000, margen: 44500000, ebitda: 33200000 },
     { mes: 'Mar', ingresos: 135000000, costos: 87000000, margen: 48000000, ebitda: 36500000 },
@@ -114,10 +130,10 @@ export default function DashboardFinanzas() {
     { mes: 'Ago', ingresos: 145000000, costos: 92800000, margen: 52200000, ebitda: 40100000 },
     { mes: 'Sep', ingresos: 143000000, costos: 91200000, margen: 51800000, ebitda: 39800000 },
     { mes: 'Oct', ingresos: 148500000, costos: 94200000, margen: 54300000, ebitda: 41850000 }
-  ];
+  ] : [];
 
   // Estados de Pago / Facturación Activa
-  const estadosDePago = [
+  const estadosDePago = isGavalDemo ? [
     {
       folio: 'EP-COL-2026-10',
       cliente: 'Minera Doña Inés de Collahuasi SCM',
@@ -154,7 +170,7 @@ export default function DashboardFinanzas() {
       estado: 'PAGADO',
       diasCobro: 0
     }
-  ];
+  ] : [];
 
   return (
     <div className="p-4 md:p-6 space-y-6">

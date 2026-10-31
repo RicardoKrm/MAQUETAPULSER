@@ -28,7 +28,8 @@ export default function Trazabilidad() {
       if (!error && data && data.length > 0) {
          setServicios(data);
       } else {
-         setServicios([
+         const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab';
+         setServicios(isGavalDemo ? [
            {
              id: 'srv-01',
              nombre: 'Transporte Concentrado Ujina - Cordillera',
@@ -59,7 +60,7 @@ export default function Trazabilidad() {
                { id: 'prog-03', estado: 'Completado', conductor: { nombre: 'Roberto Sanhueza' }, vehiculo: { patente: 'DEMO08' } }
              ]
            }
-         ]);
+         ] : []);
       }
     } catch (e) {
       console.error(e);

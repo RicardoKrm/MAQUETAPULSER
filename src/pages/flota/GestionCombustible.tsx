@@ -246,9 +246,10 @@ export default function GestionCombustible() {
       let rawVehiculos = vehiculoRes.data || [];
       let rawCargas = cargasRes.data || [];
 
-      // Si la empresa actual no tiene registros cargados (por ejemplo en Imperia o tenants sin datos),
-      // vincular automáticamente a las 90 cargas de combustible y vehículos de Gaval Demo TMS para que el dashboard siempre muestre datos completos
-      if (rawCargas.length === 0) {
+      const isGavalDemo = currentCompany.id === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany.name?.toLowerCase().includes('demo');
+
+      // Solo vincular automáticamente a las cargas y vehículos de Gaval Demo si la empresa activa ES Gaval Demo TMS
+      if (rawCargas.length === 0 && isGavalDemo) {
         const [cargasFallback, vehiculosFallback] = await Promise.all([
           supabase.from('registro_combustible').select('*').eq('empresa_id', '161a47ac-9c63-435d-ab55-a6163a6805ab').order('fecha', { ascending: false }),
           supabase.from('vehiculo').select('*').eq('empresa_id', '161a47ac-9c63-435d-ab55-a6163a6805ab')

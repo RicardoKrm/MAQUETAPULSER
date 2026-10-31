@@ -39,13 +39,14 @@ export default function EvaluacionEmpresa() {
 
          setEmpresasEval(arr);
       } else {
-         setEmpresasEval([
+         const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab';
+         setEmpresasEval(isGavalDemo ? [
            { id: 'prov-01', empresa: 'Copec Combustibles S.A.', rut: '99.520.000-7', contratosActivos: 2, ticketPromedio: 19780000, nivelRiesgo: 'Bajo', salud: 'Excelente' },
            { id: 'prov-02', empresa: 'Bandag Chile / Bridgestone', rut: '96.850.120-K', contratosActivos: 1, ticketPromedio: 5180000, nivelRiesgo: 'Bajo', salud: 'Excelente' },
            { id: 'prov-03', empresa: 'Scania Chile S.A. Taller', rut: '89.740.300-4', contratosActivos: 2, ticketPromedio: 8005000, nivelRiesgo: 'Bajo', salud: 'Excelente' },
            { id: 'prov-04', empresa: 'Autopistas de Antofagasta S.A.', rut: '76.430.220-1', contratosActivos: 1, ticketPromedio: 2355000, nivelRiesgo: 'Bajo', salud: 'Excelente' },
            { id: 'prov-05', empresa: 'BCI Seguros Generales', rut: '99.140.000-2', contratosActivos: 1, ticketPromedio: 2840000, nivelRiesgo: 'Bajo', salud: 'Excelente' }
-         ]);
+         ] : []);
       }
     } catch (e) {
       console.error(e);

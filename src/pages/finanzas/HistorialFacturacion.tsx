@@ -39,7 +39,9 @@ export default function HistorialFacturacion() {
          });
       }
 
-      if (allRegistros.length === 0) {
+      const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab';
+
+      if (allRegistros.length === 0 && isGavalDemo) {
         allRegistros = [
           { fecha: '2026-10-28', tipo: 'Costo/Egreso', categoria: 'Combustible Diésel', origen: 'Flota General', origenDetalle: 'Copec ENAP Diésel', descripcion: 'Suministro de combustible troncal minero', monto: 39560000 },
           { fecha: '2026-10-25', tipo: 'Ingreso', categoria: 'Contrato Minero', origen: 'Mandante', origenDetalle: 'Minera Collahuasi (EP-COL-2026-10)', descripcion: 'Facturación Transporte Concentrado Ujina', monto: 74200000 },

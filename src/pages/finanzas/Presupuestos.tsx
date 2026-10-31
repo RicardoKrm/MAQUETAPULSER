@@ -33,9 +33,11 @@ export default function Presupuestos() {
       const { data: empData, error: empErr } = await supabase.from('empresa').select('id, detalles').eq('id', activeCompanyId).single();
       const { data: vehData, error: vehErr } = await supabase.from('vehiculo').select('id, patente, detalles').eq('empresa_id', activeCompanyId);
 
-      // Cargar presupuestos de empresa con fallback consistente
+      const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab';
+
+      // Cargar presupuestos de empresa con fallback consistente ÚNICAMENTE para Gaval Demo
       let empBudgets = empData?.detalles?.presupuestos || [];
-      if (empBudgets.length === 0) {
+      if (empBudgets.length === 0 && isGavalDemo) {
         empBudgets = [
           { id: 'pres-01', name: 'Combustible Diésel Operacional', category: 'Operaciones y Servicios', total: 42000000, period: 'Mensual', alertThreshold: 90, created_at: '2026-10-01' },
           { id: 'pres-02', name: 'Remuneraciones y Viáticos Conducción', category: 'Operaciones y Servicios', total: 22000000, period: 'Mensual', alertThreshold: 85, created_at: '2026-10-01' },

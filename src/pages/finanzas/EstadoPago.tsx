@@ -40,8 +40,10 @@ export default function EstadoPago() {
          });
       }
 
-      // Fallback consistente con DashboardFinanzas si la BD no tiene registros cargados
-      if (allRegistros.length === 0) {
+      const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab';
+
+      // Fallback consistente con DashboardFinanzas ÚNICAMENTE si es Gaval Demo
+      if (allRegistros.length === 0 && isGavalDemo) {
         allRegistros = [
           {
             id: 'ep-01',
