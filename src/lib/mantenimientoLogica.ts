@@ -291,7 +291,7 @@ export interface FilaPizarraMantenimiento {
     
     // Análisis de Desviación
     cumplimiento: "NORMAL" | "ANTICIPADO" | "RETRASADO" | "N/A"; // 6. Cumplimiento
-    estatus: "NORMAL" | "PROXIMO" | "VENCIDO";                   // 7. Estatus
+    estatus: "NORMAL" | "PROXIMO" | "EN_TIEMPO" | "VENCIDO";     // 7. Estatus
     kmVencido: number | null;                                    // 8. Km Vencido
     pautaVencida: string | null;                                 // 9. Pauta Vencida
     
@@ -356,7 +356,7 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
     const intervalo = vehiculo.intervaloMantencionKm;
     
     let cumplimiento: "NORMAL" | "ANTICIPADO" | "RETRASADO" | "N/A" = "N/A";
-    let estatus: "NORMAL" | "PROXIMO" | "VENCIDO" = "NORMAL";
+    let estatus: "NORMAL" | "PROXIMO" | "EN_TIEMPO" | "VENCIDO" = "NORMAL";
     let kmVencido: number | null = null;
     let kmProximo: number | null = null;
     let fechaProxima: Date | null = null;
@@ -403,13 +403,20 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         proximoHitoVencimiento = hitoProximo.iteracion_km;
         tipoProximoMantencion = hitoProximo.nombre.split('-')[0].trim();
 
-        if (kmActual >= proximoHitoVencimiento) {
-            // El vehículo superó el kilometraje de su próximo mantenimiento: está VENCIDO
+        const tolerancia = (intervalo > 0 ? intervalo : 10000) * 0.10; // Tolerancia técnica del +10%
+
+        if (kmActual > (proximoHitoVencimiento + tolerancia)) {
+            // El vehículo superó el límite superior de tolerancia (+10% + 1 km): está VENCIDO
             estatus = "VENCIDO";
-            kmVencido = kmActual - proximoHitoVencimiento;
+            kmVencido = Math.round(kmActual - (proximoHitoVencimiento + tolerancia));
             pautaVencidaStr = tipoProximoMantencion;
+        } else if (kmActual >= proximoHitoVencimiento) {
+            // El vehículo alcanzó el hito pero está dentro de la ventana de tolerancia (+10%): EN TIEMPO
+            estatus = "EN_TIEMPO";
+            kmVencido = null;
+            pautaVencidaStr = null;
         } else {
-            // No está vencido: evaluar si está próximo (dentro del 25% del intervalo)
+            // No ha llegado al hito: evaluar si está próximo (dentro del 25% del intervalo o ventana de aviso)
             const kmsFaltantes = proximoHitoVencimiento - kmActual;
             if (intervalo > 0 && kmsFaltantes <= (intervalo * 0.25)) {
                 estatus = "PROXIMO";
@@ -424,12 +431,17 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         if (kmUltimo > 0 && intervalo > 0) {
             const kmUltimoRedondeado = Math.round(kmUltimo / intervalo) * intervalo;
             const primerHito = kmUltimoRedondeado + intervalo;
+            const tolerancia = intervalo * 0.10;
 
             proximoHitoVencimiento = primerHito;
-            if (kmActual >= primerHito) {
-                kmVencido = kmActual - primerHito;
+            if (kmActual > (primerHito + tolerancia)) {
+                kmVencido = Math.round(kmActual - (primerHito + tolerancia));
                 estatus = "VENCIDO";
                 pautaVencidaStr = `Mant. de ${primerHito.toLocaleString('es-CL')} km`;
+            } else if (kmActual >= primerHito) {
+                estatus = "EN_TIEMPO";
+                kmVencido = null;
+                pautaVencidaStr = null;
             } else {
                 const kmsFaltantes = primerHito - kmActual;
                 if (kmsFaltantes <= (intervalo * 0.25)) {
