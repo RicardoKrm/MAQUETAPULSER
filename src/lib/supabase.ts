@@ -10,20 +10,130 @@ if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'https://example.supabas
 const rawSupabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
- * Motor de Sandbox Local para Maqueta Comercial Pulser TMS:
- * - Operaciones SELECT: Pasan directamente a la base de datos central en Supabase (Solo Lectura).
- * - Operaciones INSERT / UPDATE / UPSERT / DELETE: Son interceptadas y simuladas con éxito localmente,
- *   sin enviar modificaciones ni borrados a la base de datos maestra.
- * - Esto garantiza que múltiples clientes puedan probar y jugar con la plataforma simultáneamente
- *   sin generar conflictos ni alterar los datos de origen de Pulser Gaval Demo.
+ * Almacenamiento de Sandbox Local en sessionStorage:
+ * - Persiste las manipulaciones de datos durante toda la sesión del usuario/prospecto.
+ * - Evita que un auto-refresh o cambio de pestaña revierta los cambios realizados en demo.
+ * - Se reinicia automáticamente cuando el usuario cierra la pestaña o navegador.
+ */
+interface SessionStore {
+  updates: Record<string, any>;
+  inserts: any[];
+  deletes: string[];
+}
+
+function getSessionTableStore(table: string): SessionStore {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return { updates: {}, inserts: [], deletes: [] };
+  }
+  try {
+    const raw = window.sessionStorage.getItem(`sandbox_${table}`);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { updates: {}, inserts: [], deletes: [] };
+}
+
+function saveSessionTableStore(table: string, store: SessionStore) {
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
+  try {
+    window.sessionStorage.setItem(`sandbox_${table}`, JSON.stringify(store));
+  } catch (e) {}
+}
+
+function applySessionToRows(table: string, data: any): any {
+  if (!data) return data;
+  const store = getSessionTableStore(table);
+  
+  if (Array.isArray(data)) {
+    // 1. Filtrar registros eliminados en esta sesión
+    let result = data.filter((r: any) => {
+      const key = String(r.id || r.numero_interno || r.patente || '');
+      return !store.deletes.includes(key);
+    });
+
+    // 2. Fusionar actualizaciones de la sesión
+    result = result.map((r: any) => {
+      const idKey = r.id ? String(r.id) : null;
+      const patKey = r.patente ? String(r.patente) : null;
+      const numKey = r.numero_interno ? String(r.numero_interno) : null;
+
+      const patch = (idKey && store.updates[idKey]) || (patKey && store.updates[patKey]) || (numKey && store.updates[numKey]);
+      if (patch) {
+        return {
+          ...r,
+          ...patch,
+          detalles: {
+            ...(r.detalles || {}),
+            ...(patch.detalles || {})
+          }
+        };
+      }
+      return r;
+    });
+
+    // 3. Añadir registros insertados localmente en esta sesión
+    if (store.inserts && store.inserts.length > 0) {
+      result = [...result, ...store.inserts];
+    }
+
+    return result;
+  }
+
+  // Objeto individual (single / maybeSingle)
+  if (typeof data === 'object') {
+    const idKey = data.id ? String(data.id) : null;
+    const patKey = data.patente ? String(data.patente) : null;
+    const patch = (idKey && store.updates[idKey]) || (patKey && store.updates[patKey]);
+    if (patch) {
+      return {
+        ...data,
+        ...patch,
+        detalles: {
+          ...(data.detalles || {}),
+          ...(patch.detalles || {})
+        }
+      };
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Motor de Sandbox Local para Maqueta Comercial Pulser TMS
  */
 function createSandboxBuilder(table: string, op: 'insert' | 'update' | 'upsert' | 'delete', payload: any) {
   let isSingle = false;
+  let targetId: string | null = null;
+
   const builder: any = {
     _table: table,
     _op: op,
     _payload: payload,
     then(onFulfilled: any, onRejected: any) {
+      const store = getSessionTableStore(table);
+
+      if (op === 'update' || op === 'upsert') {
+        const key = targetId || (payload && (payload.id ? String(payload.id) : (payload.patente ? String(payload.patente) : null)));
+        if (key) {
+          store.updates[key] = {
+            ...(store.updates[key] || {}),
+            ...payload
+          };
+          saveSessionTableStore(table, store);
+        }
+      } else if (op === 'insert') {
+        const toAdd = Array.isArray(payload) ? payload : [payload];
+        store.inserts.push(...toAdd);
+        saveSessionTableStore(table, store);
+      } else if (op === 'delete' && targetId) {
+        if (!store.deletes.includes(targetId)) {
+          store.deletes.push(targetId);
+          saveSessionTableStore(table, store);
+        }
+      }
+
+      console.info(`🛡️ [Sandbox Demo] Operación "${op.toUpperCase()}" en tabla "${table}" persistida en sessionStorage local.`);
+
       let resultData = payload;
       if (Array.isArray(payload)) {
         resultData = isSingle ? (payload[0] || null) : payload;
@@ -32,8 +142,6 @@ function createSandboxBuilder(table: string, op: 'insert' | 'update' | 'upsert' 
       } else {
         resultData = null;
       }
-
-      console.info(`🛡️ [Sandbox Demo] Operación "${op.toUpperCase()}" en tabla "${table}" simulada localmente (Base de datos central protegida).`);
 
       const response = {
         data: resultData,
@@ -47,7 +155,7 @@ function createSandboxBuilder(table: string, op: 'insert' | 'update' | 'upsert' 
   };
 
   const chainMethods = [
-    'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike', 'is', 'in', 'contains', 
+    'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike', 'is', 'in', 'contains', 
     'containedBy', 'rangeGt', 'rangeGte', 'rangeLt', 'rangeLte', 'rangeAdjacent', 
     'overlaps', 'textSearch', 'match', 'not', 'or', 'filter', 'order', 'limit', 
     'range', 'abortSignal', 'select', 'csv'
@@ -58,6 +166,13 @@ function createSandboxBuilder(table: string, op: 'insert' | 'update' | 'upsert' 
       return builder;
     };
   });
+
+  builder.eq = function(column: string, value: any) {
+    if (column === 'id' || column === 'patente' || column === 'numero_interno') {
+      targetId = String(value);
+    }
+    return builder;
+  };
 
   builder.single = function() {
     isSingle = true;
@@ -70,6 +185,35 @@ function createSandboxBuilder(table: string, op: 'insert' | 'update' | 'upsert' 
   };
 
   return builder;
+}
+
+function wrapQueryBuilder(table: string, qb: any): any {
+  return new Proxy(qb, {
+    get(target: any, prop: string | symbol) {
+      if (prop === 'then') {
+        return function(onFulfilled: any, onRejected: any) {
+          return target.then((res: any) => {
+            if (res && res.data) {
+              res.data = applySessionToRows(table, res.data);
+            }
+            return res;
+          }).then(onFulfilled, onRejected);
+        };
+      }
+      const orig = target[prop];
+      if (typeof orig === 'function') {
+        return function(...args: any[]) {
+          const res = orig.apply(target, args);
+          // Si el resultado de encadenar (.eq, .order, etc.) es el builder o promesa, envolverlo
+          if (res && (typeof res === 'object' || typeof res === 'function')) {
+            return wrapQueryBuilder(table, res);
+          }
+          return res;
+        };
+      }
+      return orig;
+    }
+  });
 }
 
 export const supabase: any = new Proxy(rawSupabase, {
@@ -90,6 +234,12 @@ export const supabase: any = new Proxy(rawSupabase, {
             }
             if (tableProp === 'delete') {
               return () => createSandboxBuilder(table, 'delete', null);
+            }
+            if (tableProp === 'select') {
+              return (...args: any[]) => {
+                const qb = tableTarget.select(...args);
+                return wrapQueryBuilder(table, qb);
+              };
             }
             const orig = tableTarget[tableProp];
             if (typeof orig === 'function') {
