@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://example.supabase.co';
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'public-anon-key';
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://lafhpegjexgbjoxdqxxw.supabase.co';
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2H9RF-gipot9S7pre2NPOQ_2KnywGqP';
 
 if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'https://example.supabase.co') {
   console.warn('Faltan las variables de entorno de Supabase. Algunas funcionalidades pueden fallar.');

@@ -9,8 +9,8 @@ import * as xlsx from "xlsx";
 
 dotenv.config();
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || "";
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://lafhpegjexgbjoxdqxxw.supabase.co";
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_2H9RF-gipot9S7pre2NPOQ_2KnywGqP";
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 async function startServer() {
