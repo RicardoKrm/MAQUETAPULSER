@@ -585,6 +585,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           return {
             id: v.id,
+            empresa_id: v.empresa_id,
+            empresaId: v.empresa_id,
             patente: v.patente || v.numero_interno || 'Sin Patente',
             numeroInterno: v.numero_interno?.toString() || '',
             numero_interno: v.numero_interno?.toString() || '',

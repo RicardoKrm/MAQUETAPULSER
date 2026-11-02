@@ -23,11 +23,11 @@ export default function KpiFlota() {
     const hasta = new Date();
     const desde = new Date();
     if (tipo === 'mensual') {
-      desde.setDate(desde.getDate() - 30);
+      desde.setDate(desde.getDate() - 29);
     } else if (tipo === 'trimestral') {
-      desde.setDate(desde.getDate() - 90);
+      desde.setDate(desde.getDate() - 89);
     } else {
-      desde.setDate(desde.getDate() - 365);
+      desde.setDate(desde.getDate() - 364);
     }
     return {
       desdeStr: desde.toISOString().split('T')[0],
@@ -66,14 +66,16 @@ export default function KpiFlota() {
     globalConf,
     horasOperacionGlobal,
     horasTotalesGlobal,
+    horasTallerGlobal,
     numeroFallasGlobal,
     diasPeriodoGlobal,
+    vCountGlobal,
     marcasDisponibles,
     modelosDisponibles
   } = useMemo(() => {
     const currentEmpresaId = currentCompany?.id;
     // 1. Filtrar vehículos de la empresa activa
-    const vehiculosEmpresa = (vehiculos || []).filter((v: any) => !currentEmpresaId || v.empresa_id === currentEmpresaId);
+    const vehiculosEmpresa = (vehiculos || []).filter((v: any) => !currentEmpresaId || !v.empresa_id || v.empresa_id === currentEmpresaId);
 
     // Opciones para filtros de Marca y Modelo
     const marcasDisponibles = Array.from(new Set(vehiculosEmpresa.map((v: any) => v.marca).filter(Boolean))) as string[];
@@ -147,8 +149,14 @@ export default function KpiFlota() {
     ];
 
     // 5. Cálculo estricto de MTBF y Disponibilidad según estándar de confiabilidad:
-    // Días del período
-    const diasPeriodo = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    // Días del período nominales según estándar operacional
+    let diasPeriodo = 90;
+    if (periodoTipo === 'mensual') diasPeriodo = 30;
+    else if (periodoTipo === 'trimestral') diasPeriodo = 90;
+    else if (periodoTipo === 'anual') diasPeriodo = 365;
+    else {
+      diasPeriodo = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    }
     const vCount = Math.max(1, vehiculosFiltrados.length);
     const horasTotalesPeriodo = diasPeriodo * 24 * vCount;
 
@@ -335,12 +343,14 @@ export default function KpiFlota() {
       globalConf: globalConfVal,
       horasOperacionGlobal: Math.round(horasOperacion),
       horasTotalesGlobal: horasTotalesPeriodo,
+      horasTallerGlobal: Math.round(horasTallerPeriodo),
       numeroFallasGlobal: numeroFallas,
       diasPeriodoGlobal: diasPeriodo,
+      vCountGlobal: vCount,
       marcasDisponibles,
       modelosDisponibles
     };
-  }, [ordenesTrabajo, vehiculos, currentCompany?.id, fechaDesde, fechaHasta, filtroMarca, filtroModelo]);
+  }, [ordenesTrabajo, vehiculos, currentCompany?.id, fechaDesde, fechaHasta, filtroMarca, filtroModelo, periodoTipo]);
 
   // Overall calculations
   const globalPrevPct = totales.totalOTs > 0 ? (totales.prevCount / totales.totalOTs) * 100 : 0;
@@ -352,58 +362,152 @@ export default function KpiFlota() {
 
   const renderSidebarContent = () => {
     switch (activeDetail) {
-      case 'disponibilidad':
+      case 'disponibilidad': {
+        const infoPeriodo = {
+          mensual: {
+            tag: 'MENSUAL (30 DÍAS)',
+            dias: 30,
+            hrsBase: 720,
+            formulaNominal: 'Disponibilidad Mensual = [ Horas Operación / (30 días × 24h × N_vehículos) ] × 100',
+            formulaNumerica: `D = [ ${horasOperacionGlobal.toLocaleString('es-CL')}h / (720h × ${vCountGlobal}) ] × 100 = ${globalDisp}%`,
+            explicacion: 'Mide la disponibilidad física en la ventana móvil de 30 días continuos (base teórica de 720 horas por cada vehículo de la flota activa).'
+          },
+          trimestral: {
+            tag: 'TRIMESTRAL (90 DÍAS)',
+            dias: 90,
+            hrsBase: 2160,
+            formulaNominal: 'Disponibilidad Trimestral = [ Horas Operación / (90 días × 24h × N_vehículos) ] × 100',
+            formulaNumerica: `D = [ ${horasOperacionGlobal.toLocaleString('es-CL')}h / (2.160h × ${vCountGlobal}) ] × 100 = ${globalDisp}%`,
+            explicacion: 'Mide la disponibilidad física del trimestre móvil (base teórica de 2.160 horas por cada vehículo), estándar para reportes operativos trimestrales.'
+          },
+          anual: {
+            tag: 'ANUAL (365 DÍAS)',
+            dias: 365,
+            hrsBase: 8760,
+            formulaNominal: 'Disponibilidad Anual = [ Horas Operación / (365 días × 24h × N_vehículos) ] × 100',
+            formulaNumerica: `D = [ ${horasOperacionGlobal.toLocaleString('es-CL')}h / (8.760h × ${vCountGlobal}) ] × 100 = ${globalDisp}%`,
+            explicacion: 'Mide la disponibilidad física consolidada del año móvil (base teórica de 8.760 horas por cada vehículo), estándar internacional de confiabilidad de activos (SMRP / ISO 14224).'
+          },
+          personalizado: {
+            tag: `PERSONALIZADO (${diasPeriodoGlobal} DÍAS)`,
+            dias: diasPeriodoGlobal,
+            hrsBase: diasPeriodoGlobal * 24,
+            formulaNominal: `Disponibilidad Dinámica = [ Horas Operación / (${diasPeriodoGlobal} días × 24h × N_vehículos) ] × 100`,
+            formulaNumerica: `D = [ ${horasOperacionGlobal.toLocaleString('es-CL')}h / (${(diasPeriodoGlobal * 24).toLocaleString('es-CL')}h × ${vCountGlobal}) ] × 100 = ${globalDisp}%`,
+            explicacion: `Mide la disponibilidad en el rango de fechas seleccionado entre ${fechaDesde} y ${fechaHasta} (${diasPeriodoGlobal} días calendario).`
+          }
+        }[periodoTipo] || {
+          tag: 'TRIMESTRAL (90 DÍAS)',
+          dias: 90,
+          hrsBase: 2160,
+          formulaNominal: 'Disponibilidad = [ Horas Operación / Horas Calendario ] × 100',
+          formulaNumerica: `D = [ ${horasOperacionGlobal.toLocaleString('es-CL')}h / ${horasTotalesGlobal.toLocaleString('es-CL')}h ] × 100 = ${globalDisp}%`,
+          explicacion: 'Mide la disponibilidad física de la flota en el período analizado.'
+        };
+
         return (
           <>
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-start">
               <div className="pr-4">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">Detalle: Disponibilidad Física</h2>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mt-2">Cálculo de Disponibilidad</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">Detalle: Disponibilidad Física</h2>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                    {infoPeriodo.tag}
+                  </span>
+                </div>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mt-1">Cálculo de Disponibilidad de Flota</p>
               </div>
-              <button onClick={() => setActiveDetail(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400">
+              <button onClick={() => setActiveDetail(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 p-4 rounded-xl flex items-start gap-3">
-                <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider mb-1">Fórmula de Disponibilidad:</h4>
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300 leading-snug">
-                    Disponibilidad = (Horas Totales de Operación / Horas Calendario del Período) × 100
-                  </p>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                    Operación: {horasOperacionGlobal.toLocaleString('es-CL')}h / Capacidad Total: {horasTotalesGlobal.toLocaleString('es-CL')}h ({diasPeriodoGlobal} días)
-                  </p>
+              {/* Bloque Fórmula y Explicación */}
+              <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-950/20 border border-blue-200/80 dark:border-blue-800/60 p-4 rounded-xl space-y-3">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider mb-1">
+                      Fórmula de Disponibilidad ({infoPeriodo.tag}):
+                    </h4>
+                    <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-blue-100 dark:border-blue-900/40 font-mono text-xs font-semibold text-blue-900 dark:text-blue-200">
+                      {infoPeriodo.formulaNominal}
+                    </div>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-2 leading-relaxed">
+                      {infoPeriodo.explicacion}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Desglose de variables precisas */}
+                <div className="pt-2 border-t border-blue-200/60 dark:border-blue-900/50 grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-blue-100/50 dark:bg-blue-900/30">
+                    <span className="font-bold text-slate-600 dark:text-slate-300 block">Capacidad Teórica (H. Cal):</span>
+                    <span className="text-blue-700 dark:text-blue-300 font-mono font-bold">
+                      {infoPeriodo.dias}d × 24h × {vCountGlobal} veh = {horasTotalesGlobal.toLocaleString('es-CL')}h
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-rose-100/50 dark:bg-rose-900/30">
+                    <span className="font-bold text-slate-600 dark:text-slate-300 block">Downtime Taller (H. Indisp):</span>
+                    <span className="text-rose-600 dark:text-rose-300 font-mono font-bold">
+                      {horasTallerGlobal.toLocaleString('es-CL')}h en OTs
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-emerald-100/50 dark:bg-emerald-900/30">
+                    <span className="font-bold text-slate-600 dark:text-slate-300 block">Horas Operativas Netas:</span>
+                    <span className="text-emerald-700 dark:text-emerald-300 font-mono font-bold">
+                      {horasOperacionGlobal.toLocaleString('es-CL')}h efectivas
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-indigo-100/50 dark:bg-indigo-900/30">
+                    <span className="font-bold text-slate-600 dark:text-slate-300 block">Resultado Disponibilidad:</span>
+                    <span className="text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs">
+                      {globalDisp}% Disponibilidad
+                    </span>
+                  </div>
                 </div>
               </div>
-              <table className="w-full text-sm">
-                <thead className="border-b border-slate-200 dark:border-slate-800">
-                  <tr>
-                    <th className="text-left font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Vehículo</th>
-                    <th className="text-right font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Hrs Op</th>
-                    <th className="text-right font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Disponibilidad</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {detailsData.length > 0 ? (
-                    detailsData.map((row) => (
-                      <tr key={row.id}>
-                        <td className="py-3 font-bold text-slate-700 dark:text-slate-300">{row.v}</td>
-                        <td className="py-3 text-right font-medium text-slate-600 dark:text-slate-400">{row.horasOp}h</td>
-                        <td className="py-3 text-right font-bold text-emerald-500">{row.dispNum.toFixed(1)}%</td>
-                      </tr>
-                    ))
-                  ) : (
+
+              {/* Tabla individual de vehículos */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Desglose Individual por Unidad ({detailsData.length})
+                  </h4>
+                  <span className="text-[10px] text-slate-400 font-medium">Base: {infoPeriodo.hrsBase.toLocaleString('es-CL')}h / unidad</span>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <td colSpan={3} className="py-6 text-center text-slate-500 text-xs font-medium">Sin datos registrados</td>
+                      <th className="text-left font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Vehículo</th>
+                      <th className="text-right font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Taller</th>
+                      <th className="text-right font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Hrs Op</th>
+                      <th className="text-right font-bold text-[10px] uppercase text-slate-400 tracking-wider pb-3">Disponibilidad</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {detailsData.length > 0 ? (
+                      detailsData.map((row) => (
+                        <tr key={row.id}>
+                          <td className="py-2.5 font-bold text-slate-700 dark:text-slate-300">{row.v}</td>
+                          <td className="py-2.5 text-right font-medium text-rose-500">{row.horasTaller || 0}h</td>
+                          <td className="py-2.5 text-right font-medium text-slate-600 dark:text-slate-400">{row.horasOp}h</td>
+                          <td className="py-2.5 text-right font-bold text-emerald-500">{row.dispNum.toFixed(1)}%</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-slate-500 text-xs font-medium">Sin datos registrados</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         );
+      }
       
       case 'mtbf':
         return (
