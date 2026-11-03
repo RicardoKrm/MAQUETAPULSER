@@ -469,14 +469,21 @@ export default function ServiciosSpot() {
         notas: formData.notas
       };
 
+      const newServiceId = crypto.randomUUID();
+      const newProgId = crypto.randomUUID();
+      const targetEmpresaId = activeCompanyId && activeCompanyId !== 'GLOBAL' 
+        ? activeCompanyId 
+        : (currentCompany?.id || '161a47ac-9c63-435d-ab55-a6163a6805ab');
+
       const payload = {
-        empresa_id: activeCompanyId,
+        id: newServiceId,
+        empresa_id: targetEmpresaId,
         codigo: folioGen,
         tipo_carga: tabFormulario === 'CAMA_BAJA' ? 'Cama Baja' : tabFormulario === 'RENTAL' ? 'Rental Maquinaria' : 'Carga General',
         subtipo: JSON.stringify(metadataSpot),
         origen: formData.origen,
         destino: formData.destino,
-        fecha_servicio: new Date(formData.fecha_programada).toISOString(),
+        fecha_servicio: formData.fecha_programada ? new Date(formData.fecha_programada + 'T12:00:00Z').toISOString() : new Date().toISOString(),
         conductor_id: choferObj?.id || null,
         vehiculo_id: tractoObj?.id || null,
         estado: 'Confirmado',
@@ -490,17 +497,18 @@ export default function ServiciosSpot() {
       // Sincronizar en programación para que aparezca en el timeline de la empresa
       try {
         await supabase.from('operacion_programacion').insert([{
-          empresa_id: activeCompanyId,
+          id: newProgId,
+          empresa_id: targetEmpresaId,
           tipo: payload.tipo_carga,
           origen: payload.origen,
           destino: payload.destino,
-          fecha: formData.fecha_programada,
+          fecha: formData.fecha_programada || new Date().toISOString().split('T')[0],
           hora: 8,
           duracion: 4,
           conductor_id: payload.conductor_id,
           vehiculo_id: payload.vehiculo_id,
           estado: 'Asignado',
-          notas: newRow?.id || folioGen
+          notas: newServiceId
         }]);
       } catch (_) {}
 
@@ -1077,9 +1085,12 @@ export default function ServiciosSpot() {
                         onChange={(e) => setFormData({ ...formData, conductor_id: e.target.value })}
                         className="w-full text-sm p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
                       >
-                        <option value="">-- Seleccionar Chofer --</option>
-                        {colaboradores.filter(c => (c.rol || '').toLowerCase().includes('conduc') || (c.rol || '').toLowerCase().includes('chofer')).map(c => (
-                          <option key={c.id} value={c.id}>{c.nombre} (Lic: {c.licencia || 'A5'})</option>
+                        <option value="">-- Seleccionar Chofer / Operador --</option>
+                        {colaboradores.filter(c => {
+                          const r = (c.rol || '').toLowerCase();
+                          return r.includes('cond') || r.includes('chof') || r.includes('operad');
+                        }).map(c => (
+                          <option key={c.id} value={c.id}>{c.nombre} ({c.rol || 'Conductor'})</option>
                         ))}
                       </select>
                     </div>
