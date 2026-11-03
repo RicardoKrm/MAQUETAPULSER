@@ -123,19 +123,17 @@ export default function Programacion() {
         const allServsMap = new Map(allServsQuery.data?.map((s:any) => [s.id, s]) || []);
         
         const validBlocks = resProg.data.filter((p: any) => {
-          if (p.notas && p.notas.length > 20 && p.notas.includes('-')) {
-             if (!allServsMap.has(p.notas)) {
-                // Eliminate orphaned block asynchronously
-                supabase.from('operacion_programacion').delete().eq('id', p.id).then();
-                return false;
-             } else {
-                const s = allServsMap.get(p.notas);
-                p.realTimeStr = s.fecha_servicio;
-                p.codigo = s.codigo;
-             }
-          }
-          // Si resServ viene vacío asumiendo que el usuario borró todo y p.notas está vacío, limpiarlo
           if (!p.notas) return false; 
+
+          if (!allServsMap.has(p.notas)) {
+            // Eliminate orphaned block asynchronously
+            supabase.from('operacion_programacion').delete().eq('id', p.id).then();
+            return false;
+          } else {
+            const s = allServsMap.get(p.notas);
+            p.realTimeStr = s.fecha_servicio;
+            p.codigo = s.codigo;
+          }
           
           return true;
         });
