@@ -509,7 +509,7 @@ export default function PizarraMantenimiento() {
       'F. Últ. Mant.': v.fechaUltimoMantencion || '—',
       'Tipo Mant.': v.tipoUltimoMantencion || '—',
       'Cumplimiento': v.cumplimiento || '—',
-      'Estatus': v.estatus || '—',
+      'Estatus': v.estatus === 'REALIZAR_MANT' || v.estatus === 'EN_TIEMPO' ? 'REALIZAR MANT.' : v.estatus === 'PROXIMO' ? 'MANT. PRÓXIMO' : v.estatus === 'VENCIDO' ? 'MANT. VENCIDO' : 'NORMALIDAD',
       'KM Vencido': v.kmVencido !== null && v.kmVencido !== undefined ? v.kmVencido : '—',
       'Pauta Vencida': v.pautaVencida || '—',
       'KM Actual': v.kmActual || 0,
@@ -811,7 +811,7 @@ export default function PizarraMantenimiento() {
   const kpis = {
     vehiculosFiltrados: vehiculosFiltrados.length,
     porcentajeFlota: dataFlota.length > 0 ? Math.round((vehiculosFiltrados.length / dataFlota.length) * 100) : 0,
-    nivelCumplimiento: dataFlota.length > 0 ? Math.round((dataFlota.filter(v => v.cumplimiento === 'NORMAL' || v.cumplimiento === 'ANTICIPADO').length / dataFlota.length) * 100) : 0,
+    nivelCumplimiento: dataFlota.length > 0 ? Math.round((dataFlota.filter(v => v.cumplimiento === 'NORMAL' || v.cumplimiento === 'EN RANGO' || v.cumplimiento === 'ANTICIPADO').length / (dataFlota.filter(v => v.cumplimiento && v.cumplimiento !== 'N/A').length || dataFlota.length)) * 100) : 0,
     costoTotal,
     costoPreventivo,
     costoCorrectivo,
@@ -1043,11 +1043,12 @@ export default function PizarraMantenimiento() {
       case 'NORMAL':
         return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow-sm uppercase"><CheckCircle className="w-3 h-3 mr-1" /> NORMALIDAD</div>;
       case 'PROXIMO':
-        return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500 text-white shadow-sm uppercase"><Clock className="w-3 h-3 mr-1" /> MANT. PRÓX</div>;
+        return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-sm uppercase"><Clock className="w-3 h-3 mr-1" /> MANT. PRÓXIMO</div>;
       case 'EN_TIEMPO':
-        return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white shadow-sm uppercase"><CheckCircle className="w-3 h-3 mr-1" /> EN TIEMPO</div>;
+      case 'REALIZAR_MANT':
+        return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white shadow-sm uppercase"><CheckCircle className="w-3 h-3 mr-1" /> REALIZAR MANT.</div>;
       case 'VENCIDO':
-        return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white shadow-sm uppercase"><AlertTriangle className="w-3 h-3 mr-1" /> VENCIDO</div>;
+        return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white shadow-sm uppercase"><AlertTriangle className="w-3 h-3 mr-1" /> MANT. VENCIDO</div>;
       default:
         return <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500 text-white shadow-sm uppercase">{estado}</div>;
     }
@@ -1056,10 +1057,37 @@ export default function PizarraMantenimiento() {
   const getStatusIcon = (estado: string) => {
     switch (estado) {
       case 'NORMAL': return <div className="h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />;
-      case 'PROXIMO': return <div className="h-3 w-3 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.8)] animate-pulse" />;
-      case 'EN_TIEMPO': return <div className="h-3 w-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]" />;
+      case 'PROXIMO': return <div className="h-3 w-3 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)] animate-pulse" />;
+      case 'EN_TIEMPO':
+      case 'REALIZAR_MANT': return <div className="h-3 w-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]" />;
       case 'VENCIDO': return <div className="h-3 w-3 rounded-full bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)] animate-pulse" />;
       default: return null;
+    }
+  };
+
+  const getCumplimientoBadge = (cump: string) => {
+    switch (cump) {
+      case 'ANTICIPADO':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 uppercase">
+            ANTICIPADO
+          </span>
+        );
+      case 'EN RANGO':
+      case 'NORMAL':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300 dark:border-blue-700 uppercase">
+            EN RANGO
+          </span>
+        );
+      case 'RETRASADO':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-700 uppercase">
+            RETRASADO
+          </span>
+        );
+      default:
+        return <span className="text-slate-400 dark:text-slate-500 font-medium">—</span>;
     }
   };
 
@@ -1093,11 +1121,6 @@ export default function PizarraMantenimiento() {
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-300 bg-white dark:bg-slate-900">
             {vehiculosFiltrados.map((vehiculo) => {
-              let cumplimientoColor = 'text-slate-700 dark:text-slate-300';
-              if (vehiculo.cumplimiento === 'RETRASADO') cumplimientoColor = 'text-red-600 font-bold';
-              else if (vehiculo.cumplimiento === 'ANTICIPADO') cumplimientoColor = 'text-emerald-600 font-bold';
-              else if (vehiculo.cumplimiento === 'NORMAL') cumplimientoColor = 'text-slate-700 dark:text-slate-300 font-bold';
-
               return (
                 <tr 
                   key={`dense-${vehiculo.id}`} 
@@ -1109,7 +1132,11 @@ export default function PizarraMantenimiento() {
                   <td className="px-2 py-2 border-r border-slate-200 dark:border-slate-800">{vehiculo.kmUltimoMantencion ? vehiculo.kmUltimoMantencion.toLocaleString('es-CL') : '—'}</td>
                   <td className="px-2 py-2 border-r border-slate-200 dark:border-slate-800 text-slate-500 whitespace-nowrap">{vehiculo.fechaUltimoMantencion || '—'}</td>
                   <td className="px-2 py-2 border-r border-slate-200 dark:border-slate-800 font-medium whitespace-nowrap">{vehiculo.tipoUltimoMantencion || 'N/A'}</td>
-                  <td className={`px-2 py-2 border-r border-slate-200 dark:border-slate-800 ${cumplimientoColor}`}>{vehiculo.cumplimiento !== 'N/A' ? vehiculo.cumplimiento : '—'}</td>
+                  <td className="px-2 py-2 border-r border-slate-200 dark:border-slate-800">
+                    <div className="flex justify-center">
+                      {getCumplimientoBadge(vehiculo.cumplimiento)}
+                    </div>
+                  </td>
                   <td className="px-1 py-1 border-r border-slate-200 dark:border-slate-800">
                     <div className="flex justify-center w-full transform scale-90">
                       {getStatusBadge(vehiculo.estatus)}
@@ -1666,9 +1693,12 @@ export default function PizarraMantenimiento() {
                         <Clock className="w-3 h-3" />
                         {vehiculo.fechaUltimoMantencion || '—'}
                       </div>
-                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded w-fit uppercase">
-                        {vehiculo.tipoUltimoMantencion || 'N/A'}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded w-fit uppercase">
+                          {vehiculo.tipoUltimoMantencion || 'N/A'}
+                        </span>
+                        {getCumplimientoBadge(vehiculo.cumplimiento)}
+                      </div>
                     </div>
                   </td>
                   <td className="px-5 py-4">
@@ -1825,7 +1855,7 @@ export default function PizarraMantenimiento() {
       <Modal isOpen={kpiModal === 'cumplimiento'} onClose={() => setKpiModal(null)} title="Detalle KPI: Cumplimiento del Cronograma">
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Este KPI mide la <b>ejecución del plan de mantenimiento en el tiempo pasado (ANTES)</b>. Evalúa si las mantenciones realizadas se ejecutaron dentro del rango de tolerancia programado (Normal o Anticipado a ±10%) o si tuvieron retraso en su ejecución en taller.
+            Este KPI mide la <b>ejecución del plan de mantenimiento en el tiempo pasado (ANTES)</b>. Evalúa si las mantenciones realizadas se ejecutaron dentro del rango de tolerancia programado (En Rango o Anticipado a ±10%) o si tuvieron retraso en su ejecución en taller.
           </p>
           <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg space-y-3 text-sm">
             <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
@@ -1833,8 +1863,8 @@ export default function PizarraMantenimiento() {
               <span className="font-bold text-slate-900 dark:text-slate-100">{dataFlota.length}</span>
             </div>
             <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Mantenciones a Tiempo (Normal / Anticipado)</span>
-              <span className="font-bold text-emerald-600">{dataFlota.filter(v => v.cumplimiento === 'NORMAL' || v.cumplimiento === 'ANTICIPADO').length}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">Mantenciones a Tiempo (En Rango / Anticipado)</span>
+              <span className="font-bold text-emerald-600">{dataFlota.filter(v => v.cumplimiento === 'NORMAL' || v.cumplimiento === 'EN RANGO' || v.cumplimiento === 'ANTICIPADO').length}</span>
             </div>
             <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
               <span className="font-medium text-slate-700 dark:text-slate-300">Mantenciones con Retraso</span>

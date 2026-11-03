@@ -290,8 +290,8 @@ export interface FilaPizarraMantenimiento {
     tipoUltimoMantencion: string;   // 5. Tipo Mant.
     
     // Análisis de Desviación
-    cumplimiento: "NORMAL" | "ANTICIPADO" | "RETRASADO" | "N/A"; // 6. Cumplimiento
-    estatus: "NORMAL" | "PROXIMO" | "EN_TIEMPO" | "VENCIDO";     // 7. Estatus
+    cumplimiento: "EN RANGO" | "ANTICIPADO" | "RETRASADO" | "NORMAL" | "N/A"; // 6. Cumplimiento
+    estatus: "NORMAL" | "PROXIMO" | "EN_TIEMPO" | "REALIZAR_MANT" | "VENCIDO";     // 7. Estatus
     kmVencido: number | null;                                    // 8. Km Vencido
     pautaVencida: string | null;                                 // 9. Pauta Vencida
     
@@ -355,8 +355,8 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
     const kmUltimo = vehiculo.kmUltimaMantencion;
     const intervalo = vehiculo.intervaloMantencionKm;
     
-    let cumplimiento: "NORMAL" | "ANTICIPADO" | "RETRASADO" | "N/A" = "N/A";
-    let estatus: "NORMAL" | "PROXIMO" | "EN_TIEMPO" | "VENCIDO" = "NORMAL";
+    let cumplimiento: "EN RANGO" | "ANTICIPADO" | "RETRASADO" | "NORMAL" | "N/A" = "N/A";
+    let estatus: "NORMAL" | "PROXIMO" | "EN_TIEMPO" | "REALIZAR_MANT" | "VENCIDO" = "NORMAL";
     let kmVencido: number | null = null;
     let kmProximo: number | null = null;
     let fechaProxima: Date | null = null;
@@ -403,26 +403,32 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         proximoHitoVencimiento = hitoProximo.iteracion_km;
         tipoProximoMantencion = hitoProximo.nombre.split('-')[0].trim();
 
-        const tolerancia = (intervalo > 0 ? intervalo : 10000) * 0.10; // Tolerancia técnica del +10%
+        const intEfectivo = intervalo > 0 ? intervalo : 10000;
+        const tolerancia10 = intEfectivo * 0.10; // Rango operativo +/- 10%
+        const aviso20 = intEfectivo * 0.20;      // Aviso preventivo 20% antes del hito
 
-        if (kmActual > (proximoHitoVencimiento + tolerancia)) {
-            // El vehículo superó el límite superior de tolerancia (+10% + 1 km): está VENCIDO
+        const limiteSuperior = proximoHitoVencimiento + tolerancia10; // Hito + 10%
+        const limiteInferior = proximoHitoVencimiento - tolerancia10; // Hito - 10%
+        const limiteAviso = proximoHitoVencimiento - aviso20;         // Hito - 20%
+
+        if (kmActual > limiteSuperior) {
+            // Supera el límite superior (+10% de tolerancia): MANT. VENCIDO
             estatus = "VENCIDO";
-            kmVencido = Math.round(kmActual - (proximoHitoVencimiento + tolerancia));
+            kmVencido = Math.round(kmActual - limiteSuperior);
             pautaVencidaStr = tipoProximoMantencion;
-        } else if (kmActual >= proximoHitoVencimiento) {
-            // El vehículo alcanzó el hito pero está dentro de la ventana de tolerancia (+10%): EN TIEMPO
-            estatus = "EN_TIEMPO";
+        } else if (kmActual >= limiteInferior) {
+            // Dentro del rango de realización de mantenimiento +/- 10%: REALIZAR MANT.
+            estatus = "REALIZAR_MANT";
+            kmVencido = null;
+            pautaVencidaStr = null;
+        } else if (kmActual >= limiteAviso) {
+            // Entre 20% y 10% antes del hito: MANT. PRÓXIMO
+            estatus = "PROXIMO";
             kmVencido = null;
             pautaVencidaStr = null;
         } else {
-            // No ha llegado al hito: evaluar si está próximo (dentro del 25% del intervalo o ventana de aviso)
-            const kmsFaltantes = proximoHitoVencimiento - kmActual;
-            if (intervalo > 0 && kmsFaltantes <= (intervalo * 0.25)) {
-                estatus = "PROXIMO";
-            } else {
-                estatus = "NORMAL";
-            }
+            // Antes del 20% de aviso previo: NORMALIDAD
+            estatus = "NORMAL";
             kmVencido = null;
             pautaVencidaStr = null;
         }
@@ -431,24 +437,28 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         if (kmUltimo > 0 && intervalo > 0) {
             const kmUltimoRedondeado = Math.round(kmUltimo / intervalo) * intervalo;
             const primerHito = kmUltimoRedondeado + intervalo;
-            const tolerancia = intervalo * 0.10;
+            const tolerancia10 = intervalo * 0.10;
+            const aviso20 = intervalo * 0.20;
+
+            const limiteSuperior = primerHito + tolerancia10;
+            const limiteInferior = primerHito - tolerancia10;
+            const limiteAviso = primerHito - aviso20;
 
             proximoHitoVencimiento = primerHito;
-            if (kmActual > (primerHito + tolerancia)) {
-                kmVencido = Math.round(kmActual - (primerHito + tolerancia));
+            if (kmActual > limiteSuperior) {
+                kmVencido = Math.round(kmActual - limiteSuperior);
                 estatus = "VENCIDO";
                 pautaVencidaStr = `Mant. de ${primerHito.toLocaleString('es-CL')} km`;
-            } else if (kmActual >= primerHito) {
-                estatus = "EN_TIEMPO";
+            } else if (kmActual >= limiteInferior) {
+                estatus = "REALIZAR_MANT";
+                kmVencido = null;
+                pautaVencidaStr = null;
+            } else if (kmActual >= limiteAviso) {
+                estatus = "PROXIMO";
                 kmVencido = null;
                 pautaVencidaStr = null;
             } else {
-                const kmsFaltantes = primerHito - kmActual;
-                if (kmsFaltantes <= (intervalo * 0.25)) {
-                    estatus = "PROXIMO";
-                } else {
-                    estatus = "NORMAL";
-                }
+                estatus = "NORMAL";
                 kmVencido = null;
                 pautaVencidaStr = null;
             }
@@ -457,7 +467,7 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
     
     kmProximo = proximoHitoVencimiento > 0 ? proximoHitoVencimiento : null;
 
-    // --- 2. CÁLCULO DE CUMPLIMIENTO (Tolerancia del 10% respecto al hito redondo teórico) ---
+    // --- 2. CÁLCULO DE CUMPLIMIENTO (Tolerancia +/- 10% respecto al hito teórico) ---
     if (kmUltimo > 0 && intervalo > 0) {
         let hitoIdeal = Math.round(kmUltimo / intervalo) * intervalo;
         if (vehiculo.pautasSecuencia && vehiculo.pautasSecuencia.length > 0) {
@@ -481,7 +491,7 @@ export function calcularDatosPizarra(vehiculo: VehiculoDB): FilaPizarraMantenimi
         } else if (kmUltimo > (hitoIdeal + tolerancia)) {
             cumplimiento = "RETRASADO";
         } else {
-            cumplimiento = "NORMAL";
+            cumplimiento = "EN RANGO";
         }
     }
 

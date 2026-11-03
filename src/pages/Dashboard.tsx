@@ -290,7 +290,7 @@ export default function Dashboard() {
     const pizarraData = dbVehiculos.map(v => calcularDatosPizarra(v));
     const vencidosMantenimiento = pizarraData.filter(p => p.estatus === 'VENCIDO').length;
     const proximos = pizarraData.filter(p => p.estatus === 'PROXIMO').length;
-    const alDia = pizarraData.filter(p => p.estatus === 'NORMAL').length;
+    const alDia = pizarraData.filter(p => p.estatus === 'NORMAL' || p.estatus === 'REALIZAR_MANT' || p.estatus === 'EN_TIEMPO').length;
 
     // 2.b. Control Documental de Flota (Vehicular y Choferes - PRT, SOAP, Permiso, Licencias)
     const nowTs = new Date().getTime();
@@ -455,7 +455,7 @@ export default function Dashboard() {
     // Cumplimiento Preventivo del plan (medición histórica del tiempo pasado / ANTES: ejecución a tiempo de mantenciones)
     const vehiculosEvaluables = pizarraData.filter(p => p.cumplimiento && p.cumplimiento !== 'N/A');
     const cumpPrev = vehiculosEvaluables.length > 0
-      ? Math.round((vehiculosEvaluables.filter(p => p.cumplimiento === 'NORMAL' || p.cumplimiento === 'ANTICIPADO').length / vehiculosEvaluables.length) * 100)
+      ? Math.round((vehiculosEvaluables.filter(p => p.cumplimiento === 'NORMAL' || p.cumplimiento === 'EN RANGO' || p.cumplimiento === 'ANTICIPADO').length / vehiculosEvaluables.length) * 100)
       : (pizarraData.length > 0 ? 100 : 0);
 
     // 3. Costos y Tendencias Semestrales (Últimos 6 meses continuos vs Meta)
