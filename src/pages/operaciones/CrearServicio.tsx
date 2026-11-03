@@ -188,72 +188,6 @@ export default function CrearServicio() {
         costo: parseFloat(s.costo_estimado) || 0
       }));
 
-      if (isGavalDemo && formattedServices.length <= 1) {
-        const demoServices: Servicio[] = [
-          {
-            id: 'demo-srv-01',
-            codigo: 'SRV-INT-101',
-            contrato: 'Contrato Transporte Interurbano Troncal',
-            tipo: 'Traslado de Pasajeros',
-            subtipo: 'Interurbano Pasajeros',
-            origen: 'Terminal Los Héroes (Santiago)',
-            destino: 'Terminal Rodoviario (Antofagasta)',
-            fecha: new Date(Date.now() + 86400000).toISOString(),
-            conductor: 'Juan Carlos Pérez (A2/A3)',
-            unidad: 'PRYL49 - Bus Salón Cama',
-            estado: 'Programado',
-            ingreso: 3850000,
-            costo: 1920000
-          },
-          {
-            id: 'demo-srv-02',
-            codigo: 'SRV-MIN-204',
-            contrato: 'Contrato Minera Doña Inés de Collahuasi',
-            tipo: 'Minero (Turnos / Faena)',
-            subtipo: 'Turno Minero 7x7',
-            origen: 'Calama Centro',
-            destino: 'Campamento Mina Ujina (Collahuasi)',
-            fecha: new Date(Date.now() + 43200000).toISOString(),
-            conductor: 'Rodrigo Araya (A2/Ex. Altura)',
-            unidad: 'JPHK19 - Bus Minero Climatizado 4x4',
-            estado: 'En Ruta',
-            ingreso: 4200000,
-            costo: 2150000
-          },
-          {
-            id: 'demo-srv-03',
-            codigo: 'SRV-ESP-305',
-            contrato: 'Servicio Especial / Cotización Directa',
-            tipo: 'Servicios Especiales / Turismo',
-            subtipo: 'Servicio Especial Privado',
-            origen: 'Iquique Costanera',
-            destino: 'San Pedro de Atacama',
-            fecha: new Date(Date.now() + 172800000).toISOString(),
-            conductor: 'Mauricio Silva (A2)',
-            unidad: 'KRTC90 - Minibús Ejecutivo',
-            estado: 'Cotizado',
-            ingreso: 2450000,
-            costo: 980000
-          },
-          {
-            id: 'demo-srv-04',
-            codigo: 'SRV-INT-102',
-            contrato: 'Contrato Transporte Pasajeros Norte',
-            tipo: 'Traslado de Pasajeros',
-            subtipo: 'Interurbano Pasajeros',
-            origen: 'La Serena',
-            destino: 'Calama',
-            fecha: new Date(Date.now() - 86400000).toISOString(),
-            conductor: 'Carlos Valenzuela (A3)',
-            unidad: 'VSCG61 - Bus Doble Piso',
-            estado: 'Finalizado',
-            ingreso: 3400000,
-            costo: 1750000
-          }
-        ];
-        formattedServices = [...demoServices, ...formattedServices];
-      }
-
       setServicios(formattedServices);
 
       if (activeCompanyId === 'GLOBAL') {
@@ -417,18 +351,26 @@ export default function CrearServicio() {
     }
   };
 
-  const handleConfirmSelectedService = async () => {
+  const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedServicio) return;
     try {
-      showToast('Confirmando servicio...');
-      await supabase.from('operacion_servicio').update({ estado: 'Confirmado' }).eq('id', selectedServicio.id);
-      await supabase.from('operacion_programacion').update({ estado: 'Asignado' }).eq('notas', selectedServicio.id);
-      setSelectedServicio(prev => prev ? { ...prev, estado: 'Confirmado' } : null);
+      showToast(`Actualizando estado a ${newStatus}...`);
+      await supabase.from('operacion_servicio').update({ estado: newStatus }).eq('id', selectedServicio.id);
+      
+      let progStatus = 'Borrador';
+      if (newStatus === 'Confirmado' || newStatus === 'Programado') progStatus = 'Asignado';
+      else if (newStatus === 'En Ruta') progStatus = 'En Curso';
+      else if (newStatus === 'Finalizado') progStatus = 'Realizado';
+      else if (newStatus === 'Anulado') progStatus = 'Anulado';
+
+      await supabase.from('operacion_programacion').update({ estado: progStatus }).eq('notas', selectedServicio.id);
+
+      setSelectedServicio(prev => prev ? { ...prev, estado: newStatus } : null);
       await loadData();
-      showToast('Servicio confirmado exitosamente.');
+      showToast(`Servicio actualizado a "${newStatus}" exitosamente.`);
     } catch (err: any) {
       console.error(err);
-      showToast('Error al confirmar servicio: ' + (err?.message || ''));
+      showToast('Error al actualizar estado: ' + (err?.message || ''));
     }
   };
 
@@ -1040,14 +982,44 @@ export default function CrearServicio() {
 
               {/* Acciones de detalle */}
               <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-3">
-                 {selectedServicio.estado !== 'Confirmado' && selectedServicio.estado !== 'Finalizado' && selectedServicio.estado !== 'Anulado' && (
+                 {/* Si está en Borrador o Cotizado: botón para confirmar */}
+                 {(selectedServicio.estado === 'Borrador' || selectedServicio.estado === 'Cotizado') && (
                    <button 
-                     onClick={handleConfirmSelectedService}
+                     onClick={() => handleUpdateStatus('Confirmado')}
                      className="w-full py-3.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all flex items-center justify-center gap-2"
                    >
                      <CheckCircle2 className="w-4 h-4" /> Confirmar Servicio
                    </button>
                  )}
+
+                 {/* Si ya está Confirmado o Programado: botón para Despachar / En Ruta */}
+                 {(selectedServicio.estado === 'Confirmado' || selectedServicio.estado === 'Programado') && (
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                     <button 
+                       onClick={() => handleUpdateStatus('En Ruta')}
+                       className="w-full py-3.5 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all flex items-center justify-center gap-2"
+                     >
+                       <Truck className="w-4 h-4" /> Iniciar Viaje (En Ruta)
+                     </button>
+                     <button 
+                       onClick={() => handleUpdateStatus('Borrador')}
+                       className="w-full py-3.5 rounded-xl font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all text-xs flex items-center justify-center"
+                     >
+                       Regresar a Borrador
+                     </button>
+                   </div>
+                 )}
+
+                 {/* Si está En Ruta: botón para Finalizar */}
+                 {selectedServicio.estado === 'En Ruta' && (
+                   <button 
+                     onClick={() => handleUpdateStatus('Finalizado')}
+                     className="w-full py-3.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all flex items-center justify-center gap-2"
+                   >
+                     <CheckCircle2 className="w-4 h-4" /> Finalizar Servicio
+                   </button>
+                 )}
+
                  <button 
                    onClick={handleEditService}
                    className="w-full py-3.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
