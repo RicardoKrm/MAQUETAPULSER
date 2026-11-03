@@ -31,8 +31,8 @@ export default function CrearServicio() {
   const { profile } = useAuth();
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [contratosDisponibles, setContratosDisponibles] = useState<{ id: string; cliente: string }[]>([]);
-  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<{ id: string; patente: string }[]>([]);
-  const [conductoresDisponibles, setConductoresDisponibles] = useState<{ id: string; nombre: string; estado: string }[]>([]);
+  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<{ id: string; patente: string; tipo?: string; marca?: string; modelo?: string; estado?: string }[]>([]);
+  const [conductoresDisponibles, setConductoresDisponibles] = useState<{ id: string; nombre: string; rol?: string; estado: string }[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedServicio, setSelectedServicio] = useState<Servicio | null>(null);
@@ -215,10 +215,10 @@ export default function CrearServicio() {
 
       // Load form options
       let contratosQ = supabase.from('operacion_contrato').select('id, cliente_razon_social').eq('activo', true);
-      let vehiculosQ = supabase.from('vehiculo').select('id, patente');
-      let colaboradoresQ = supabase.from('colaborador').select('id, nombre, estado').in('rol', ['Conductor', 'Chofer', 'Conductor Interprovincial', 'Conductor Interno Mina']);
+      let vehiculosQ = supabase.from('vehiculo').select('id, patente, tipo, marca, modelo, estado').order('patente', { ascending: true });
+      let colaboradoresQ = supabase.from('colaborador').select('id, nombre, estado, rol').order('nombre', { ascending: true });
 
-      if (activeCompanyId !== 'GLOBAL') {
+      if (activeCompanyId && activeCompanyId !== 'GLOBAL') {
         contratosQ = contratosQ.eq('empresa_id', activeCompanyId);
         vehiculosQ = vehiculosQ.eq('empresa_id', activeCompanyId);
         colaboradoresQ = colaboradoresQ.eq('empresa_id', activeCompanyId);
@@ -229,8 +229,25 @@ export default function CrearServicio() {
       ]);
 
       if (contratos.data) setContratosDisponibles(contratos.data.map(c => ({ id: c.id, cliente: c.cliente_razon_social })));
-      if (vehiculos.data) setVehiculosDisponibles(vehiculos.data);
-      if (colaboradores.data) setConductoresDisponibles(colaboradores.data);
+      
+      if (vehiculos.data) {
+        const activeVehs = vehiculos.data.filter((v: any) => v.estado !== 'INACTIVO');
+        setVehiculosDisponibles(activeVehs.length > 0 ? activeVehs : vehiculos.data);
+      }
+
+      if (colaboradores.data) {
+        const drivers = colaboradores.data.filter((c: any) => {
+          const r = String(c.rol || '').toLowerCase().trim();
+          return r.includes('cond') || r.includes('chof') || r.includes('operad') || r.includes('chofer');
+        });
+        const finalList = drivers.length > 0 ? drivers : colaboradores.data;
+        setConductoresDisponibles(finalList.map((c: any) => ({
+          id: c.id,
+          nombre: c.nombre,
+          rol: c.rol || '',
+          estado: c.estado || 'DISPONIBLE'
+        })));
+      }
 
       if (activeCompanyId === 'GLOBAL') {
         const { data: userData } = await supabase.auth.getUser();
@@ -296,99 +313,85 @@ export default function CrearServicio() {
   };
 
   const handleSaveService = async () => {
-    const finalCompanyId = activeCompanyId === 'GLOBAL' ? newEmpresaId : activeCompanyId;
-
-    if (!finalCompanyId) {
-      showToast('Por favor, selecciona una empresa operadora para asignar este servicio.');
-      return;
+    let finalCompanyId = activeCompanyId === 'GLOBAL' ? newEmpresaId : activeCompanyId;
+    if (!finalCompanyId || finalCompanyId === 'GLOBAL') {
+      finalCompanyId = currentCompany?.id || profile?.empresa_id || '161a47ac-9c63-435d-ab55-a6163a6805ab';
     }
 
     if (!newOrigen.trim() || !newDestino.trim()) {
-      showToast('Origen y Destino son campos requeridos.');
+      showToast('Debes ingresar Punto de Origen y Punto de Destino.');
       return;
     }
 
     try {
-      showToast('Guardando servicio...');
+      showToast('Guardando y confirmando servicio...');
 
       const safeUUID = (val: string) => val && val.length > 20 ? val : null;
+      const targetServicioId = editingServicio?.id || crypto.randomUUID();
 
-      const serviceData = {
+      const serviceData: any = {
+        id: targetServicioId,
         empresa_id: finalCompanyId,
-        codigo: editingServicio?.codigo || `SRV-${Math.floor(Math.random() * 10000)}`,
+        codigo: editingServicio?.codigo || `SRV-${Math.floor(1000 + Math.random() * 9000)}`,
         contrato_id: safeUUID(newContrato),
-        tipo_carga: newTipoCarga,
-        subtipo: newSubtipo,
-        origen: newOrigen,
-        destino: newDestino,
+        tipo_carga: newTipoCarga || 'General / Logística',
+        subtipo: newSubtipo || 'Interurbano Pasajeros',
+        origen: newOrigen.trim(),
+        destino: newDestino.trim(),
         fecha_servicio: newFecha ? new Date(newFecha).toISOString() : new Date().toISOString(),
         conductor_id: safeUUID(newConductor),
         vehiculo_id: safeUUID(newUnidad),
-        estado: newConductor && newUnidad ? 'Programado' : 'Borrador',
+        estado: safeUUID(newConductor) && safeUUID(newUnidad) ? 'Confirmado' : (safeUUID(newConductor) ? 'Programado' : 'Borrador'),
         ingreso_esperado: newIngreso ? Number(newIngreso) : 0,
         costo_estimado: newCosto ? Number(newCosto) : 0
       };
 
       let saveError;
-      let insertedServicioId = null;
       if (editingServicio) {
         const { error } = await supabase.from('operacion_servicio').update(serviceData).eq('id', editingServicio.id);
         saveError = error;
       } else {
-        const { data: newServ, error } = await supabase.from('operacion_servicio').insert([serviceData]).select().single();
+        const { data: newServ, error } = await supabase.from('operacion_servicio').insert([serviceData]).select().maybeSingle();
         saveError = error;
-        if (newServ) insertedServicioId = newServ.id;
       }
 
-      if (saveError) throw saveError;
+      if (saveError) {
+        console.error('Error guardando operacion_servicio:', saveError);
+        throw saveError;
+      }
 
-      const targetServicioId = editingServicio ? editingServicio.id : insertedServicioId;
-      
-      if (targetServicioId) {
-        // Only require a date/time to sync to the board. Driver is optional.
-        const hasTime = newFecha && newFecha.includes('T');
-        
-        const { data: existingProg } = await supabase.from('operacion_programacion').select('id').eq('notas', targetServicioId).maybeSingle();
+      // Sincronizar con el panel de programación y calendario (operacion_programacion)
+      const hasTime = Boolean(newFecha && newFecha.includes('T'));
+      const { data: existingProg } = await supabase.from('operacion_programacion').select('id').eq('notas', targetServicioId).maybeSingle();
 
-        if (hasTime) {
-          const progDateStr = newFecha.split('T')[0];
-          const hora = parseInt(newFecha.split('T')[1].split(':')[0]);
-          
-          const progData = {
-            empresa_id: finalCompanyId,
-            tipo: newTipoCarga || 'Interprovincial',
-            origen: newOrigen,
-            destino: newDestino,
-            fecha: progDateStr,
-            hora: hora,
-            duracion: 2,
-            conductor_id: safeUUID(newConductor) || null,
-            vehiculo_id: safeUUID(newUnidad) || null,
-            estado: safeUUID(newConductor) ? 'Asignado' : 'Borrador',
-            notas: targetServicioId
-          };
+      const progDateStr = hasTime ? newFecha.split('T')[0] : (newFecha ? newFecha.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const hora = hasTime ? parseInt(newFecha.split('T')[1].split(':')[0]) : 10;
 
-          if (existingProg) {
-             const { error: progSaveErr } = await supabase.from('operacion_programacion').update(progData).eq('id', existingProg.id);
-             if (progSaveErr) console.error("Error updating prog", progSaveErr);
-          } else {
-             const { error: progSaveErr } = await supabase.from('operacion_programacion').insert([progData]);
-             if (progSaveErr) console.error("Error inserting prog", progSaveErr);
-          }
-          
-          await supabase.from('operacion_servicio').update({ estado: safeUUID(newConductor) ? 'Confirmado' : 'Borrador' }).eq('id', targetServicioId);
-        } else {
-          // If it lacks a valid time but has an existing block on the board, delete it so it surfaces to Pendientes.
-          if (existingProg) {
-             await supabase.from('operacion_programacion').delete().eq('id', existingProg.id);
-          }
-        }
+      const progData: any = {
+        empresa_id: finalCompanyId,
+        tipo: newTipoCarga || 'Interprovincial',
+        origen: newOrigen.trim(),
+        destino: newDestino.trim(),
+        fecha: progDateStr,
+        hora: isNaN(hora) ? 10 : hora,
+        duracion: 2,
+        conductor_id: safeUUID(newConductor),
+        vehiculo_id: safeUUID(newUnidad),
+        estado: safeUUID(newConductor) ? 'Asignado' : 'Borrador',
+        notas: targetServicioId
+      };
+
+      if (existingProg) {
+        await supabase.from('operacion_programacion').update(progData).eq('id', existingProg.id);
+      } else {
+        const newProgId = crypto.randomUUID();
+        await supabase.from('operacion_programacion').insert([{ ...progData, id: newProgId }]);
       }
 
       clearFormCache();
       setIsModalOpen(false);
-      loadData();
-      showToast('Servicio guardado exitosamente.');
+      await loadData();
+      showToast(editingServicio ? 'Servicio actualizado exitosamente.' : 'Servicio confirmado y programado con éxito.');
       
       try {
         logActividad(
@@ -401,9 +404,24 @@ export default function CrearServicio() {
       } catch (logErr) {
         console.warn('Logging skipped:', logErr);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving service:', error);
-      showToast('Error al guardar el servicio.');
+      showToast('Error al guardar el servicio: ' + (error?.message || 'Verifica los datos'));
+    }
+  };
+
+  const handleConfirmSelectedService = async () => {
+    if (!selectedServicio) return;
+    try {
+      showToast('Confirmando servicio...');
+      await supabase.from('operacion_servicio').update({ estado: 'Confirmado' }).eq('id', selectedServicio.id);
+      await supabase.from('operacion_programacion').update({ estado: 'Asignado' }).eq('notas', selectedServicio.id);
+      setSelectedServicio(prev => prev ? { ...prev, estado: 'Confirmado' } : null);
+      await loadData();
+      showToast('Servicio confirmado exitosamente.');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Error al confirmar servicio: ' + (err?.message || ''));
     }
   };
 
@@ -498,8 +516,8 @@ export default function CrearServicio() {
     }
     
     const driver = conductoresDisponibles.find(d => d.id === newConductor);
-    if (driver && driver.estado === 'EN_RUTA') {
-      v.push({ type: 'error', text: 'Programación Cruzada (Anticolisión): El conductor ya está en ruta.' });
+    if (driver && (driver.estado === 'EN_RUTA' || driver.estado === 'EN RUTA')) {
+      v.push({ type: 'warning', text: 'Aviso Anticolisión: El conductor figura en ruta. Verifica disponibilidad para el nuevo servicio.' });
     } else if (newConductor) {
       v.push({ type: 'success', text: 'Documentación en regla: Conductor habilitado (Integración GDC).' });
     }
@@ -758,7 +776,9 @@ export default function CrearServicio() {
                           <select value={newConductor} onChange={e => setNewConductor(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white">
                             <option value="">Seleccionar conductor...</option>
                             {conductoresDisponibles.map(d => (
-                              <option key={d.id} value={d.id}>{d.nombre} ({d.estado})</option>
+                              <option key={d.id} value={d.id}>
+                                {d.nombre} {d.rol ? `• ${d.rol}` : ''} [{d.estado}]
+                              </option>
                             ))}
                           </select>
                         </div>
@@ -767,7 +787,9 @@ export default function CrearServicio() {
                           <select value={newUnidad} onChange={(e) => setNewUnidad(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white">
                             <option value="">Seleccionar unidad...</option>
                             {vehiculosDisponibles.map(v => (
-                              <option key={v.id} value={v.id}>{v.patente}</option>
+                              <option key={v.id} value={v.id}>
+                                {v.patente} {v.tipo ? `• ${v.tipo}` : ''} {v.modelo ? `(${v.modelo})` : ''}
+                              </option>
                             ))}
                           </select>
                         </div>
@@ -846,9 +868,10 @@ export default function CrearServicio() {
                    Cancelar
                  </button>
                  <button 
-                   disabled={validations.some(v => v.type === 'error')}
+                   disabled={!newOrigen.trim() || !newDestino.trim()}
                    onClick={handleSaveService}
                    className="px-8 py-3 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2"
+                   title={(!newOrigen.trim() || !newDestino.trim()) ? 'Debes indicar Punto de Origen y Punto de Destino' : 'Confirmar y programar servicio'}
                  >
                    <CheckCircle2 className="w-5 h-5" />
                    {editingServicio ? 'Guardar Cambios' : 'Confirmar Servicio'}
@@ -1010,6 +1033,14 @@ export default function CrearServicio() {
 
               {/* Acciones de detalle */}
               <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-3">
+                 {selectedServicio.estado !== 'Confirmado' && selectedServicio.estado !== 'Finalizado' && selectedServicio.estado !== 'Anulado' && (
+                   <button 
+                     onClick={handleConfirmSelectedService}
+                     className="w-full py-3.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all flex items-center justify-center gap-2"
+                   >
+                     <CheckCircle2 className="w-4 h-4" /> Confirmar Servicio
+                   </button>
+                 )}
                  <button 
                    onClick={handleEditService}
                    className="w-full py-3.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"

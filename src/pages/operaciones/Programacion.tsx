@@ -107,9 +107,13 @@ export default function Programacion() {
       }
 
       if (resCond.data) {
-        const driversOnly = resCond.data.filter((c: any) => String(c.rol).toLowerCase().includes('conductor') || String(c.rol).toLowerCase().includes('chofer'));
-        setDbConductores(driversOnly);
-        setConductores(driversOnly.map((c: any) => ({ ...c, vehiculo: 'Sin Asignar', selected: true })));
+        const driversOnly = resCond.data.filter((c: any) => {
+          const r = String(c.rol || '').toLowerCase().trim();
+          return r.includes('cond') || r.includes('chof') || r.includes('operad');
+        });
+        const finalDrivers = driversOnly.length > 0 ? driversOnly : resCond.data;
+        setDbConductores(finalDrivers);
+        setConductores(finalDrivers.map((c: any) => ({ ...c, vehiculo: 'Sin Asignar', selected: true })));
       }
       
       if (resServ.data && resProg.data) {
@@ -274,7 +278,9 @@ export default function Programacion() {
 
     if (source === 'pending') {
       try {
+        const progId = crypto.randomUUID();
         const { data: progData, error: progErr } = await supabase.from('operacion_programacion').insert([{
+          id: progId,
           empresa_id: item.empresa_id,
           tipo: item.tipo,
           origen: item.origen,
@@ -370,7 +376,9 @@ export default function Programacion() {
         }
         
         if (!isOriginalService) {
+          const newServId = crypto.randomUUID();
           const { data: servData, error: servErr } = await supabase.from('operacion_servicio').insert([{
+             id: newServId,
              empresa_id: item.empresa_id,
              codigo: `SRV-${Math.floor(Math.random() * 10000)}`,
              tipo_carga: item.tipo,
@@ -504,7 +512,9 @@ export default function Programacion() {
     const saveCompanyId = activeCompanyId === 'GLOBAL' ? profile?.empresa_id : activeCompanyId;
     if (!saveCompanyId) return alert('No perteneces a una empresa asignada o no has seleccionado una empresa. Por favor contacta al administrador.');
 
+    const newServId = crypto.randomUUID();
     const newServiceData = {
+      id: newServId,
       empresa_id: saveCompanyId,
       codigo: `SRV-${Math.random().toString().slice(2, 6)}`,
       tipo_carga: newSvrTipo,
@@ -524,7 +534,9 @@ export default function Programacion() {
       const progDateStr = new Date().toISOString().split('T')[0];
       const hora = new Date().getHours();
       
+      const newProgId = crypto.randomUUID();
       const progData = {
+        id: newProgId,
         empresa_id: data.empresa_id,
         tipo: data.tipo_carga || 'Interprovincial',
         origen: data.origen,
