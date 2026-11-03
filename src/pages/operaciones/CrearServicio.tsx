@@ -105,31 +105,74 @@ export default function CrearServicio() {
   };
 
   const loadData = async () => {
-    if (!activeCompanyId) return;
+    const targetCompanyId = (activeCompanyId && activeCompanyId !== 'GLOBAL')
+      ? activeCompanyId
+      : (currentCompany?.id || '161a47ac-9c63-435d-ab55-a6163a6805ab');
 
     try {
+      // 1. Cargar opciones del formulario en paralelo de forma aislada
+      let contratosQ = supabase.from('operacion_contrato').select('id, cliente_razon_social').eq('activo', true);
+      let vehiculosQ = supabase.from('vehiculo').select('id, patente, tipo, marca, modelo, estado').order('patente', { ascending: true });
+      let colaboradoresQ = supabase.from('colaborador').select('id, nombre, estado, rol').order('nombre', { ascending: true });
+
+      if (targetCompanyId) {
+        contratosQ = contratosQ.eq('empresa_id', targetCompanyId);
+        vehiculosQ = vehiculosQ.eq('empresa_id', targetCompanyId);
+        colaboradoresQ = colaboradoresQ.eq('empresa_id', targetCompanyId);
+      }
+
+      const [resContratos, resVehiculos, resColaboradores] = await Promise.allSettled([
+        contratosQ, vehiculosQ, colaboradoresQ
+      ]);
+
+      const contratosList = resContratos.status === 'fulfilled' && resContratos.value.data ? resContratos.value.data : [];
+      const vehiculosList = resVehiculos.status === 'fulfilled' && resVehiculos.value.data ? resVehiculos.value.data : [];
+      const colaboradoresList = resColaboradores.status === 'fulfilled' && resColaboradores.value.data ? resColaboradores.value.data : [];
+
+      if (contratosList.length > 0) {
+        setContratosDisponibles(contratosList.map((c: any) => ({ id: c.id, cliente: c.cliente_razon_social })));
+      }
+
+      if (vehiculosList.length > 0) {
+        const activeVehs = vehiculosList.filter((v: any) => v.estado !== 'INACTIVO');
+        setVehiculosDisponibles(activeVehs.length > 0 ? activeVehs : vehiculosList);
+      }
+
+      if (colaboradoresList.length > 0) {
+        const drivers = colaboradoresList.filter((c: any) => {
+          const r = String(c.rol || '').toLowerCase().trim();
+          return r.includes('cond') || r.includes('chof') || r.includes('operad') || r.includes('chofer');
+        });
+        const finalList = drivers.length > 0 ? drivers : colaboradoresList;
+        setConductoresDisponibles(finalList.map((c: any) => ({
+          id: c.id,
+          nombre: c.nombre,
+          rol: c.rol || '',
+          estado: c.estado || 'DISPONIBLE'
+        })));
+      }
+
+      // 2. Cargar servicios (sin join a operacion_contrato para evitar error PGRST200 por falta de FK en Postgres)
       let query = supabase
         .from('operacion_servicio')
         .select(`
           *,
-          operacion_contrato ( cliente_razon_social ),
           colaborador ( nombre, estado ),
           vehiculo ( patente, estado )
         `)
         .order('created_at', { ascending: false });
 
-      if (activeCompanyId !== 'GLOBAL') {
-        query = query.eq('empresa_id', activeCompanyId);
+      if (targetCompanyId) {
+        query = query.eq('empresa_id', targetCompanyId);
       }
 
       const { data, error } = await query;
-
-      if (error) throw error;
+      const contratosMap = new Map(contratosList.map((c: any) => [c.id, c.cliente_razon_social]));
 
       let formattedServices: Servicio[] = (data || []).map((s: any) => ({
         id: s.id,
         codigo: s.codigo || 'S-S/N',
-        contrato: s.operacion_contrato?.cliente_razon_social || 'Sin contrato',
+        contrato: contratosMap.get(s.contrato_id) || 'Sin contrato',
         contrato_id: s.contrato_id,
         tipo: s.tipo_carga,
         subtipo: s.subtipo || '',
@@ -213,42 +256,6 @@ export default function CrearServicio() {
 
       setServicios(formattedServices);
 
-      // Load form options
-      let contratosQ = supabase.from('operacion_contrato').select('id, cliente_razon_social').eq('activo', true);
-      let vehiculosQ = supabase.from('vehiculo').select('id, patente, tipo, marca, modelo, estado').order('patente', { ascending: true });
-      let colaboradoresQ = supabase.from('colaborador').select('id, nombre, estado, rol').order('nombre', { ascending: true });
-
-      if (activeCompanyId && activeCompanyId !== 'GLOBAL') {
-        contratosQ = contratosQ.eq('empresa_id', activeCompanyId);
-        vehiculosQ = vehiculosQ.eq('empresa_id', activeCompanyId);
-        colaboradoresQ = colaboradoresQ.eq('empresa_id', activeCompanyId);
-      }
-
-      const [contratos, vehiculos, colaboradores] = await Promise.all([
-        contratosQ, vehiculosQ, colaboradoresQ
-      ]);
-
-      if (contratos.data) setContratosDisponibles(contratos.data.map(c => ({ id: c.id, cliente: c.cliente_razon_social })));
-      
-      if (vehiculos.data) {
-        const activeVehs = vehiculos.data.filter((v: any) => v.estado !== 'INACTIVO');
-        setVehiculosDisponibles(activeVehs.length > 0 ? activeVehs : vehiculos.data);
-      }
-
-      if (colaboradores.data) {
-        const drivers = colaboradores.data.filter((c: any) => {
-          const r = String(c.rol || '').toLowerCase().trim();
-          return r.includes('cond') || r.includes('chof') || r.includes('operad') || r.includes('chofer');
-        });
-        const finalList = drivers.length > 0 ? drivers : colaboradores.data;
-        setConductoresDisponibles(finalList.map((c: any) => ({
-          id: c.id,
-          nombre: c.nombre,
-          rol: c.rol || '',
-          estado: c.estado || 'DISPONIBLE'
-        })));
-      }
-
       if (activeCompanyId === 'GLOBAL') {
         const { data: userData } = await supabase.auth.getUser();
         if (userData?.user?.email) {
@@ -267,7 +274,7 @@ export default function CrearServicio() {
           }
         }
       } else {
-        setNewEmpresaId(activeCompanyId);
+        setNewEmpresaId(targetCompanyId);
       }
 
     } catch (error) {
