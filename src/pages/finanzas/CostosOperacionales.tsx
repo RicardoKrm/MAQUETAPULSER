@@ -8,7 +8,6 @@ import { useCompany } from '../../contexts/CompanyContext';
 export default function CostosOperacionales() {
   const { activeCompanyId, currentCompany } = useCompany();
   const isGavalDemo = activeCompanyId === '161a47ac-9c63-435d-ab55-a6163a6805ab' || currentCompany?.name?.toLowerCase().includes('demo');
-  const isAlvimar = currentCompany?.name?.toLowerCase().includes('alvimar');
   const [vehiculosStats, setVehiculosStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -108,7 +107,7 @@ export default function CostosOperacionales() {
            const ingresoCalc = ingresos.reduce((sum: number, r: any) => sum + Number(r.monto || 0), 0);
            const ingresoTotal = ingresoCalc > 0 
               ? ingresoCalc 
-              : (isGavalDemo ? 4950000 : (isAlvimar ? 5500000 : 0));
+              : (isGavalDemo ? 4950000 : 0);
            const ganancia = ingresoTotal - costoTotal;
            
            let estado = 'normal';

@@ -10,6 +10,44 @@ if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'https://example.supabas
 const rawSupabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
+ * Inactividad y Reset Automático del Sandbox Demo:
+ * Si el usuario pasa 15 minutos sin interactuar (sin mover el mouse, clics ni teclas),
+ * se limpian automáticamente todas las claves 'sandbox_' de sessionStorage y se recarga
+ * la página para volver a los valores originales de la base de datos de Gaval Demo TMS.
+ */
+const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutos
+let inactivityTimer: any = null;
+
+function resetInactivityTimer() {
+  if (typeof window === 'undefined') return;
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+
+  inactivityTimer = setTimeout(() => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('sandbox_')) {
+          keysToRemove.push(key);
+        }
+      }
+      if (keysToRemove.length > 0) {
+        keysToRemove.forEach(k => sessionStorage.removeItem(k));
+        console.info('[Sandbox Demo] Tiempo de inactividad alcanzado. Restaurando valores originales.');
+        window.location.reload();
+      }
+    } catch (e) {}
+  }, INACTIVITY_TIMEOUT_MS);
+}
+
+if (typeof window !== 'undefined') {
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+    window.addEventListener(evt, resetInactivityTimer, { passive: true });
+  });
+  resetInactivityTimer();
+}
+
+/**
  * Almacenamiento de Sandbox Local en sessionStorage:
  * - Persiste las manipulaciones de datos durante toda la sesión del usuario/prospecto.
  * - Evita que un auto-refresh o cambio de pestaña revierta los cambios realizados en demo.
