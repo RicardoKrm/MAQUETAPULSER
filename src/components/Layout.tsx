@@ -731,17 +731,7 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2">
-            {/* Acceso directo a Pulser Clásico */}
-            <a
-              href="https://alvimar.pulser.cl/dashboard/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-cyan-300 border border-slate-200 dark:border-cyan-500/30 text-xs font-bold transition-all hover:scale-105 shadow-sm"
-              title="Abrir plataforma anterior de Pulser Alvimar"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-cyan-500" />
-              <span>Pulser Clásico</span>
-            </a>
+
 
             <button
               onClick={toggleTheme}
@@ -939,16 +929,7 @@ export default function Layout() {
                     </button>
                   </div>
 
-                  <div className="p-1 border-t border-slate-200 dark:border-slate-700">
-                    <a
-                      href="https://alvimar.pulser.cl/dashboard/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-cyan-600 dark:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors font-medium"
-                    >
-                      <ExternalLink className="h-4 w-4" /> Ir a Pulser Clásico
-                    </a>
-                  </div>
+
 
                   <div className="p-1 border-t border-slate-200 dark:border-slate-700">
                     <button
