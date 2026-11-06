@@ -85,7 +85,8 @@ function applySessionToRows(table: string, data: any): any {
     // 1. Filtrar registros eliminados en esta sesión
     let result = data.filter((r: any) => {
       const key = String(r.id || r.numero_interno || r.patente || '');
-      return !store.deletes.includes(key);
+      const contratoKey = r.contrato_id ? String(r.contrato_id) : null;
+      return !store.deletes.includes(key) && (!contratoKey || !store.deletes.includes(contratoKey));
     });
 
     // 2. Fusionar actualizaciones de la sesión
@@ -206,9 +207,7 @@ function createSandboxBuilder(table: string, op: 'insert' | 'update' | 'upsert' 
   });
 
   builder.eq = function(column: string, value: any) {
-    if (column === 'id' || column === 'patente' || column === 'numero_interno') {
-      targetId = String(value);
-    }
+    targetId = String(value);
     return builder;
   };
 
