@@ -445,7 +445,7 @@ export default function PanelTco() {
       // 2. Contratos de Clientes
       const { data: coData } = await supabase
         .from('operacion_contrato')
-        .select('id, cliente_razon_social, valor_total, monto_mensual, activo, fecha_inicio, fecha_termino')
+        .select('id, cliente, cliente_razon_social, valor_total, monto_mensual, activo, fecha_inicio, fecha_termino')
         .eq('empresa_id', activeCompanyId);
       if (coData) setContratosData(coData);
 
@@ -708,12 +708,13 @@ export default function PanelTco() {
       const assignedVids = contractVehicleMap[c.id] || [];
       if (assignedVids.length > 0) {
         const quotaPerVehicle = Math.round(valorPeriodo / assignedVids.length);
+        const nomContrato = c.cliente || c.cliente_razon_social || 'Contrato Cliente';
         assignedVids.forEach(vid => {
           if (!vContratoIncome[vid]) {
-            vContratoIncome[vid] = { total: 0, nombreContrato: c.cliente_razon_social || 'Contrato Cliente' };
+            vContratoIncome[vid] = { total: 0, nombreContrato: nomContrato };
           }
           vContratoIncome[vid].total += quotaPerVehicle;
-          vContratoIncome[vid].nombreContrato = c.cliente_razon_social || vContratoIncome[vid].nombreContrato;
+          vContratoIncome[vid].nombreContrato = nomContrato;
         });
       }
     });

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { FileText, Plus, Search, Calendar, X, Briefcase, Download, Paperclip, ChevronRight, CheckCircle2, Truck, Wrench, Info, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { FileText, Plus, Search, Calendar, X, Briefcase, Download, Paperclip, ChevronRight, CheckCircle2, Truck, Wrench, Info, AlertCircle, FileCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -12,14 +12,18 @@ const formatCurrency = (value: number) => {
 type Contrato = {
   id: string;
   cliente: string;
+  alias?: string;
   descripcion: string;
   inicio: string;
   termino: string;
   valor: number;
+  monto_mensual: number;
   activo: boolean;
   tipo: string;
   vehiculosAsignados: string[];
+  vehiculosIds: string[];
   maquinasAsignadas: string[];
+  pdfFileName?: string;
 };
 
 export default function Contratos() {
@@ -37,11 +41,13 @@ export default function Contratos() {
   const [toastMessage, setToastMessage] = useState('');
 
   const [userCompanies, setUserCompanies] = useState<{id: string, nombre: string}[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const emptyForm = {
     empresa_id: '',
     cliente: '',
+    alias: '',
     rut: '',
     descripcion: '',
     tipo: 'Transporte Personal',
@@ -49,9 +55,11 @@ export default function Contratos() {
     inicio: '',
     termino: '',
     valor: '',
+    monto_mensual: '',
     condicion_pago: '30 Días',
     renovacion_auto: false,
-    vehiculosAsignados: [] as string[]
+    vehiculosAsignados: [] as string[],
+    pdfFileName: ''
   };
   
   const [formData, setFormData] = useState(emptyForm);
@@ -77,8 +85,21 @@ export default function Contratos() {
       }
       
       const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery;
+      
+      const parseUnitNum = (pat: string) => {
+        if (!pat) return 999999;
+        const m = pat.match(/(\d+)/);
+        return m ? parseInt(m[1], 10) : 999999;
+      };
+
       if (!vehiculosError && vehiculosData) {
-        setVehiculosDisponibles(vehiculosData);
+        const sortedVehs = [...vehiculosData].sort((a: any, b: any) => {
+          const numA = parseUnitNum(a.patente);
+          const numB = parseUnitNum(b.patente);
+          if (numA !== numB) return numA - numB;
+          return (a.patente || '').localeCompare(b.patente || '');
+        });
+        setVehiculosDisponibles(sortedVehs);
       }
 
       const vehMap = new Map((vehiculosData || []).map((v: any) => [v.id, v.patente]));
@@ -103,26 +124,33 @@ export default function Contratos() {
         .from('operacion_contrato_vehiculo')
         .select('contrato_id, vehiculo_id');
 
-      const cvMap: Record<string, string[]> = {};
+      const cvMapPatentes: Record<string, string[]> = {};
+      const cvMapIds: Record<string, string[]> = {};
       (cvLinks || []).forEach((link: any) => {
-        if (!cvMap[link.contrato_id]) cvMap[link.contrato_id] = [];
+        if (!cvMapPatentes[link.contrato_id]) cvMapPatentes[link.contrato_id] = [];
+        if (!cvMapIds[link.contrato_id]) cvMapIds[link.contrato_id] = [];
+        cvMapIds[link.contrato_id].push(link.vehiculo_id);
         const pat = vehMap.get(link.vehiculo_id);
-        if (pat) cvMap[link.contrato_id].push(pat);
+        if (pat) cvMapPatentes[link.contrato_id].push(pat);
       });
 
       const formatContratos: Contrato[] = (contratosData || []).map(c => {
-        const vehiculos = cvMap[c.id] || [];
+        const vehiculos = cvMapPatentes[c.id] || [];
+        const vehiculosIds = cvMapIds[c.id] || [];
         return {
           id: c.id,
           cliente: c.cliente_razon_social,
+          alias: c.cliente || c.codigo_contrato || '',
           descripcion: c.descripcion || '',
           inicio: c.fecha_inicio || '',
           termino: c.fecha_termino || '',
           valor: parseFloat(c.valor_total) || 0,
+          monto_mensual: parseFloat(c.monto_mensual) || 0,
           activo: c.activo !== false,
           tipo: c.tipo_servicio || 'General',
           vehiculosAsignados: vehiculos,
-          maquinasAsignadas: [] // Si manejas máquinas en otra tabla
+          vehiculosIds: vehiculosIds,
+          maquinasAsignadas: []
         };
       });
 
@@ -132,36 +160,7 @@ export default function Contratos() {
       const uniqueClients = Array.from(new Set(formatContratos.map(c => c.cliente))).filter(Boolean);
       setClientesExistentes(uniqueClients);
 
-      if (activeCompanyId === 'GLOBAL') {
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData?.user?.email) {
-          const { data: ua } = await supabase
-            .from('usuario_aplicacion')
-            .select('empresa_id, empresa(id, nombre)')
-            .eq('email', userData.user.email);
-            
-          if (ua && ua.length > 0) {
-            setUserCompanies(ua.map((u: any) => ({
-              id: u.empresa?.id || u.empresa_id,
-              nombre: u.empresa?.nombre || 'Mi Empresa'
-            })));
-            
-            if (!formData.empresa_id) {
-               const firstCompany = (ua[0] as any);
-               setFormData(prev => ({ ...prev, empresa_id: firstCompany.empresa_id || firstCompany.empresa?.id }));
-            }
-          } else {
-            // Si el usuario no tiene empresa asociada (es super admin puro sin usuario_aplicacion, etc) 
-            // Mostramos todas las empresas:
-            const { data: allEmpresas } = await supabase.from('empresa').select('id, nombre').eq('estado', 'Activo');
-            if (allEmpresas) {
-              setUserCompanies(allEmpresas.map((e: any) => ({ id: e.id, nombre: e.nombre })));
-            }
-          }
-        }
-      } else {
-        setFormData(prev => ({ ...prev, empresa_id: activeCompanyId }));
-      }
+      setFormData(prev => ({ ...prev, empresa_id: activeCompanyId || '161a47ac-9c63-435d-ab55-a6163a6805ab' }));
 
     } catch (error) {
       console.error('Error loading contracts data:', error);
@@ -174,7 +173,7 @@ export default function Contratos() {
   }, [activeCompanyId, profile]);
 
   const handleSaveContrato = async () => {
-    const finalCompanyId = activeCompanyId === 'GLOBAL' ? formData.empresa_id : activeCompanyId;
+    const finalCompanyId = activeCompanyId || '161a47ac-9c63-435d-ab55-a6163a6805ab';
 
     if (!finalCompanyId) {
       showToast('Por favor, selecciona una empresa operadora para asignar este contrato.');
@@ -189,8 +188,19 @@ export default function Contratos() {
     try {
       showToast('Guardando contrato...');
 
+      let valorTotalNum = formData.valor ? parseFloat(formData.valor) : 0;
+      let montoMensualNum = formData.monto_mensual ? parseFloat(formData.monto_mensual) : 0;
+
+      // Auto-calibración: si falta monto mensual se calcula, y viceversa
+      if (montoMensualNum === 0 && valorTotalNum > 0) {
+        montoMensualNum = Math.round(valorTotalNum / 12);
+      } else if (montoMensualNum > 0 && valorTotalNum === 0) {
+        valorTotalNum = montoMensualNum * 12;
+      }
+
       const savePayload = {
         empresa_id: finalCompanyId,
+        cliente: formData.alias && formData.alias.trim() !== '' ? formData.alias.trim() : null,
         cliente_razon_social: formData.cliente,
         cliente_rut: formData.rut,
         descripcion: formData.descripcion,
@@ -198,7 +208,8 @@ export default function Contratos() {
         zona_operacion: formData.zona,
         fecha_inicio: formData.inicio || null,
         fecha_termino: formData.termino || null,
-        valor_total: formData.valor ? parseFloat(formData.valor) : 0,
+        monto_mensual: montoMensualNum,
+        valor_total: valorTotalNum,
         activo: true
       };
 
@@ -267,8 +278,7 @@ export default function Contratos() {
   };
 
   const openNewModal = () => {
-    const finalCompanyId = activeCompanyId === 'GLOBAL' ? formData.empresa_id : activeCompanyId;
-    setFormData({ ...emptyForm, empresa_id: finalCompanyId || '' });
+    setFormData({ ...emptyForm, empresa_id: activeCompanyId });
     setEditingContratoId(null);
     setIsModalOpen(true);
   };
@@ -367,10 +377,17 @@ export default function Contratos() {
               )}
             </div>
             
-            <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-1">{contrato.cliente}</h3>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight">{contrato.cliente}</h3>
+              {contrato.alias && (
+                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 font-extrabold text-[10px] rounded-md border border-blue-200 dark:border-blue-800">
+                  {contrato.alias}
+                </span>
+              )}
+            </div>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 line-clamp-2 min-h-[40px] leading-relaxed mb-4">{contrato.descripcion}</p>
             
-            <div className="mb-4 flex gap-2">
+            <div className="mb-4 flex flex-wrap gap-2">
                <span className="inline-flex items-center px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-[10px] rounded-md uppercase tracking-wider">
                  {contrato.tipo}
                </span>
@@ -390,11 +407,16 @@ export default function Contratos() {
                     {contrato.inicio.slice(2)} <span className="text-slate-400 mx-1">→</span> {contrato.termino.slice(2)}
                   </p>
                 </div>
-                <div className="text-right space-y-1">
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor total ($)</p>
+                <div className="text-right space-y-0.5">
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Facturación</p>
                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                     {formatCurrency(contrato.valor).replace('CLP', '').trim()}
+                     {formatCurrency(contrato.valor).replace('CLP', '').trim()} <span className="text-[10px] font-bold text-slate-400">total</span>
                    </p>
+                   {contrato.monto_mensual > 0 && (
+                     <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                       {formatCurrency(contrato.monto_mensual).replace('CLP', '').trim()} / mes
+                     </p>
+                   )}
                 </div>
               </div>
               <div className="flex items-center justify-center gap-2 pt-2 text-indigo-600 dark:text-indigo-400 text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity">
@@ -462,22 +484,6 @@ export default function Contratos() {
                       <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4 border-b border-slate-100 dark:border-slate-800 pb-2">1. Datos Generales</h3>
                       
                       <div className="space-y-4">
-                        {activeCompanyId === 'GLOBAL' && (
-                          <div>
-                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Empresa Operadora (Propietaria)</label>
-                            <select 
-                              value={formData.empresa_id} 
-                              onChange={e => setFormData({...formData, empresa_id: e.target.value})} 
-                              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white"
-                            >
-                              <option value="">Selecciona Empresa Operadora...</option>
-                              {userCompanies.map(c => (
-                                <option key={c.id} value={c.id}>{c.nombre}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
                         <div>
                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Empresa Cliente (Razón Social)</label>
                           <input 
@@ -493,6 +499,20 @@ export default function Contratos() {
                               <option key={c} value={c} />
                             ))}
                           </datalist>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                            <span>Alias / Nombre Corto del Contrato</span>
+                            <span className="text-xs text-indigo-500 font-medium">(Opcional para gráficos TCO)</span>
+                          </label>
+                          <input 
+                            type="text" 
+                            value={formData.alias} 
+                            onChange={e => setFormData({...formData, alias: e.target.value})} 
+                            placeholder="Ej: Collahuasi Ujina, Teck QB2, Patillos..." 
+                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white" 
+                          />
                         </div>
 
                         <div>
@@ -513,6 +533,7 @@ export default function Contratos() {
                         <div>
                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Tipo de Servicio</label>
                           <select value={formData.tipo} onChange={e => setFormData({...formData, tipo: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white">
+                            <option>Transporte Concentrado & Personal</option>
                             <option>Transporte Personal</option>
                             <option>Carga General</option>
                             <option>Sobredimensionada</option>
@@ -551,9 +572,58 @@ export default function Contratos() {
 
                       <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Valor Total ($ o UF)</label>
-                          <input type="number" value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} placeholder="0" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white" />
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Monto Mensual de Facturación ($)</label>
+                          <input 
+                            type="number" 
+                            value={formData.monto_mensual} 
+                            onChange={e => {
+                              const valMensual = e.target.value;
+                              const numVal = parseFloat(valMensual) || 0;
+                              let meses = 12;
+                              if (formData.inicio && formData.termino) {
+                                const d1 = new Date(formData.inicio);
+                                const d2 = new Date(formData.termino);
+                                const diffMeses = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+                                if (diffMeses > 0) meses = diffMeses;
+                              }
+                              setFormData({
+                                ...formData, 
+                                monto_mensual: valMensual,
+                                valor: numVal > 0 ? (numVal * meses).toString() : formData.valor
+                              });
+                            }} 
+                            placeholder="Ej: 74200000" 
+                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white" 
+                          />
                         </div>
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Valor Total del Contrato ($)</label>
+                          <input 
+                            type="number" 
+                            value={formData.valor} 
+                            onChange={e => {
+                              const valTotal = e.target.value;
+                              const numVal = parseFloat(valTotal) || 0;
+                              let meses = 12;
+                              if (formData.inicio && formData.termino) {
+                                const d1 = new Date(formData.inicio);
+                                const d2 = new Date(formData.termino);
+                                const diffMeses = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+                                if (diffMeses > 0) meses = diffMeses;
+                              }
+                              setFormData({
+                                ...formData, 
+                                valor: valTotal,
+                                monto_mensual: numVal > 0 ? Math.round(numVal / meses).toString() : formData.monto_mensual
+                              });
+                            }} 
+                            placeholder="Ej: 890400000" 
+                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white" 
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Condición de Pago</label>
                           <select value={formData.condicion_pago} onChange={e => setFormData({...formData, condicion_pago: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm font-medium outline-none focus:border-indigo-500 transition-all text-slate-900 dark:text-white">
@@ -563,21 +633,62 @@ export default function Contratos() {
                             <option>90 Días</option>
                           </select>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                         <input type="checkbox" checked={formData.renovacion_auto} onChange={e => setFormData({...formData, renovacion_auto: e.target.checked})} id="renovacion_auto" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 dark:border-slate-700 dark:text-slate-100" />
-                         <label htmlFor="renovacion_auto" className="text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer">Renovación Automática</label>
+                        <div className="flex items-center pt-6">
+                          <div className="flex items-center gap-3 p-3 w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                             <input type="checkbox" checked={formData.renovacion_auto} onChange={e => setFormData({...formData, renovacion_auto: e.target.checked})} id="renovacion_auto" className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 dark:border-slate-700 dark:text-slate-100" />
+                             <label htmlFor="renovacion_auto" className="text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer">Renovación Automática</label>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4 border-b border-slate-100 dark:border-slate-800 pb-2">4. Documentos Legales</h3>
                       
-                      <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-6 text-center hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors bg-slate-50/50 dark:bg-slate-950 cursor-pointer">
-                        <Paperclip className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Arrastra el archivo PDF del contrato firmado</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">o haz clic para explorar</p>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        accept="application/pdf" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setFormData(prev => ({ ...prev, pdfFileName: file.name }));
+                            showToast(`Archivo PDF "${file.name}" cargado exitosamente.`);
+                          }
+                        }}
+                      />
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files?.[0];
+                          if (file && (file.type === 'application/pdf' || file.name.endsWith('.pdf'))) {
+                            setFormData(prev => ({ ...prev, pdfFileName: file.name }));
+                            showToast(`Archivo PDF "${file.name}" cargado exitosamente.`);
+                          } else {
+                            showToast('Por favor sube un archivo en formato PDF.');
+                          }
+                        }}
+                        className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-6 text-center hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors bg-slate-50/50 dark:bg-slate-950 cursor-pointer"
+                      >
+                        {formData.pdfFileName ? (
+                          <div className="flex flex-col items-center">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2">
+                              <FileCheck className="w-6 h-6" />
+                            </div>
+                            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formData.pdfFileName}</p>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded mt-1">PDF Adjuntado</span>
+                            <p className="text-xs text-slate-400 mt-2 hover:underline">Haz clic para cambiar o subir otro documento</p>
+                          </div>
+                        ) : (
+                          <>
+                            <Paperclip className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Arrastra el archivo PDF del contrato firmado</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">o haz clic para explorar en tu equipo</p>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -588,8 +699,10 @@ export default function Contratos() {
                   <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4 border-b border-slate-100 dark:border-slate-800 pb-2">5. Asignación de Flota y Maquinaria (Opcional)</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex justify-between">Vehículos <span className="text-xs text-indigo-600 font-medium">Múltiples</span></label>
-                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-48 overflow-y-auto space-y-2">
+                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex justify-between">
+                        Vehículos Operativos <span className="text-xs text-indigo-600 font-bold">Orden Numérico Menor a Mayor</span>
+                      </label>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-52 overflow-y-auto space-y-2">
                         {vehiculosDisponibles.filter(v => v.tipo !== 'Maquinaria').map(v => (
                           <label key={v.id} className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors shadow-sm">
                             <input 
@@ -607,22 +720,32 @@ export default function Contratos() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex justify-between">Maquinaria <span className="text-xs text-indigo-600 font-medium">Múltiples</span></label>
-                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-48 overflow-y-auto space-y-2">
-                        {vehiculosDisponibles.filter(v => v.tipo === 'Maquinaria').map(m => (
-                          <label key={m.id} className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors shadow-sm">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.vehiculosAsignados.includes(m.id)}
-                              onChange={() => toggleVehiculoAsignado(m.id)}
-                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" 
-                            />
-                            <div className="flex items-center gap-2">
-                               <Wrench className="w-4 h-4 text-slate-400" />
-                               <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{m.patente}</span>
-                            </div>
-                          </label>
-                        ))}
+                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex justify-between">
+                        Maquinaria Pesada <span className="text-xs text-slate-400 font-medium">Opcional</span>
+                      </label>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-52 overflow-y-auto space-y-2">
+                        {vehiculosDisponibles.filter(v => v.tipo === 'Maquinaria').length > 0 ? (
+                          vehiculosDisponibles.filter(v => v.tipo === 'Maquinaria').map(m => (
+                            <label key={m.id} className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors shadow-sm">
+                              <input 
+                                type="checkbox" 
+                                checked={formData.vehiculosAsignados.includes(m.id)}
+                                onChange={() => toggleVehiculoAsignado(m.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" 
+                              />
+                              <div className="flex items-center gap-2">
+                                 <Wrench className="w-4 h-4 text-slate-400" />
+                                 <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{m.patente}</span>
+                              </div>
+                            </label>
+                          ))
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                            <Wrench className="w-8 h-8 text-slate-400 mb-2 opacity-40" />
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Sin maquinaria pesada en la empresa</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">La dotación actual está compuesta por tractocamiones, buses y camionetas.</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -675,7 +798,14 @@ export default function Contratos() {
                     {selectedContrato.cliente.charAt(0)}
                   </div>
                   <div>
-                    <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{selectedContrato.cliente}</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{selectedContrato.cliente}</h2>
+                      {selectedContrato.alias && (
+                        <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 font-extrabold text-[10px] rounded-md border border-blue-200 dark:border-blue-800">
+                          {selectedContrato.alias}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs font-bold text-slate-500 uppercase tracking-wider dark:text-slate-400">Detalle Contrato</span>
                       {selectedContrato.activo ? (
@@ -716,9 +846,17 @@ export default function Contratos() {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">Valor Total Proyectado</p>
-                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(selectedContrato.valor)}</p>
+                      <div className="pt-4 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">Valor Total Proyectado</p>
+                          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(selectedContrato.valor)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">Facturación Mensual</p>
+                          <p className="text-xl font-black text-blue-600 dark:text-blue-400">
+                            {formatCurrency(selectedContrato.monto_mensual || Math.round(selectedContrato.valor / 12))}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -816,18 +954,21 @@ export default function Contratos() {
                       if (!selectedContrato) return;
                       setEditingContratoId(selectedContrato.id);
                       setFormData({
-                        empresa_id: activeCompanyId === 'GLOBAL' ? '' : activeCompanyId, // Se puede mejorar si mantenemos la empresa del contrato
+                        empresa_id: activeCompanyId,
                         cliente: selectedContrato.cliente,
+                        alias: selectedContrato.alias || '',
                         rut: '',
                         descripcion: selectedContrato.descripcion,
                         tipo: selectedContrato.tipo,
                         zona: 'Norte',
                         inicio: selectedContrato.inicio,
                         termino: selectedContrato.termino,
-                        valor: selectedContrato.valor.toString(),
+                        valor: selectedContrato.valor ? selectedContrato.valor.toString() : '',
+                        monto_mensual: selectedContrato.monto_mensual ? selectedContrato.monto_mensual.toString() : '',
                         condicion_pago: '30 Días',
                         renovacion_auto: false,
-                        vehiculosAsignados: selectedContrato.vehiculosAsignados || []
+                        vehiculosAsignados: selectedContrato.vehiculosIds || [],
+                        pdfFileName: selectedContrato.pdfFileName || ''
                       });
                       setSelectedContrato(null);
                       setIsModalOpen(true);
