@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { useAppContext } from '../../context/AppContext';
 import { useCompany } from '../../contexts/CompanyContext';
+import { compareVehiclesNumerically } from './PanelTco';
 
 // Mock Data
 const motifsPausa = ['Falta Repuesto', 'Espera Autorización', 'Personal Ocupado', 'Turno Noche'];
@@ -70,12 +71,16 @@ export default function KpiFlota() {
     numeroFallasGlobal,
     diasPeriodoGlobal,
     vCountGlobal,
+    hasVehiculosGlobal,
     marcasDisponibles,
     modelosDisponibles
   } = useMemo(() => {
     const currentEmpresaId = currentCompany?.id;
     // 1. Filtrar vehículos de la empresa activa
-    const vehiculosEmpresa = (vehiculos || []).filter((v: any) => !currentEmpresaId || !v.empresa_id || v.empresa_id === currentEmpresaId);
+    const vehiculosEmpresa = (vehiculos || []).filter((v: any) => {
+      if (currentEmpresaId) return v.empresa_id === currentEmpresaId;
+      return true;
+    });
 
     // Opciones para filtros de Marca y Modelo
     const marcasDisponibles = Array.from(new Set(vehiculosEmpresa.map((v: any) => v.marca).filter(Boolean))) as string[];
@@ -157,8 +162,9 @@ export default function KpiFlota() {
     else {
       diasPeriodo = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
     }
-    const vCount = Math.max(1, vehiculosFiltrados.length);
-    const horasTotalesPeriodo = diasPeriodo * 24 * vCount;
+    const hasVehiculos = vehiculosFiltrados.length > 0;
+    const vCount = vehiculosFiltrados.length;
+    const horasTotalesPeriodo = hasVehiculos ? diasPeriodo * 24 * vCount : 0;
 
     const vStatsMap: Record<string, { prev: number, corr: number, eva: number, cost: number, downTime: number }> = {};
     vehiculosFiltrados.forEach((v: any) => {
@@ -193,14 +199,20 @@ export default function KpiFlota() {
     });
 
     // Horas Totales de Operación = Horas Calendario - Horas en Taller (Preventivo + Correctivo)
-    const horasOperacion = Math.max(0, horasTotalesPeriodo - horasTallerPeriodo);
+    const horasOperacion = hasVehiculos ? Math.max(0, horasTotalesPeriodo - horasTallerPeriodo) : 0;
     // Número de Fallas = OTs Correctivas (fallas imprevistas que requirieron detención y reparación)
     const numeroFallas = corrCount;
 
     // Fórmula del MTBF = Horas Totales de Operación / Número de Fallas
-    const mtbfGlobalVal = numeroFallas > 0 ? (horasOperacion / numeroFallas) : horasOperacion;
-    const globalDispVal = horasTotalesPeriodo > 0 ? ((horasOperacion / horasTotalesPeriodo) * 100).toFixed(1) : "100";
-    const globalConfVal = (Math.exp(-24 / Math.max(1, mtbfGlobalVal)) * 100).toFixed(1);
+    const mtbfGlobalVal = hasVehiculos
+      ? (numeroFallas > 0 ? (horasOperacion / numeroFallas) : horasOperacion)
+      : 0;
+    const globalDispVal = (hasVehiculos && horasTotalesPeriodo > 0)
+      ? ((horasOperacion / horasTotalesPeriodo) * 100).toFixed(1)
+      : "0.0";
+    const globalConfVal = (hasVehiculos && mtbfGlobalVal > 0)
+      ? (Math.exp(-24 / Math.max(1, mtbfGlobalVal)) * 100).toFixed(1)
+      : "0.0";
 
     // 6. Ranking individual por vehículo
     const horasCalPorVehiculo = diasPeriodo * 24;
@@ -215,6 +227,9 @@ export default function KpiFlota() {
       return {
         id: v.id,
         v: v.patente || `Vehículo ${v.id}`,
+        patente: v.patente,
+        numero_interno: v.numero_interno || v.detalles?.numero_interno,
+        detalles: v.detalles,
         name: `${v.marca || 'Marca'} ${v.modelo || ''}`,
         prev: st.prev,
         corr: st.corr,
@@ -229,7 +244,7 @@ export default function KpiFlota() {
         horasOp: Math.round(horasOpVeh),
         horasTaller: Math.round(st.downTime)
       };
-    }).sort((a, b) => b.costVal - a.costVal);
+    }).sort(compareVehiclesNumerically);
 
     // Bad Actors: Equipos con mayor cantidad de fallas imprevistas / menor MTBF
     const badActors = [...rankingDataObj]
@@ -289,17 +304,17 @@ export default function KpiFlota() {
     });
 
     const dispMensualData = last12Months.map((m) => {
-      const hrsTotalesMes = m.days * 24 * vCount;
+      const hrsTotalesMes = hasVehiculos ? m.days * 24 * vCount : 0;
       const hrsOpMes = Math.max(0, hrsTotalesMes - m.downtime);
-      const d = hrsTotalesMes > 0 ? (hrsOpMes / hrsTotalesMes) * 100 : 100;
+      const d = (hasVehiculos && hrsTotalesMes > 0) ? (hrsOpMes / hrsTotalesMes) * 100 : 0;
       return { name: m.name, disp: Number(d.toFixed(1)) };
     });
 
     const confMensualData = last12Months.map((m) => {
-      const hrsTotalesMes = m.days * 24 * vCount;
+      const hrsTotalesMes = hasVehiculos ? m.days * 24 * vCount : 0;
       const hrsOpMes = Math.max(0, hrsTotalesMes - m.downtime);
-      const mtbfMes = m.fallas > 0 ? (hrsOpMes / m.fallas) : hrsOpMes;
-      const conf = Math.exp(-24 / Math.max(1, mtbfMes)) * 100;
+      const mtbfMes = m.fallas > 0 ? (hrsOpMes / m.fallas) : (hasVehiculos ? hrsOpMes : 0);
+      const conf = (hasVehiculos && mtbfMes > 0) ? Math.exp(-24 / Math.max(1, mtbfMes)) * 100 : 0;
       return { name: m.name, conf: Number(conf.toFixed(1)), mtbf: Math.round(mtbfMes) };
     });
 
@@ -347,6 +362,7 @@ export default function KpiFlota() {
       numeroFallasGlobal: numeroFallas,
       diasPeriodoGlobal: diasPeriodo,
       vCountGlobal: vCount,
+      hasVehiculosGlobal: hasVehiculos,
       marcasDisponibles,
       modelosDisponibles
     };
@@ -925,6 +941,16 @@ export default function KpiFlota() {
           </div>
         </div>
 
+        {/* Aviso de Empresa Sin Flota Registrada */}
+        {!hasVehiculosGlobal && (
+          <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex items-center gap-3 text-amber-700 dark:text-amber-300 shadow-sm animate-in fade-in duration-300">
+            <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="text-xs sm:text-sm font-medium">
+              La empresa <b>{currentCompany?.name || 'seleccionada'}</b> aún no cuenta con vehículos registrados en el sistema. Los indicadores de disponibilidad, horas operadas y MTBF se activarán automáticamente cuando se ingresen unidades en el módulo de <span className="font-bold underline">Gestión de Flota</span>.
+            </div>
+          </div>
+        )}
+
         {/* 4 Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div 
@@ -933,7 +959,7 @@ export default function KpiFlota() {
           >
             <h3 className="text-xs font-extrabold text-blue-500 uppercase tracking-widest mb-3">Disponibilidad Física</h3>
             <div className="flex items-end gap-3 mb-2">
-              <span className="text-4xl font-black text-emerald-500 dark:text-emerald-400">{globalDisp}%</span>
+              <span className={`text-4xl font-black ${hasVehiculosGlobal ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{globalDisp}%</span>
               <BarChart3 className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-1" />
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -952,7 +978,7 @@ export default function KpiFlota() {
               </span>
             </div>
             <div className="flex items-end gap-3 mb-2">
-              <span className="text-4xl font-black text-slate-800 dark:text-slate-100">{globalMtbf} hrs</span>
+              <span className={`text-4xl font-black ${hasVehiculosGlobal ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}`}>{globalMtbf} hrs</span>
               <History className="w-5 h-5 text-slate-300 dark:text-slate-600 mb-1" />
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
@@ -990,10 +1016,12 @@ export default function KpiFlota() {
           >
             <h3 className="text-xs font-extrabold text-emerald-500 uppercase tracking-widest mb-3">Confiabilidad de Misión</h3>
             <div className="flex items-end gap-3 mb-2">
-              <span className="text-4xl font-black text-emerald-500 dark:text-emerald-400">{globalConf}%</span>
+              <span className={`text-4xl font-black ${hasVehiculosGlobal ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{globalConf}%</span>
               <Shield className="w-5 h-5 text-slate-300 dark:text-slate-600 mb-1" />
             </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Probabilidad éxito 24h</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {hasVehiculosGlobal ? 'Probabilidad éxito 24h' : 'Sin flota registrada'}
+            </p>
           </div>
         </div>
 

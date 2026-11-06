@@ -548,7 +548,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Fetch Vehiculos
       const { data: vehiculosData } = await supabase.from('vehiculo').select('*').eq('empresa_id', activeCompanyId);
       if (vehiculosData && Array.isArray(vehiculosData)) {
-        setVehiculos(vehiculosData.map(v => {
+        const mappedVehiculos = vehiculosData.map(v => {
           const detalles = v.detalles || {};
           let rawMarca = v.marca || detalles.marca || '';
           let rawModelo = v.modelo || detalles.modelo || '';
@@ -606,7 +606,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             intervalo_km: kmInterv,
             detalles: v.detalles
           };
-        }));
+        });
+        mappedVehiculos.sort((a, b) => {
+          const numA = parseInt(String(a.numeroInterno || a.patente).replace(/\D/g, ''), 10) || 999999;
+          const numB = parseInt(String(b.numeroInterno || b.patente).replace(/\D/g, ''), 10) || 999999;
+          if (numA !== numB) return numA - numB;
+          return String(a.patente || '').localeCompare(String(b.patente || ''), undefined, { numeric: true, sensitivity: 'base' });
+        });
+        setVehiculos(mappedVehiculos);
       } else {
         setVehiculos([]);
       }

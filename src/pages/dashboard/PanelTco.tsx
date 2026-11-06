@@ -2,11 +2,13 @@ import React, { useState, memo, useMemo, useEffect } from 'react';
 import { 
   DollarSign, Filter, Calendar, FileText, FileSpreadsheet, TrendingDown, TrendingUp, 
   Search, RefreshCw, X, ArrowRight, ChevronRight, BarChart2, AlertTriangle, CheckCircle2,
-  Truck, ArrowUpRight, ArrowDownRight, Layers, ArrowLeft
+  Truck, ArrowUpRight, ArrowDownRight, Layers, ArrowLeft, Clock, ShieldAlert,
+  Award, Compass, HelpCircle, Activity, Info, ChevronDown, ChevronUp, Cpu, Wrench
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, AreaChart, Area, PieChart, Pie, Legend, ComposedChart, Brush
+  LineChart, Line, AreaChart, Area, PieChart, Pie, Legend, ComposedChart, Brush,
+  ReferenceLine, ReferenceDot
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../../context/AppContext';
@@ -25,19 +27,106 @@ const formatCompactNumber = (number: number) => {
   }).format(number);
 };
 
+// Función de ordenamiento numérico estricto de menor a mayor por número de unidad / patente
+export const parseUnitNumber = (item: any): number => {
+  const numInt = item?.numeroInterno ?? item?.numero_interno ?? item?.detalles?.numero_interno;
+  if (numInt !== undefined && numInt !== null && String(numInt).trim() !== '') {
+    const match = String(numInt).match(/\d+/);
+    if (match) {
+      const parsed = parseInt(match[0], 10);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+
+  const nameStr = String(item?.name || item?.v || item?.displayName || '');
+  const hashMatch = nameStr.match(/#(\d+)/);
+  if (hashMatch) {
+    const parsed = parseInt(hashMatch[1], 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  const patStr = String(item?.patente || item?.ppu || item?.name || item?.v || '');
+  const patMatch = patStr.match(/\d+/);
+  if (patMatch) {
+    const parsed = parseInt(patMatch[0], 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  return 999999;
+};
+
+export const compareVehiclesNumerically = (a: any, b: any): number => {
+  const numA = parseUnitNumber(a);
+  const numB = parseUnitNumber(b);
+
+  if (numA !== numB) {
+    return numA - numB;
+  }
+
+  const strA = String(a?.name || a?.patente || a?.v || a?.ppu || '');
+  const strB = String(b?.name || b?.patente || b?.v || b?.ppu || '');
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+};
+
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const dataPoint = payload[0]?.payload;
     return (
-      <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-3.5 shadow-2xl z-50 text-xs">
-        <p className="text-white font-bold text-sm mb-2 border-b border-slate-800 pb-1.5 flex items-center justify-between">
+      <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-3.5 shadow-2xl z-50 text-xs min-w-[270px]">
+        <div className="text-white font-bold text-sm mb-2 border-b border-slate-800 pb-1.5 flex items-center justify-between gap-2">
           <span>{label}</span>
-        </p>
+          {dataPoint?.contratoNombre && (
+            <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 max-w-[150px] truncate" title={dataPoint.contratoNombre}>
+              {dataPoint.contratoNombre}
+            </span>
+          )}
+          {dataPoint?.otsCount !== undefined && dataPoint.otsCount > 0 && (
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {dataPoint.otsCount} OT{dataPoint.otsCount > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {/* Desglose Estratégico de Canales de Ingreso */}
+        {dataPoint && (dataPoint.ingresoContrato > 0 || dataPoint.ingresoServicios > 0 || dataPoint.ingresoSpot > 0) && (
+          <div className="mb-2 pb-2 border-b border-slate-800/80 space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Canales de Ingreso:</span>
+            {dataPoint.ingresoContrato > 0 && (
+              <div className="flex items-center justify-between text-[11px] text-slate-300 pl-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                  <span>Contrato de Clientes:</span>
+                </span>
+                <span className="font-mono font-bold text-blue-300">{formatCurrency(dataPoint.ingresoContrato)}</span>
+              </div>
+            )}
+            {dataPoint.ingresoServicios > 0 && (
+              <div className="flex items-center justify-between text-[11px] text-slate-300 pl-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                  <span>Servicios Programados:</span>
+                </span>
+                <span className="font-mono font-bold text-indigo-300">{formatCurrency(dataPoint.ingresoServicios)}</span>
+              </div>
+            )}
+            {dataPoint.ingresoSpot > 0 && (
+              <div className="flex items-center justify-between text-[11px] text-slate-300 pl-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                  <span>Servicios SPOT & Rental:</span>
+                </span>
+                <span className="font-mono font-bold text-amber-300">{formatCurrency(dataPoint.ingresoSpot)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {payload.map((entry: any, index: number) => {
           if (entry.value === undefined || entry.value === null) return null;
           const entryKey = entry.dataKey || entry.name || `entry-${index}`;
           const isNegative = entry.value < 0;
           return (
-            <div key={`tooltip-${index}-${entryKey}`} className="flex items-center justify-between gap-4 py-1">
+            <div key={`tooltip-${index}-${entryKey}`} className="flex items-center justify-between gap-4 py-0.5">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
                 <span className="text-slate-300 font-medium">{entry.name}</span>
@@ -56,14 +145,75 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-// Componente interactivo para Rentabilidad por Vehículo con soporte de Curvas y Barras
+// Tooltip especializado para el Modelo CAUE
+const CaueTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const dataPoint = payload[0]?.payload;
+    if (!dataPoint) return null;
+    return (
+      <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-3.5 shadow-2xl z-50 text-xs min-w-[290px]">
+        <div className="text-white font-bold text-sm mb-2 border-b border-slate-800 pb-1.5 flex items-center justify-between gap-2">
+          <span>{dataPoint.anio} ({dataPoint.km})</span>
+          {dataPoint.isOptimal && (
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+              PUNTO ÓPTIMO (n*)
+            </span>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <strong className="text-emerald-400">CAUE (Costo Total Uniforme):</strong>
+            </span>
+            <span className="font-mono font-black text-emerald-400">{formatCurrency(dataPoint.caue)}</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-sky-500" />
+              <span>Costo Capital (Depreciación/WACC):</span>
+            </span>
+            <span className="font-mono font-bold text-sky-300">{formatCurrency(dataPoint.costoCapital)}</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span>OPEX + Mantención + Downtime:</span>
+            </span>
+            <span className="font-mono font-bold text-amber-300">{formatCurrency(dataPoint.opexMtto)}</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-400 pt-1 border-t border-slate-800">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span>Costo Marginal del Período:</span>
+            </span>
+            <span className="font-mono font-bold text-rose-300">{formatCurrency(dataPoint.costoMarginal)}</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-400">
+            <span>Costo Unitario Proyectado:</span>
+            <span className="font-mono font-bold text-slate-200">${dataPoint.costoPorKm} / km</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-400">
+            <span>Valor Residual de Rescate S(n):</span>
+            <span className="font-mono font-bold text-slate-200">{formatCurrency(dataPoint.valorResidual)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+// Componente interactivo para Rentabilidad (soporta vista por Flota y vista Mensual por Unidad)
 const RentabilidadChartInteractive = memo(({ 
   data, 
   showTrendLine,
+  isVehicleView = false,
   onSelectVehicle 
 }: { 
   data: any[]; 
   showTrendLine: boolean;
+  isVehicleView?: boolean;
   onSelectVehicle?: (vehName: string) => void;
 }) => {
   const [disabledSeries, setDisabledSeries] = useState<Record<string, boolean>>({});
@@ -72,133 +222,185 @@ const RentabilidadChartInteractive = memo(({
     setDisabledSeries(prev => ({ ...prev, [dataKey]: !prev[dataKey] }));
   };
 
+  const legendItems = [
+    { value: 'Ingresos', id: 'ingresos', color: '#3b82f6', isLine: false },
+    { value: 'Costos Fijos', id: 'costoFijo', color: '#0ea5e9', isLine: false },
+    { value: 'Costo Variable', id: 'costoVariable', color: '#f59e0b', isLine: false },
+    { value: 'Neumáticos', id: 'neumaticos', color: '#8b5cf6', isLine: false },
+    { value: 'Mantenimiento Preventivo', id: 'mttoPreventivo', color: '#10b981', isLine: false },
+    { value: 'Mantenimiento Correctivo', id: 'mttoCorrectivo', color: '#ef4444', isLine: false },
+    ...(showTrendLine ? [{ value: 'Margen Neto (Utilidad)', id: 'margenNeto', color: '#059669', isLine: true }] : [])
+  ];
+
+  const count = data ? data.length : 0;
+  const needsHorizontalScroll = !isVehicleView && count > 12;
+  const chartMinWidth = needsHorizontalScroll ? `${Math.max(count * 68, 900)}px` : '100%';
+
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart 
-        data={data} 
-        margin={{ top: 15, right: 15, left: 10, bottom: 25 }} 
-        barGap={2}
-        onClick={(e) => {
-          if (e && e.activeLabel && onSelectVehicle) {
-            onSelectVehicle(String(e.activeLabel));
-          }
-        }}
-      >
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" opacity={0.15} />
-        <XAxis 
-          dataKey="name" 
-          axisLine={{ stroke: '#cbd5e1' }} 
-          tickLine={false} 
-          tick={{ fill: '#64748b', fontSize: 12, fontWeight: '700' }} 
-          dy={10} 
-        />
-        <YAxis 
-          yAxisId="left"
-          axisLine={false} 
-          tickLine={false} 
-          tick={{ fill: '#64748b', fontSize: 11, fontWeight: '600' }} 
-          tickFormatter={formatCompactNumber} 
-        />
-        <YAxis 
-          yAxisId="right"
-          orientation="right"
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: '#10b981', fontSize: 11, fontWeight: '600' }}
-          tickFormatter={formatCompactNumber}
-          hide={!showTrendLine}
-        />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }} />
-        <Legend 
-          wrapperStyle={{ fontSize: '12px', paddingTop: '15px', fontWeight: 'bold', cursor: 'pointer' }} 
-          iconType="rect" 
-          verticalAlign="bottom"
-          onClick={(e: any) => handleLegendClick(e.dataKey)}
-          payload={[
-            { value: 'Ingresos', type: 'rect', id: 'ingresos', color: '#3b82f6' },
-            { value: 'Costos Fijos', type: 'rect', id: 'costoFijo', color: '#0ea5e9' },
-            { value: 'Costo Variable', type: 'rect', id: 'costoVariable', color: '#f59e0b' },
-            { value: 'Neumáticos', type: 'rect', id: 'neumaticos', color: '#8b5cf6' },
-            { value: 'Mantenimiento Preventivo', type: 'rect', id: 'mttoPreventivo', color: '#10b981' },
-            { value: 'Mantenimiento Correctivo', type: 'rect', id: 'mttoCorrectivo', color: '#ef4444' },
-            ...(showTrendLine ? [{ value: 'Margen Neto (Utilidad)', type: 'line', id: 'margenNeto', color: '#059669' }] : [])
-          ]}
-        />
-        
-        {/* Barra 1: Ingresos Generados por el equipo */}
-        <Bar 
-          yAxisId="left"
-          dataKey="ingresos" 
-          fill="#3b82f6" 
-          name="Ingresos" 
-          radius={[4, 4, 0, 0]}
-          maxBarSize={45}
-          hide={disabledSeries['ingresos']} 
-        />
+    <div className="w-full flex flex-col">
+      {needsHorizontalScroll && (
+        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            Flota extensa ({count} unidades) — Desplaza horizontalmente para explorar cada vehículo
+          </span>
+          <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+            Desplazamiento horizontal ⇄
+          </span>
+        </div>
+      )}
 
-        {/* Barras Apiladas: Desglose Real de Costos Directos */}
-        <Bar 
-          yAxisId="left"
-          dataKey="costoFijo" 
-          stackId="costos" 
-          fill="#0ea5e9" 
-          name="Costos Fijos" 
-          maxBarSize={45}
-          hide={disabledSeries['costoFijo']} 
-        />
-        <Bar 
-          yAxisId="left"
-          dataKey="costoVariable" 
-          stackId="costos" 
-          fill="#f59e0b" 
-          name="Costo Variable" 
-          maxBarSize={45}
-          hide={disabledSeries['costoVariable']} 
-        />
-        <Bar 
-          yAxisId="left"
-          dataKey="neumaticos" 
-          stackId="costos" 
-          fill="#8b5cf6" 
-          name="Neumáticos" 
-          maxBarSize={45}
-          hide={disabledSeries['neumaticos']} 
-        />
-        <Bar 
-          yAxisId="left"
-          dataKey="mttoPreventivo" 
-          stackId="costos" 
-          fill="#10b981" 
-          name="Mantenimiento Preventivo" 
-          maxBarSize={45}
-          hide={disabledSeries['mttoPreventivo']} 
-        />
-        <Bar 
-          yAxisId="left"
-          dataKey="mttoCorrectivo" 
-          stackId="costos" 
-          fill="#ef4444" 
-          name="Mantenimiento Correctivo" 
-          radius={[4, 4, 0, 0]}
-          maxBarSize={45}
-          hide={disabledSeries['mttoCorrectivo']} 
-        />
+      {/* Contenedor del gráfico */}
+      <div className="w-full overflow-x-auto pb-3 custom-scrollbar">
+        <div style={{ minWidth: chartMinWidth, height: '440px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart 
+              data={data} 
+              margin={{ top: 15, right: 25, left: 10, bottom: isVehicleView ? 20 : 45 }} 
+              barGap={2}
+              onClick={(e) => {
+                if (!isVehicleView && e && e.activeLabel && onSelectVehicle) {
+                  onSelectVehicle(String(e.activeLabel));
+                }
+              }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" opacity={0.15} />
+              <XAxis 
+                dataKey="name" 
+                axisLine={{ stroke: '#cbd5e1' }} 
+                tickLine={false} 
+                interval={0}
+                angle={isVehicleView ? 0 : -45}
+                textAnchor={isVehicleView ? 'middle' : 'end'}
+                height={isVehicleView ? 35 : 75}
+                tick={{ fill: '#64748b', fontSize: 11, fontWeight: '700' }} 
+                dy={isVehicleView ? 6 : 8} 
+                dx={isVehicleView ? 0 : -4}
+              />
+              <YAxis 
+                yAxisId="left"
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: '#64748b', fontSize: 11, fontWeight: '600' }} 
+                tickFormatter={formatCompactNumber} 
+              />
+              <YAxis 
+                yAxisId="right"
+                orientation="right"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#10b981', fontSize: 11, fontWeight: '600' }}
+                tickFormatter={formatCompactNumber}
+                hide={!showTrendLine || Boolean(disabledSeries['margenNeto'])}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }} />
+              
+              {/* Barra 1: Ingresos Generados */}
+              <Bar 
+                yAxisId="left"
+                dataKey="ingresos" 
+                fill="#3b82f6" 
+                name="Ingresos" 
+                radius={[4, 4, 0, 0]}
+                maxBarSize={isVehicleView ? 40 : 45}
+                hide={disabledSeries['ingresos']} 
+              />
 
-        {/* Curva de Rentabilidad Neta para Análisis Estratégico */}
-        {showTrendLine && (
-          <Line 
-            yAxisId="right"
-            type="monotone" 
-            dataKey="margenNeto" 
-            name="Margen Neto (Utilidad)"
-            stroke="#059669" 
-            strokeWidth={3}
-            dot={{ r: 4, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
-            activeDot={{ r: 7 }}
-          />
-        )}
-      </ComposedChart>
-    </ResponsiveContainer>
+              {/* Barras Apiladas: Desglose Real de Costos Directos */}
+              <Bar 
+                yAxisId="left"
+                dataKey="costoFijo" 
+                stackId="costos" 
+                fill="#0ea5e9" 
+                name="Costos Fijos" 
+                maxBarSize={isVehicleView ? 40 : 45}
+                hide={disabledSeries['costoFijo']} 
+              />
+              <Bar 
+                yAxisId="left"
+                dataKey="costoVariable" 
+                stackId="costos" 
+                fill="#f59e0b" 
+                name="Costo Variable" 
+                maxBarSize={isVehicleView ? 40 : 45}
+                hide={disabledSeries['costoVariable']} 
+              />
+              <Bar 
+                yAxisId="left"
+                dataKey="neumaticos" 
+                stackId="costos" 
+                fill="#8b5cf6" 
+                name="Neumáticos" 
+                maxBarSize={isVehicleView ? 40 : 45}
+                hide={disabledSeries['neumaticos']} 
+              />
+              <Bar 
+                yAxisId="left"
+                dataKey="mttoPreventivo" 
+                stackId="costos" 
+                fill="#10b981" 
+                name="Mantenimiento Preventivo" 
+                maxBarSize={isVehicleView ? 40 : 45}
+                hide={disabledSeries['mttoPreventivo']} 
+              />
+              <Bar 
+                yAxisId="left"
+                dataKey="mttoCorrectivo" 
+                stackId="costos" 
+                fill="#ef4444" 
+                name="Mantenimiento Correctivo" 
+                radius={[4, 4, 0, 0]}
+                maxBarSize={isVehicleView ? 40 : 45}
+                hide={disabledSeries['mttoCorrectivo']} 
+              />
+
+              {/* Curva de Rentabilidad Neta */}
+              {showTrendLine && (
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="margenNeto" 
+                  name="Margen Neto (Utilidad)"
+                  stroke="#059669" 
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 7 }}
+                  hide={disabledSeries['margenNeto']}
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Leyenda interactiva fija abajo */}
+      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+        {legendItems.map(item => {
+          const isDisabled = disabledSeries[item.id];
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => handleLegendClick(item.id)}
+              className={cn(
+                "flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer py-1 px-2 rounded-md",
+                isDisabled 
+                  ? "opacity-35 line-through hover:opacity-60 bg-slate-100 dark:bg-slate-800 text-slate-400" 
+                  : "opacity-100 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300"
+              )}
+              title={isDisabled ? `Hacer clic para mostrar ${item.value}` : `Hacer clic para ocultar ${item.value}`}
+            >
+              {item.isLine ? (
+                <span className="w-3.5 h-0.5 rounded-full inline-block" style={{ backgroundColor: item.color }} />
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: item.color }} />
+              )}
+              <span>{item.value}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 });
 
@@ -208,45 +410,59 @@ export default function PanelTco() {
   const [showFilters, setShowFilters] = useState(true);
   const [isFiltering, setIsFiltering] = useState(false);
 
-  // Estados de Filtros Reales
+  // Estados de Filtros Avanzados
+  const [filtroPeriodo, setFiltroPeriodo] = useState<'todo' | '30d' | '6m' | 'ytd'>('todo');
   const [filtroTipoMantencion, setFiltroTipoMantencion] = useState<'todas' | 'PREVENTIVA' | 'CORRECTIVA'>('todas');
+  const [filtroTipoIngreso, setFiltroTipoIngreso] = useState<'todos' | 'CONTRATO' | 'SERVICIO' | 'SPOT'>('todos');
   const [filtroMarca, setFiltroMarca] = useState('todas');
   const [filtroVehiculoSeleccionado, setFiltroVehiculoSeleccionado] = useState<string>('todos');
   const [busquedaVehiculo, setBusquedaVehiculo] = useState('');
   const [showCurvaRentabilidad, setShowCurvaRentabilidad] = useState(true);
 
+  // Estado para el Modo de Visualización del Eje X en Curva TCO
+  const [caueXAxisMode, setCaueXAxisMode] = useState<'anios' | 'km'>('anios');
+  const [showCaueSideDrawer, setShowCaueSideDrawer] = useState(false);
+  const [showOtsTable, setShowOtsTable] = useState(true);
+
   // Datos de bases de datos
   const [combustibleData, setCombustibleData] = useState<any[]>([]);
   const [contratosData, setContratosData] = useState<any[]>([]);
-  const [reservasData, setReservasData] = useState<any[]>([]);
+  const [contratoVehiculoLinks, setContratoVehiculoLinks] = useState<any[]>([]);
+  const [serviciosData, setServiciosData] = useState<any[]>([]);
   const [registrosFData, setRegistrosFData] = useState<any[]>([]);
 
   useEffect(() => {
     if (!activeCompanyId) return;
 
     const fetchRealData = async () => {
-      // Combustible directo sin JOIN roto
+      // 1. Combustible directo sin JOIN ambiguo
       const { data: cData } = await supabase
         .from('registro_combustible')
         .select('vehiculo_id, costo_total, fecha, patente')
         .eq('empresa_id', activeCompanyId);
       if (cData) setCombustibleData(cData);
 
-      // Contratos
+      // 2. Contratos de Clientes
       const { data: coData } = await supabase
         .from('operacion_contrato')
-        .select('valor_total, activo, fecha_inicio, fecha_termino')
+        .select('id, cliente_razon_social, valor_total, monto_mensual, activo, fecha_inicio, fecha_termino')
         .eq('empresa_id', activeCompanyId);
       if (coData) setContratosData(coData);
 
-      // Reservas
-      const { data: rData } = await supabase
-        .from('operacion_reserva')
-        .select('monto_total, fecha_reserva, vehiculo_id')
+      // 3. Vínculos de Vehículos a Contratos
+      const { data: cvData } = await supabase
+        .from('operacion_contrato_vehiculo')
+        .select('contrato_id, vehiculo_id');
+      if (cvData) setContratoVehiculoLinks(cvData);
+
+      // 4. Servicios Programados, Especiales y SPOT / Rental
+      const { data: sData } = await supabase
+        .from('operacion_servicio')
+        .select('id, codigo, contrato_id, tipo_carga, subtipo, origen, destino, ingreso_esperado, costo_estimado, vehiculo_id, estado, created_at, fecha_servicio')
         .eq('empresa_id', activeCompanyId);
-      if (rData) setReservasData(rData);
+      if (sData) setServiciosData(sData);
       
-      // Registros Financieros from vehiculo and empresa
+      // 5. Registros Financieros from vehiculo and empresa
       let registrosExt: any[] = [];
       const { data: vehData } = await supabase.from('vehiculo').select('id, detalles').eq('empresa_id', activeCompanyId);
       if (vehData) {
@@ -280,7 +496,63 @@ export default function PanelTco() {
     setTimeout(() => setIsFiltering(false), 300);
   };
 
-  // Cálculo TCO y Rentabilidad
+  // Helper para verificar rango de fechas según período
+  const isDateInPeriod = (dateStr: string | null | undefined, period: 'todo' | '30d' | '6m' | 'ytd') => {
+    if (period === 'todo' || !dateStr) return true;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+    const now = new Date(); // En el sistema es Nov 2026
+    if (period === '30d') {
+      const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return d >= cutoff;
+    }
+    if (period === '6m') {
+      const cutoff = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+      return d >= cutoff;
+    }
+    if (period === 'ytd') {
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      return d >= startOfYear;
+    }
+    return true;
+  };
+
+  // Definición de meses activos según el período seleccionado
+  const activeMonthsForPeriod = useMemo(() => {
+    const allMonths = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    if (filtroPeriodo === '30d') {
+      return ['Oct', 'Nov'];
+    }
+    if (filtroPeriodo === '6m') {
+      return ['Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov'];
+    }
+    if (filtroPeriodo === 'ytd') {
+      return ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov'];
+    }
+    return allMonths;
+  }, [filtroPeriodo]);
+
+  // Factor de meses equivalente al período para contratos mensuales
+  const factorMesesPeriodo = useMemo(() => {
+    if (filtroPeriodo === '30d') return 1;
+    if (filtroPeriodo === '6m') return 6;
+    if (filtroPeriodo === 'ytd') {
+      const currentMonth = new Date().getMonth() + 1; // 11 para nov 2026
+      return Math.max(1, currentMonth);
+    }
+    return 12; // 'todo' -> anualizado a 12 meses
+  }, [filtroPeriodo]);
+
+  // Mapeo de meses
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const getMonthStr = (dateStr: string | null | undefined) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    return monthNames[d.getMonth()];
+  };
+
+  // Cálculo TCO y Rentabilidad Dinámica
   const {
     kpis,
     rentabilidadVehiculoCompleta,
@@ -288,34 +560,37 @@ export default function PanelTco() {
     distribucionCostos,
     evolucionMensual,
     proyeccionPresupuesto,
-    vehiculoAuditoria
+    vehiculoAuditoria,
+    rentabilidadVehiculoMensual,
+    otsVehiculoSeleccionado
   } = useMemo(() => {
     let costosTotales = 0;
-    
     let mttoPrev = 0;
     let mttoCorr = 0;
 
     const vStats: Record<string, {
       prev: number, corr: number, totalCosto: number,
-      ingreso: number, combustible: number, costoVariable: number,
+      combustible: number, costoVariable: number,
       costoFijo: number, neumaticos: number, otCount: number, corrCount: number
     }> = {};
 
     vehiculos.forEach(v => {
       vStats[v.id] = { 
-        prev: 0, corr: 0, totalCosto: 0, ingreso: 0, 
+        prev: 0, corr: 0, totalCosto: 0, 
         combustible: 0, costoVariable: 0, costoFijo: 0, 
         neumaticos: 0, otCount: 0, corrCount: 0 
       };
     });
 
-    // Procesar Órdenes de Trabajo según el filtro de tipo de mantención
+    // 1. Procesar Órdenes de Trabajo según período y tipo de mantención
     ordenesTrabajo.forEach(ot => {
+      const fechaOt = ot.fechaCreacion || ot.created_at || ot.inicio_proceso || ot.fecha_ot;
+      if (!isDateInPeriod(fechaOt, filtroPeriodo)) return;
+
       const tipoRaw = (ot.tipo || '').toUpperCase();
       const isPreventiva = tipoRaw.includes('PREVENTIV');
       const isCorrectiva = tipoRaw.includes('CORRECTIV') || (!isPreventiva);
 
-      // Aplicar filtro de Mantención si está activo
       if (filtroTipoMantencion === 'PREVENTIVA' && !isPreventiva) return;
       if (filtroTipoMantencion === 'CORRECTIVA' && !isCorrectiva) return;
 
@@ -341,91 +616,168 @@ export default function PanelTco() {
       }
     });
 
-    // Combustible
+    // 2. Combustible según período
     let totalCombustible = 0;
     combustibleData.forEach(c => {
-        const costo = Number(c.costo_total || 0);
-        totalCombustible += costo;
-        costosTotales += costo;
-        const targetVid = c.vehiculo_id || (vehiculos.find(v => v.patente === c.patente)?.id);
-        if (targetVid && vStats[targetVid]) {
-            vStats[targetVid].combustible += costo;
-            vStats[targetVid].costoVariable += costo;
-            vStats[targetVid].totalCosto += costo;
-        }
+      if (!isDateInPeriod(c.fecha, filtroPeriodo)) return;
+      const costo = Number(c.costo_total || 0);
+      totalCombustible += costo;
+      costosTotales += costo;
+      const targetVid = c.vehiculo_id || (vehiculos.find(v => v.patente === c.patente)?.id);
+      if (targetVid && vStats[targetVid]) {
+        vStats[targetVid].combustible += costo;
+        vStats[targetVid].costoVariable += costo;
+        vStats[targetVid].totalCosto += costo;
+      }
     });
 
-    // Ingresos Fijos por Contrato
-    let ingresoFijo = 0;
-    contratosData.forEach(c => {
-        ingresoFijo += Number(c.valor_total || 0);
-    });
-
-    // Ingresos Variables por Reservas/Servicios Spot
-    let ingresoVariable = 0;
-    reservasData.forEach(r => {
-        const monto = Number(r.monto_total || 0);
-        ingresoVariable += monto;
-        if (r.vehiculo_id && vStats[r.vehiculo_id]) {
-           vStats[r.vehiculo_id].ingreso += monto;
-        }
-    });
-
-    // Registros Financieros (Costos Fijos vs Variables)
+    // 3. Registros Financieros (Costos Fijos vs Variables) según período
     let totalCostoFijo = 0;
     let totalCostoVariableAdicional = 0;
     let totalNeumaticos = 0;
 
     registrosFData.forEach(rf => {
-        const monto = Number(rf.monto || 0);
-        costosTotales += monto;
-        const cat = (rf.categoria || '').toLowerCase();
-        
-        const applyToVid = (vid: string, field: string) => {
-            if (vid && vStats[vid]) {
-                (vStats[vid] as any)[field] += monto;
-                vStats[vid].totalCosto += monto;
-            }
-        };
+      const fechaRf = rf.fecha || rf.created_at;
+      if (!isDateInPeriod(fechaRf, filtroPeriodo)) return;
 
-        if (cat.includes('peaje') || cat.includes('estacionamiento') || cat.includes('viático') || cat.includes('colacion')) {
-            totalCostoVariableAdicional += monto;
-            applyToVid(rf.vehiculo_id, 'costoVariable');
-        } else if (cat.includes('sueldo') || cat.includes('salario') || cat.includes('honorario') || cat.includes('seguro') || cat.includes('leasing')) {
-            totalCostoFijo += monto;
-            applyToVid(rf.vehiculo_id, 'costoFijo');
-        } else if (cat.includes('neumático') || cat.includes('neumatico') || cat.includes('llanta')) {
-            totalNeumaticos += monto;
-            applyToVid(rf.vehiculo_id, 'neumaticos');
-        } else {
-            // Costos operacionales generales
-            totalCostoVariableAdicional += monto;
-            applyToVid(rf.vehiculo_id, 'costoVariable');
+      const monto = Number(rf.monto || 0);
+      costosTotales += monto;
+      const cat = (rf.categoria || '').toLowerCase();
+      
+      const applyToVid = (vid: string, field: string) => {
+        if (vid && vStats[vid]) {
+          (vStats[vid] as any)[field] += monto;
+          vStats[vid].totalCosto += monto;
         }
+      };
+
+      if (cat.includes('peaje') || cat.includes('estacionamiento') || cat.includes('viático') || cat.includes('colacion')) {
+        totalCostoVariableAdicional += monto;
+        applyToVid(rf.vehiculo_id, 'costoVariable');
+      } else if (cat.includes('sueldo') || cat.includes('salario') || cat.includes('honorario') || cat.includes('seguro') || cat.includes('leasing')) {
+        totalCostoFijo += monto;
+        applyToVid(rf.vehiculo_id, 'costoFijo');
+      } else if (cat.includes('neumático') || cat.includes('neumatico') || cat.includes('llanta')) {
+        totalNeumaticos += monto;
+        applyToVid(rf.vehiculo_id, 'neumaticos');
+      } else {
+        totalCostoVariableAdicional += monto;
+        applyToVid(rf.vehiculo_id, 'costoVariable');
+      }
     });
 
-    const ingresoFijoEfectivo = ingresoFijo > 0 ? ingresoFijo : 148500000;
-    const ingresosTotales = ingresoFijoEfectivo + ingresoVariable;
-    const costosTotalesEfectivos = costosTotales > 0 ? costosTotales : 94200000;
-    const utilidadBruta = ingresosTotales - costosTotalesEfectivos;
-    const margen = ingresosTotales > 0 ? (utilidadBruta / ingresosTotales) * 100 : (costosTotalesEfectivos > 0 ? -100 : 0);
+    // 4. Asignación de Costos Operacionales Estándar Chilenos para Flota Activa
+    // Si la empresa o vehículo no tiene vouchers manuales cargados en la BD, se asignan los estándares operativos
+    // de faena minera y transporte de Chile (Costos Fijos: conductor/seguro; Neumáticos; Peajes/Viáticos)
+    vehiculos.forEach(v => {
+      const s = vStats[v.id];
+      if (!s) return;
+      if (s.costoFijo === 0) {
+        // Conductor y seguros obligatorios prorrateados
+        const fijoBase = Math.round(920000 * factorMesesPeriodo);
+        s.costoFijo = fijoBase;
+        s.totalCosto += fijoBase;
+        costosTotales += fijoBase;
+      }
+      if (s.neumaticos === 0) {
+        // Desgaste de neumáticos operacional estándar
+        const neumBase = Math.round(220000 * factorMesesPeriodo);
+        s.neumaticos = neumBase;
+        s.totalCosto += neumBase;
+        costosTotales += neumBase;
+      }
+      // Variables operacionales (peajes autopistas y viáticos)
+      const varAdic = Math.round(180000 * factorMesesPeriodo);
+      s.costoVariable += varAdic;
+      s.totalCosto += varAdic;
+      costosTotales += varAdic;
+    });
 
-    // Rentabilidad integral de TODOS los vehículos de la flota
+    // 5. Mapeo de Contratos y prorrateo ajustado al factor temporal
+    const contractVehicleMap: Record<string, string[]> = {};
+    contratoVehiculoLinks.forEach((cv: any) => {
+      if (!contractVehicleMap[cv.contrato_id]) contractVehicleMap[cv.contrato_id] = [];
+      contractVehicleMap[cv.contrato_id].push(cv.vehiculo_id);
+    });
+
+    const vContratoIncome: Record<string, { total: number, nombreContrato: string }> = {};
+    contratosData.forEach(c => {
+      if (c.activo === false) return;
+      const valorMensual = Number(c.monto_mensual || (c.valor_total ? c.valor_total / 12 : 0));
+      const valorPeriodo = valorMensual * factorMesesPeriodo;
+      const assignedVids = contractVehicleMap[c.id] || [];
+      if (assignedVids.length > 0) {
+        const quotaPerVehicle = Math.round(valorPeriodo / assignedVids.length);
+        assignedVids.forEach(vid => {
+          if (!vContratoIncome[vid]) {
+            vContratoIncome[vid] = { total: 0, nombreContrato: c.cliente_razon_social || 'Contrato Cliente' };
+          }
+          vContratoIncome[vid].total += quotaPerVehicle;
+          vContratoIncome[vid].nombreContrato = c.cliente_razon_social || vContratoIncome[vid].nombreContrato;
+        });
+      }
+    });
+
+    // 6. Ingresos por Servicios Programados y SPOT / Rental según período
+    const vServiciosIncome: Record<string, number> = {};
+    const vSpotIncome: Record<string, number> = {};
+
+    serviciosData.forEach(s => {
+      const fechaS = s.fecha_servicio || s.created_at;
+      if (!isDateInPeriod(fechaS, filtroPeriodo)) return;
+
+      const vid = s.vehiculo_id;
+      if (!vid) return;
+      const monto = Number(s.ingreso_esperado || 0);
+      const tipoCarga = (s.tipo_carga || '').toUpperCase();
+      const subtipo = (s.subtipo || '').toUpperCase();
+      
+      const isSpot = tipoCarga.includes('SPOT') || tipoCarga.includes('CAMA') || tipoCarga.includes('RENTAL') || subtipo.includes('CAMA_BAJA') || subtipo.includes('RENTAL');
+
+      if (isSpot) {
+        vSpotIncome[vid] = (vSpotIncome[vid] || 0) + monto;
+      } else {
+        vServiciosIncome[vid] = (vServiciosIncome[vid] || 0) + monto;
+      }
+    });
+
+    // 7. Rentabilidad integral de TODOS los vehículos de la flota
     const rentabilidadVehiculoCompleta = vehiculos.map(v => {
       const vs = vStats[v.id] || { 
-        prev: 0, corr: 0, totalCosto: 0, ingreso: 0, 
+        prev: 0, corr: 0, totalCosto: 0, 
         combustible: 0, costoVariable: 0, costoFijo: 0, 
         neumaticos: 0, otCount: 0, corrCount: 0 
       };
       
-      const proportionalFixedIncome = Math.round(ingresoFijoEfectivo / (vehiculos.length || 1));
-      const ingresosTotalVeh = proportionalFixedIncome + vs.ingreso;
+      const cInfo = vContratoIncome[v.id] || { total: 0, nombreContrato: '' };
+      const sIncome = vServiciosIncome[v.id] || 0;
+      const spotIncome = vSpotIncome[v.id] || 0;
+
+      let ingresoEfectivoVeh = 0;
+      if (filtroTipoIngreso === 'CONTRATO') {
+        ingresoEfectivoVeh = cInfo.total;
+      } else if (filtroTipoIngreso === 'SERVICIO') {
+        ingresoEfectivoVeh = sIncome;
+      } else if (filtroTipoIngreso === 'SPOT') {
+        ingresoEfectivoVeh = spotIncome;
+      } else {
+        ingresoEfectivoVeh = cInfo.total + sIncome + spotIncome;
+      }
+
       const costosTotalVeh = vs.totalCosto;
-      const margenNeto = ingresosTotalVeh - costosTotalVeh;
-      const ratioCostoIngreso = ingresosTotalVeh > 0 ? Math.round((costosTotalVeh / ingresosTotalVeh) * 100) : 100;
+      const margenNeto = ingresoEfectivoVeh - costosTotalVeh;
+      const ratioCostoIngreso = ingresoEfectivoVeh > 0 ? Math.round((costosTotalVeh / ingresoEfectivoVeh) * 100) : 100;
 
       const numInt = v.detalles?.numero_interno || v.numero_interno;
       const displayName = numInt ? `${v.patente} (#${numInt})` : (v.patente || `Vehículo ${v.id}`);
+
+      let anioReal = '2021';
+      if (v.detalles?.fechaInscripcion) {
+        const d = new Date(v.detalles.fechaInscripcion);
+        if (!isNaN(d.getFullYear())) anioReal = String(d.getFullYear());
+      } else if (v.detalles?.ano || v.detalles?.anio) {
+        anioReal = String(v.detalles.ano || v.detalles.anio);
+      }
 
       return {
         id: v.id,
@@ -434,10 +786,16 @@ export default function PanelTco() {
         marca: v.marca || v.detalles?.marca || 'N/A',
         modelo: v.modelo || v.detalles?.modelo || 'N/A',
         km: v.kilometraje_actual || v.detalles?.kilometraje || 0,
-        anio: v.detalles?.ano || v.detalles?.anio || '2021',
-        ingresos: ingresosTotalVeh,
+        anio: anioReal,
+        detalles: v.detalles,
+        ingresos: ingresoEfectivoVeh,
+        ingresoContrato: cInfo.total,
+        ingresoServicios: sIncome,
+        ingresoSpot: spotIncome,
+        contratoNombre: cInfo.nombreContrato,
         costoFijo: vs.costoFijo,
         costoVariable: vs.costoVariable,
+        combustible: vs.combustible,
         neumaticos: vs.neumaticos,
         mttoPreventivo: vs.prev,
         mttoCorrectivo: vs.corr,
@@ -447,9 +805,9 @@ export default function PanelTco() {
         otCount: vs.otCount,
         corrCount: vs.corrCount
       };
-    }).sort((a, b) => b.ingresos - a.ingresos);
+    }).sort(compareVehiclesNumerically);
 
-    // Filtrar lista según controles de usuario (Marca, Patente, Selector)
+    // 8. Filtrar lista según controles de usuario (Marca, Patente, Selector)
     let rentabilidadVehiculoFiltrada = [...rentabilidadVehiculoCompleta];
 
     if (filtroMarca !== 'todas') {
@@ -469,16 +827,19 @@ export default function PanelTco() {
       );
     }
 
-    // Auditoría Estratégica del vehículo seleccionado
-    let vehiculoAuditoria = null;
+    // Asegurar orden numérico estricto de menor a mayor (de izquierda a derecha en la gráfica)
+    rentabilidadVehiculoFiltrada.sort(compareVehiclesNumerically);
+
+    // 9. Auditoría Estratégica del vehículo seleccionado
+    let vehiculoAuditoria: any = null;
     if (filtroVehiculoSeleccionado !== 'todos' && rentabilidadVehiculoFiltrada.length > 0) {
       const target = rentabilidadVehiculoFiltrada[0];
-      const isCritico = target.margenNeto < 0 || (target.mttoCorrectivo > target.mttoPreventivo * 1.8 && target.mttoCorrectivo > 1500000);
-      const isAlerta = !isCritico && (target.ratioCostoIngreso > 75 || target.corrCount > 3);
+      const isCritico = target.margenNeto < 0 || (target.mttoCorrectivo > target.mttoPreventivo * 1.5 && target.mttoCorrectivo > 600000) || target.corrCount >= 4;
+      const isAlerta = !isCritico && (target.ratioCostoIngreso > 75 || target.corrCount > 2);
       
       let recomendacion = "Unidad operativa y rentable. Mantener el programa de mantenimiento preventivo estricto.";
       if (isCritico) {
-        recomendacion = "ALERTA CRÍTICA: Curva de costos correctivos disparada. Se recomienda evaluar reemplazo inmediato por unidad nueva o venta al mejor valor residual antes de mayor depreciación.";
+        recomendacion = "ALERTA CRÍTICA: Curva de costos correctivos disparada y alta tasa de fallas (más del 50% de las OTs son correctivas). Se recomienda evaluar renovación o descarte antes de mayor depreciación.";
       } else if (isAlerta) {
         recomendacion = "ATENCIÓN: Aumento en frecuencia de reparaciones correctivas. Programar overhaul general o acotar rutas de alta exigencia.";
       }
@@ -491,91 +852,375 @@ export default function PanelTco() {
       };
     }
 
-    // Distribución Ejecutiva de Costos OPEX
+    // 10. Composición OPEX Flota 100% REACTIVA Y CON LAS 6 VARIABLES COMPLETAS
+    const fPrev = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + (v.mttoPreventivo || 0), 0);
+    const fCorr = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + (v.mttoCorrectivo || 0), 0);
+    const fComb = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + (v.combustible || 0), 0);
+    const fNeum = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + (v.neumaticos || 0), 0);
+    const fFijo = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + (v.costoFijo || 0), 0);
+    const fVar = rentabilidadVehiculoFiltrada.reduce((acc, v) => {
+      const variableAdicional = Math.max(0, (v.costoVariable || 0) - (v.combustible || 0));
+      return acc + variableAdicional;
+    }, 0);
+
+    // Mostramos siempre las 6 variables completas de la estructura de costos Chilena
     const distribucionCostos = [
-      { name: 'Mantenimiento Preventivo', value: mttoPrev, color: '#10b981' },
-      { name: 'Mantenimiento Correctivo', value: mttoCorr, color: '#ef4444' },
-      { name: 'Combustible', value: totalCombustible, color: '#f59e0b' },
-      { name: 'Costos Fijos (Sueldos/Seguros)', value: totalCostoFijo, color: '#0ea5e9' },
-      { name: 'Costos Variables (Peajes/Viáticos)', value: totalCostoVariableAdicional, color: '#6366f1' },
-      { name: 'Neumáticos', value: totalNeumaticos, color: '#8b5cf6' }
-    ].filter(d => d.value > 0);
+      { name: 'Combustible', value: fComb, color: '#f59e0b' },
+      { name: 'Costos Fijos (Sueldos/Seguros)', value: fFijo, color: '#0ea5e9' },
+      { name: 'Mantenimiento Preventivo', value: fPrev, color: '#10b981' },
+      { name: 'Mantenimiento Correctivo', value: fCorr, color: '#ef4444' },
+      { name: 'Neumáticos', value: fNeum, color: '#8b5cf6' },
+      { name: 'Costos Variables (Peajes/Viáticos)', value: fVar, color: '#6366f1' }
+    ];
 
-    // Evolución Mensual
-    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    // 11. Evolución Mensual Reactiva a los vehículos filtrados
+    const allowedVidSet = new Set(rentabilidadVehiculoFiltrada.map(v => v.id));
     const monthlyData: Record<string, { ingresos: number, costos: number }> = {};
-    monthNames.forEach(m => monthlyData[m] = { ingresos: 0, costos: 0 });
-
-    const getMonthStr = (dateStr: string) => {
-        if (!dateStr) return null;
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return null;
-        return monthNames[d.getMonth()];
-    };
+    activeMonthsForPeriod.forEach(m => monthlyData[m] = { ingresos: 0, costos: 0 });
 
     ordenesTrabajo.forEach(ot => {
-        const m = getMonthStr(ot.fechaCreacion || ot.created_at || ot.inicio_proceso);
-        if (m) {
-            monthlyData[m].costos += (ot.costoManoObraTareas || 0) + (ot.costoInsumos || 0) + (ot.costoManoObraHH || 0);
-        }
+      const vid = ot.vehiculoId || ot.vehiculo_id;
+      if (!allowedVidSet.has(vid)) return;
+      const fechaOt = ot.fechaCreacion || ot.created_at || ot.inicio_proceso || ot.fecha_ot;
+      if (!isDateInPeriod(fechaOt, filtroPeriodo)) return;
+
+      const m = getMonthStr(fechaOt);
+      if (m && monthlyData[m]) {
+        monthlyData[m].costos += (ot.costoManoObraTareas || 0) + (ot.costoInsumos || 0) + (ot.costoManoObraHH || 0);
+      }
     });
 
     combustibleData.forEach(c => {
-        const m = getMonthStr(c.fecha);
-        if (m) monthlyData[m].costos += Number(c.costo_total || 0);
+      const targetVid = c.vehiculo_id || (vehiculos.find(v => v.patente === c.patente)?.id);
+      if (!allowedVidSet.has(targetVid)) return;
+      if (!isDateInPeriod(c.fecha, filtroPeriodo)) return;
+
+      const m = getMonthStr(c.fecha);
+      if (m && monthlyData[m]) monthlyData[m].costos += Number(c.costo_total || 0);
     });
 
     contratosData.forEach(c => {
-        const m = getMonthStr(c.fecha_inicio);
-        if (m) monthlyData[m].ingresos += Number(c.valor_total || 0);
+      if (c.activo === false) return;
+      if (filtroTipoIngreso === 'SERVICIO' || filtroTipoIngreso === 'SPOT') return;
+      const assignedVids = contractVehicleMap[c.id] || [];
+      const matchingVids = assignedVids.filter(vid => allowedVidSet.has(vid));
+      if (matchingVids.length === 0) return;
+
+      const valorMensual = Number(c.monto_mensual || (c.valor_total ? c.valor_total / 12 : 0));
+      const quotaForFiltered = (valorMensual / assignedVids.length) * matchingVids.length;
+
+      activeMonthsForPeriod.forEach(m => {
+        if (monthlyData[m]) monthlyData[m].ingresos += Math.round(quotaForFiltered);
+      });
     });
 
-    const evolucionMensual = monthNames.map(month => ({
-        month,
-        ingresos: monthlyData[month].ingresos,
-        costos: monthlyData[month].costos
-    })).filter(em => em.ingresos > 0 || em.costos > 0);
-    
-    if (evolucionMensual.length === 0) {
-        evolucionMensual.push({ month: 'Mes Actual', ingresos: ingresosTotales, costos: costosTotales });
-    }
+    serviciosData.forEach(s => {
+      if (!allowedVidSet.has(s.vehiculo_id)) return;
+      const fechaS = s.fecha_servicio || s.created_at;
+      if (!isDateInPeriod(fechaS, filtroPeriodo)) return;
 
-    // Proyección vs Presupuesto con alto contraste para día y noche
-    const proyeccionPresupuesto = evolucionMensual.map(em => ({
-        month: em.month,
-        presupuesto: em.costos > 0 ? Math.round(em.costos * 0.92) : 10000000,
-        real: em.costos
+      const tipoCarga = (s.tipo_carga || '').toUpperCase();
+      const subtipo = (s.subtipo || '').toUpperCase();
+      const isSpot = tipoCarga.includes('SPOT') || tipoCarga.includes('CAMA') || tipoCarga.includes('RENTAL') || subtipo.includes('CAMA_BAJA') || subtipo.includes('RENTAL');
+      
+      if (filtroTipoIngreso === 'CONTRATO') return;
+      if (filtroTipoIngreso === 'SERVICIO' && isSpot) return;
+      if (filtroTipoIngreso === 'SPOT' && !isSpot) return;
+
+      const m = getMonthStr(fechaS);
+      if (m && monthlyData[m]) monthlyData[m].ingresos += Number(s.ingreso_esperado || 0);
+    });
+
+    const ingresosTotales = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + v.ingresos, 0);
+    const costosTotalesEfectivos = rentabilidadVehiculoFiltrada.reduce((acc, v) => acc + v.costosTotales, 0);
+    const utilidadBruta = ingresosTotales - costosTotalesEfectivos;
+    const margen = ingresosTotales > 0 ? (utilidadBruta / ingresosTotales) * 100 : (costosTotalesEfectivos > 0 ? -100 : 0);
+
+    const evolucionMensual = activeMonthsForPeriod.map(month => ({
+      month,
+      ingresos: monthlyData[month]?.ingresos || 0,
+      costos: monthlyData[month]?.costos || 0
     }));
+
+    // 12. Proyección vs Presupuesto Operacional DINÁMICO, REACTIVO Y ESTACIONAL
+    const seasonalBudgetFactors: Record<string, number> = {
+      'Ene': 0.88, 'Feb': 0.82, 'Mar': 1.05, 'Abr': 0.98,
+      'May': 1.02, 'Jun': 0.96, 'Jul': 0.94, 'Ago': 1.00,
+      'Sep': 1.06, 'Oct': 1.14, 'Nov': 1.12, 'Dic': 1.02
+    };
+
+    const monthlyQuotaBase = rentabilidadVehiculoFiltrada.reduce((acc, v) => {
+      const cuotaContratoMes = v.ingresoContrato > 0 
+        ? Math.round((v.ingresoContrato / factorMesesPeriodo) * 0.78) 
+        : 3800000;
+      return acc + cuotaContratoMes;
+    }, 0);
+
+    const proyeccionPresupuesto = activeMonthsForPeriod.map(mName => {
+      const gastoReal = monthlyData[mName]?.costos || 0;
+      const factor = seasonalBudgetFactors[mName] || 1.0;
+      const presupuestoMes = monthlyQuotaBase > 0 
+        ? Math.round(monthlyQuotaBase * factor) 
+        : Math.round((gastoReal > 0 ? gastoReal * 0.95 : 3800000) * factor);
+
+      return {
+        month: mName,
+        presupuesto: presupuestoMes,
+        real: gastoReal
+      };
+    });
+
+    // 13. EVOLUCIÓN MENSUAL ESPECÍFICA CUANDO SE SELECCIONA UN VEHÍCULO
+    let rentabilidadVehiculoMensual: any[] | null = null;
+    let otsVehiculoSeleccionado: any[] = [];
+
+    if (vehiculoAuditoria) {
+      const targetId = vehiculoAuditoria.id;
+
+      rentabilidadVehiculoMensual = activeMonthsForPeriod.map(mName => {
+        const ingContratoMes = vehiculoAuditoria.ingresoContrato > 0 
+          ? Math.round(vehiculoAuditoria.ingresoContrato / factorMesesPeriodo) 
+          : 0;
+
+        const servMes = serviciosData
+          .filter(s => s.vehiculo_id === targetId && getMonthStr(s.fecha_servicio || s.created_at) === mName)
+          .reduce((acc, s) => acc + Number(s.ingreso_esperado || 0), 0);
+
+        const ingTotalMes = (filtroTipoIngreso === 'CONTRATO') ? ingContratoMes
+          : (filtroTipoIngreso === 'SERVICIO' || filtroTipoIngreso === 'SPOT') ? servMes
+          : (ingContratoMes + servMes);
+
+        const otsMes = ordenesTrabajo.filter(ot => {
+          const vid = ot.vehiculoId || ot.vehiculo_id;
+          if (vid !== targetId) return false;
+          const f = ot.fechaCreacion || ot.created_at || ot.inicio_proceso || ot.fecha_ot;
+          return getMonthStr(f) === mName;
+        });
+
+        let prevMes = 0;
+        let corrMes = 0;
+        otsMes.forEach(ot => {
+          const tipo = (ot.tipo || '').toUpperCase();
+          const c = (ot.costoManoObraTareas || 0) + (ot.costoInsumos || 0) + (ot.costoManoObraHH || 0);
+          if (tipo.includes('PREVENTIV')) prevMes += c;
+          else corrMes += c;
+        });
+
+        const combMes = combustibleData
+          .filter(c => (c.vehiculo_id === targetId || c.patente === vehiculoAuditoria.patente) && getMonthStr(c.fecha) === mName)
+          .reduce((acc, c) => acc + Number(c.costo_total || 0), 0);
+
+        const fijoMes = Math.round(vehiculoAuditoria.costoFijo / factorMesesPeriodo);
+        const varAdicMes = Math.round(Math.max(0, vehiculoAuditoria.costoVariable - vehiculoAuditoria.combustible) / factorMesesPeriodo);
+        const neumMes = Math.round(vehiculoAuditoria.neumaticos / factorMesesPeriodo);
+
+        const costosTotalesMes = prevMes + corrMes + combMes + fijoMes + varAdicMes + neumMes;
+        const margenNetoMes = ingTotalMes - costosTotalesMes;
+
+        return {
+          name: mName,
+          month: mName,
+          ingresos: ingTotalMes,
+          costoFijo: fijoMes,
+          costoVariable: combMes + varAdicMes,
+          neumaticos: neumMes,
+          mttoPreventivo: prevMes,
+          mttoCorrectivo: corrMes,
+          costosTotales: costosTotalesMes,
+          margenNeto: margenNetoMes,
+          otsCount: otsMes.length
+        };
+      });
+
+      otsVehiculoSeleccionado = ordenesTrabajo
+        .filter(ot => {
+          const vid = ot.vehiculoId || ot.vehiculo_id;
+          if (vid !== targetId) return false;
+          const f = ot.fechaCreacion || ot.created_at || ot.inicio_proceso || ot.fecha_ot;
+          return isDateInPeriod(f, filtroPeriodo);
+        })
+        .map(ot => {
+          const f = ot.fechaCreacion || ot.created_at || ot.inicio_proceso || ot.fecha_ot;
+          const costo = (ot.costoManoObraTareas || 0) + (ot.costoInsumos || 0) + (ot.costoManoObraHH || 0);
+          const tipoRaw = (ot.tipo || '').toUpperCase();
+          const isPrev = tipoRaw.includes('PREVENTIV');
+          return {
+            id: ot.id,
+            folio: ot.folio || ot.numero_ot || `OT-${ot.id.substring(0, 6)}`,
+            fecha: f ? new Date(f).toLocaleDateString('es-CL') : 'N/D',
+            mes: getMonthStr(f) || 'N/D',
+            tipo: isPrev ? 'PREVENTIVA' : 'CORRECTIVA',
+            estado: ot.estado || 'FINALIZADA',
+            insumos: ot.costoInsumos || 0,
+            manoObra: (ot.costoManoObraTareas || 0) + (ot.costoManoObraHH || 0),
+            costoTotal: costo,
+            pauta: ot.pauta || ot.diagnostico_evaluacion || (isPrev ? 'Pauta Regular SM' : 'Reparación por Falla')
+          };
+        })
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    }
 
     return {
       kpis: {
         ingresosTotales,
-        costosTotales,
+        costosTotales: costosTotalesEfectivos,
         utilidadBruta,
         margen: isFinite(margen) ? margen.toFixed(1) : "0.0",
-        mttoPrev,
-        mttoCorr,
-        totalCombustible
+        mttoPrev: fPrev,
+        mttoCorr: fCorr,
+        totalCombustible: fComb
       },
       rentabilidadVehiculoCompleta,
       rentabilidadVehiculoFiltrada,
       distribucionCostos,
       evolucionMensual,
       proyeccionPresupuesto,
-      vehiculoAuditoria
+      vehiculoAuditoria,
+      rentabilidadVehiculoMensual,
+      otsVehiculoSeleccionado
     };
   }, [
     ordenesTrabajo, 
     vehiculos, 
     combustibleData, 
     contratosData, 
-    reservasData, 
+    contratoVehiculoLinks,
+    serviciosData, 
     registrosFData,
+    filtroPeriodo,
+    activeMonthsForPeriod,
+    factorMesesPeriodo,
     filtroTipoMantencion,
+    filtroTipoIngreso,
     filtroMarca,
     filtroVehiculoSeleccionado,
     busquedaVehiculo
   ]);
+
+  // 14. MODELO MATEMÁTICO CAUE / EAC (Calibrado al Vehículo Seleccionado)
+  const caueData = useMemo(() => {
+    let vehiculoNombre = 'Flota General (Promedio Ponderado)';
+    let anioVehiculo = 2021;
+    let kmActual = 285000;
+    let i0 = 92000000;
+    let corrRatio = 0.35;
+    let annualOpexBase = 15000000;
+    let kmAnualPromedio = 80000;
+
+    if (vehiculoAuditoria) {
+      vehiculoNombre = `${vehiculoAuditoria.name} (${vehiculoAuditoria.marca} ${vehiculoAuditoria.modelo})`;
+      kmActual = Number(vehiculoAuditoria.km) || 95425;
+      
+      const anioParsed = Number(vehiculoAuditoria.anio);
+      if (!isNaN(anioParsed) && anioParsed >= 2000 && anioParsed <= 2026) {
+        anioVehiculo = anioParsed;
+      }
+
+      const mod = (vehiculoAuditoria.modelo || '').toUpperCase();
+      if (mod.includes('SPRINTER') || mod.includes('DUCATO') || mod.includes('BOXER') || mod.includes('HIACE') || mod.includes('VAN')) {
+        i0 = 49500000; // Sprinter VS30
+        kmAnualPromedio = 60000;
+      } else if (mod.includes('HILUX') || mod.includes('D-MAX') || mod.includes('NAVARA') || mod.includes('CAMIONETA') || mod.includes('AMAROK')) {
+        i0 = 32000000; // Camioneta 4x4
+        kmAnualPromedio = 50000;
+      } else if (mod.includes('BUS') || mod.includes('PARADISO') || mod.includes('K450') || mod.includes('O500') || mod.includes('CENTURY')) {
+        i0 = 120000000; // Bus Interurbano Minero
+        kmAnualPromedio = 120000;
+      } else {
+        i0 = 92000000; // Tractocamión estándar
+        kmAnualPromedio = 100000;
+      }
+
+      const totOts = vehiculoAuditoria.otCount || 1;
+      const corrOts = vehiculoAuditoria.corrCount || 0;
+      corrRatio = corrOts / Math.max(1, totOts);
+
+      const opexRealVeh = (vehiculoAuditoria.costosTotales / factorMesesPeriodo) * 12;
+      annualOpexBase = opexRealVeh > 0 ? opexRealVeh : (i0 * 0.16);
+    }
+
+    const r = 0.08;
+    const residualPcts = [0.72, 0.58, 0.46, 0.36, 0.28, 0.21, 0.15, 0.10];
+    const wearMultiplier = 1 + (corrRatio * 0.70);
+
+    const table: any[] = [];
+    let minCaue = Infinity;
+    let optIndex = 3;
+    let cumDiscountedOpex = 0;
+
+    for (let n = 1; n <= 8; n++) {
+      const s_n = i0 * residualPcts[n - 1];
+      const discount_n = Math.pow(1 + r, -n);
+      const anFactor = (1 - Math.pow(1 + r, -n)) / r;
+
+      const costoCapitalAnual = (i0 - (s_n * discount_n)) / anFactor;
+      const yearWear = Math.pow(n, 1.35) * 0.12 * wearMultiplier;
+      const opex_t = annualOpexBase * (1 + yearWear);
+      cumDiscountedOpex += opex_t * discount_n;
+      const opexAnualizado = cumDiscountedOpex / anFactor;
+
+      const caue_n = costoCapitalAnual + opexAnualizado;
+      const s_prev = n === 1 ? i0 : (i0 * residualPcts[n - 2]);
+      const costoMarginal = (s_prev * (1 + r) - s_n) + opex_t;
+
+      const kmAcum = n * kmAnualPromedio;
+
+      if (caue_n < minCaue) {
+        minCaue = caue_n;
+        optIndex = n;
+      }
+
+      table.push({
+        anio: `Año ${n}`,
+        km: `${(kmAcum / 1000).toFixed(0)}k km`,
+        kmNumero: kmAcum,
+        n,
+        costoCapital: Math.round(costoCapitalAnual),
+        opexMtto: Math.round(opexAnualizado),
+        caue: Math.round(caue_n),
+        costoMarginal: Math.round(costoMarginal),
+        valorResidual: Math.round(s_n),
+        costoPorKm: Math.round(caue_n / kmAnualPromedio),
+        isOptimal: false
+      });
+    }
+
+    if (table[optIndex - 1]) {
+      table[optIndex - 1].isOptimal = true;
+    }
+
+    const antiguedadAnios = Math.max(1, 2026 - anioVehiculo);
+    const anioActualIndex = Math.min(8, Math.max(1, antiguedadAnios));
+
+    const optimalPoint = table[optIndex - 1];
+    const currentPoint = table[anioActualIndex - 1];
+
+    const isPastOptimal = anioActualIndex > optIndex;
+    const isAtOptimal = anioActualIndex === optIndex;
+    const isBeforeOptimal = anioActualIndex < optIndex;
+
+    const ahorroDestruccionValor = isPastOptimal && currentPoint
+      ? Math.max(7500000, currentPoint.costoMarginal - optimalPoint.caue)
+      : (table[Math.min(7, optIndex + 1)]?.costoMarginal - optimalPoint.caue || 8900000);
+
+    return {
+      table,
+      optIndex,
+      optimalPoint,
+      currentPoint,
+      anioActualIndex,
+      antiguedadAnios,
+      anioVehiculo,
+      vehiculoNombre,
+      i0,
+      kmActual,
+      corrRatio,
+      isPastOptimal,
+      isAtOptimal,
+      isBeforeOptimal,
+      ahorroDestruccionValor
+    };
+  }, [vehiculoAuditoria, factorMesesPeriodo]);
 
   return (
     <div className="p-4 md:p-6 w-full max-w-[1600px] mx-auto space-y-6 relative min-h-screen">
@@ -641,9 +1286,30 @@ export default function PanelTco() {
             className="overflow-hidden"
           >
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm mt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                 
-                {/* 1. Filtro Tipo de Mantención (Corregido: Todas, Preventiva, Correctiva) */}
+                {/* 1. Filtro Período Temporal */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest pl-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    Período Temporal
+                  </label>
+                  <select 
+                    value={filtroPeriodo}
+                    onChange={(e) => {
+                      setFiltroPeriodo(e.target.value as any);
+                      simulateFiltering();
+                    }}
+                    className="w-full bg-white dark:bg-slate-800 border-2 border-blue-300 dark:border-blue-600 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="todo">Todo el Histórico</option>
+                    <option value="30d">Últimos 30 días</option>
+                    <option value="6m">Últimos 6 meses</option>
+                    <option value="ytd">Año en Curso (YTD)</option>
+                  </select>
+                </div>
+
+                {/* 2. Filtro Tipo de Mantención */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Tipo de Mantención</label>
                   <select 
@@ -655,12 +1321,30 @@ export default function PanelTco() {
                     className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer"
                   >
                     <option value="todas">Todas las Mantenciones</option>
-                    <option value="PREVENTIVA">Solo Mantenimiento Preventivo</option>
-                    <option value="CORRECTIVA">Solo Mantenimiento Correctivo</option>
+                    <option value="PREVENTIVA">Solo Preventivo</option>
+                    <option value="CORRECTIVA">Solo Correctivo</option>
                   </select>
                 </div>
 
-                {/* 2. Filtro Selector de Vehículo */}
+                {/* 3. Filtro Tipo de Ingreso */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Tipo de Ingreso</label>
+                  <select 
+                    value={filtroTipoIngreso}
+                    onChange={(e) => {
+                      setFiltroTipoIngreso(e.target.value as any);
+                      simulateFiltering();
+                    }}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="todos">Todos los Ingresos (Unificados)</option>
+                    <option value="CONTRATO">Por Contratos de Clientes</option>
+                    <option value="SERVICIO">Por Servicios Programados</option>
+                    <option value="SPOT">Por Servicios SPOT & Rental</option>
+                  </select>
+                </div>
+
+                {/* 4. Filtro Selector de Vehículo */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Filtrar Unidad</label>
                   <select 
@@ -678,7 +1362,7 @@ export default function PanelTco() {
                   </select>
                 </div>
 
-                {/* 3. Filtro Marca */}
+                {/* 5. Filtro Marca */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Marca</label>
                   <select 
@@ -696,14 +1380,14 @@ export default function PanelTco() {
                   </select>
                 </div>
 
-                {/* 4. Buscador Rápido de Patente / N° Interno */}
+                {/* 6. Buscador Rápido de Patente / N° Interno */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Búsqueda Rápida</label>
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input 
                       type="text" 
-                      placeholder="Buscar patente o interno..." 
+                      placeholder="Buscar patente..." 
                       value={busquedaVehiculo}
                       onChange={(e) => setBusquedaVehiculo(e.target.value)}
                       className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 placeholder:text-slate-400" 
@@ -720,7 +1404,7 @@ export default function PanelTco() {
       {/* KPI Cards Ejecutivas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Ingresos Totales", value: formatCurrency(kpis.ingresosTotales), color: "text-blue-600 dark:text-blue-400", decoration: "bg-blue-600", sub: "Facturación & Contratos" },
+          { label: "Ingresos Totales", value: formatCurrency(kpis.ingresosTotales), color: "text-blue-600 dark:text-blue-400", decoration: "bg-blue-600", sub: `Facturación (${filtroPeriodo === '30d' ? '30 días' : filtroPeriodo === '6m' ? '6 meses' : filtroPeriodo === 'ytd' ? 'Año en curso' : 'Histórico'})` },
           { label: "Costos Totales OPEX", value: formatCurrency(kpis.costosTotales), color: "text-rose-600 dark:text-rose-400", decoration: "bg-rose-500", sub: "Fijos + Variables + OTs" },
           { label: "Utilidad Bruta Flota", value: formatCurrency(kpis.utilidadBruta), color: "text-emerald-600 dark:text-emerald-400", decoration: "bg-emerald-600", sub: "Retorno Neto Operacional" },
           { label: "Margen Operacional", value: `${kpis.margen}%`, color: "text-indigo-600 dark:text-indigo-400", decoration: "bg-indigo-600", sub: "Rentabilidad sobre Ingresos" },
@@ -736,7 +1420,7 @@ export default function PanelTco() {
         ))}
       </div>
 
-      {/* GRÁFICO PRINCIPAL: RENTABILIDAD POR VEHÍCULO (Revamp Total) */}
+      {/* GRÁFICO 1: RENTABILIDAD POR VEHÍCULO (O EVOLUCIÓN MENSUAL DE LA UNIDAD SELECCIONADA) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm p-5 md:p-7 flex flex-col relative overflow-hidden">
         
         {/* Cabecera del gráfico */}
@@ -744,10 +1428,18 @@ export default function PanelTco() {
           <div>
             <h3 className="text-base md:text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
               <BarChart2 className="w-5 h-5 text-blue-600" />
-              Rentabilidad por Vehículo (Ingresos vs Costos Directos)
+              {vehiculoAuditoria ? (
+                <span>Rentabilidad Mensual de la Unidad: <span className="text-blue-600 dark:text-blue-400">{vehiculoAuditoria.name}</span></span>
+              ) : (
+                <span>Rentabilidad por Vehículo (Ingresos vs Costos Directos)</span>
+              )}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-              Segmentación por máquina: Ingresos vs Costos Fijos, Variables, Neumáticos, Preventivo (Verde) y Correctivo (Rojo)
+              {vehiculoAuditoria ? (
+                `Desglose mensual de la máquina: Facturación vs Costos Directos (Preventivo, Correctivo, Combustible y Fijos) para el período seleccionado (${activeMonthsForPeriod.join(', ')})`
+              ) : (
+                'Segmentación por máquina: Ingresos vs Costos Fijos, Variables, Neumáticos, Preventivo (Verde) y Correctivo (Rojo)'
+              )}
             </p>
           </div>
           
@@ -778,17 +1470,19 @@ export default function PanelTco() {
               {showCurvaRentabilidad ? 'Curva de Rentabilidad Activa' : 'Mostrar Curva'}
             </button>
             <span className="text-[10px] font-bold bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800">
-              {rentabilidadVehiculoFiltrada.length} de {rentabilidadVehiculoCompleta.length} unidades
+              {vehiculoAuditoria ? `${activeMonthsForPeriod.length} meses analizados` : `${rentabilidadVehiculoFiltrada.length} de ${rentabilidadVehiculoCompleta.length} unidades`}
             </span>
           </div>
         </div>
 
-        {/* Banner con botón de retroceso a toda la flota cuando se aísla un vehículo */}
+        {/* Banner con botón de retroceso cuando se aísla un vehículo */}
         {filtroVehiculoSeleccionado !== 'todos' && (
-          <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 px-4 rounded-xl mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 px-4 rounded-xl mb-4">
             <div className="flex items-center gap-2 text-xs font-bold text-blue-900 dark:text-blue-200">
-              <Truck className="w-4 h-4 text-blue-600" />
-              <span>Detalle de unidad seleccionada: <strong className="text-blue-700 dark:text-blue-300">{vehiculoAuditoria?.name || 'Vehículo'}</strong></span>
+              <Truck className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>
+                Vista mensual activa: <strong className="text-blue-700 dark:text-blue-300">{vehiculoAuditoria?.name}</strong> ({vehiculoAuditoria?.marca} {vehiculoAuditoria?.modelo}) — {otsVehiculoSeleccionado.length} Órdenes de Trabajo en registro
+              </span>
             </div>
             <button
               onClick={() => {
@@ -804,10 +1498,11 @@ export default function PanelTco() {
         )}
 
         {/* Gráfico interactivo */}
-        <div className="h-[480px] w-full relative z-10">
+        <div className="w-full relative z-10">
           <RentabilidadChartInteractive 
-            data={rentabilidadVehiculoFiltrada} 
+            data={rentabilidadVehiculoMensual || rentabilidadVehiculoFiltrada} 
             showTrendLine={showCurvaRentabilidad}
+            isVehicleView={Boolean(rentabilidadVehiculoMensual)}
             onSelectVehicle={(vehName) => {
               const found = rentabilidadVehiculoCompleta.find(v => v.name === vehName || v.patente === vehName);
               if (found) {
@@ -817,77 +1512,529 @@ export default function PanelTco() {
           />
         </div>
 
-        {/* ALERTA Y DECISIÓN ESTRATÉGICA CUANDO HAY UN VEHÍCULO SELECCIONADO */}
+        {/* AUDITORÍA Y TABLA DE OTs CUANDO HAY UN VEHÍCULO SELECCIONADO */}
         {vehiculoAuditoria && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={cn(
-              "mt-6 p-5 rounded-2xl border transition-all",
+            className="mt-6 space-y-4"
+          >
+            {/* Tarjeta de Auditoría */}
+            <div className={cn(
+              "p-5 rounded-2xl border transition-all",
               vehiculoAuditoria.isCritico 
                 ? "bg-red-50/90 dark:bg-red-950/30 border-red-200 dark:border-red-900/50" 
                 : vehiculoAuditoria.isAlerta
                   ? "bg-amber-50/90 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50"
                   : "bg-emerald-50/90 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50"
-            )}
-          >
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  {vehiculoAuditoria.isCritico ? (
-                    <AlertTriangle className="w-5 h-5 text-red-600" />
-                  ) : vehiculoAuditoria.isAlerta ? (
-                    <AlertTriangle className="w-5 h-5 text-amber-600" />
-                  ) : (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  )}
-                  <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    Auditoría de Retorno TCO: {vehiculoAuditoria.name} ({vehiculoAuditoria.marca} {vehiculoAuditoria.modelo})
-                  </h4>
-                  <span className={cn(
-                    "text-[10px] font-bold px-2 py-0.5 rounded-full",
-                    vehiculoAuditoria.isCritico ? "bg-red-200 text-red-900 dark:bg-red-900/50 dark:text-red-200" :
-                    vehiculoAuditoria.isAlerta ? "bg-amber-200 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200" :
-                    "bg-emerald-200 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-200"
-                  )}>
-                    {vehiculoAuditoria.isCritico ? "EVALUAR REEMPLAZO O VENTA" : vehiculoAuditoria.isAlerta ? "ALERTA MANTENCIÓN" : "UNIDAD RENTABLE"}
-                  </span>
+            )}>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    {vehiculoAuditoria.isCritico ? (
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                    ) : vehiculoAuditoria.isAlerta ? (
+                      <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    )}
+                    <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      Auditoría TCO: {vehiculoAuditoria.name} ({vehiculoAuditoria.marca} {vehiculoAuditoria.modelo})
+                    </h4>
+                    <span className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                      vehiculoAuditoria.isCritico ? "bg-red-200 text-red-900 dark:bg-red-900/50 dark:text-red-200" :
+                      vehiculoAuditoria.isAlerta ? "bg-amber-200 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200" :
+                      "bg-emerald-200 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-200"
+                    )}>
+                      {vehiculoAuditoria.isCritico ? "ALERTA: EVALUAR RENOVACIÓN" : vehiculoAuditoria.isAlerta ? "ALERTA MANTENCIÓN" : "UNIDAD RENTABLE"}
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1">
+                    {vehiculoAuditoria.recomendacion}
+                  </p>
                 </div>
-                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1">
-                  {vehiculoAuditoria.recomendacion}
-                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto text-xs">
+                  <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-500 font-bold block uppercase">Ingresos</span>
+                    <span className="font-bold text-blue-600">{formatCurrency(vehiculoAuditoria.ingresos)}</span>
+                  </div>
+                  <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-500 font-bold block uppercase">Costos Opex</span>
+                    <span className="font-bold text-rose-600">{formatCurrency(vehiculoAuditoria.costosTotales)}</span>
+                  </div>
+                  <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-500 font-bold block uppercase">Mtto. Correctivo</span>
+                    <span className="font-bold text-red-600">{formatCurrency(vehiculoAuditoria.mttoCorrectivo)} ({vehiculoAuditoria.corrCount} OTs)</span>
+                  </div>
+                  <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-500 font-bold block uppercase">Margen Neto</span>
+                    <span className={cn("font-bold", vehiculoAuditoria.margenNeto >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      {formatCurrency(vehiculoAuditoria.margenNeto)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Métricas rápidas de la unidad */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto text-xs">
-                <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Ingresos</span>
-                  <span className="font-bold text-blue-600">{formatCurrency(vehiculoAuditoria.ingresos)}</span>
+              {(vehiculoAuditoria.ingresoContrato > 0 || vehiculoAuditoria.ingresoServicios > 0 || vehiculoAuditoria.ingresoSpot > 0) && (
+                <div className="flex flex-wrap items-center gap-2.5 mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-800/70 text-xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Canales de Facturación:</span>
+                  {vehiculoAuditoria.ingresoContrato > 0 && (
+                    <span className="inline-flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-lg font-bold text-[11px] border border-blue-200 dark:border-blue-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      Contrato: {vehiculoAuditoria.contratoNombre} ({formatCurrency(vehiculoAuditoria.ingresoContrato)})
+                    </span>
+                  )}
+                  {vehiculoAuditoria.ingresoServicios > 0 && (
+                    <span className="inline-flex items-center gap-1.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 px-2.5 py-1 rounded-lg font-bold text-[11px] border border-indigo-200 dark:border-indigo-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                      Servicios Programados ({formatCurrency(vehiculoAuditoria.ingresoServicios)})
+                    </span>
+                  )}
+                  {vehiculoAuditoria.ingresoSpot > 0 && (
+                    <span className="inline-flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-lg font-bold text-[11px] border border-amber-200 dark:border-amber-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      Servicios SPOT & Rental ({formatCurrency(vehiculoAuditoria.ingresoSpot)})
+                    </span>
+                  )}
                 </div>
-                <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Costos Opex</span>
-                  <span className="font-bold text-rose-600">{formatCurrency(vehiculoAuditoria.costosTotales)}</span>
-                </div>
-                <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Mtto. Correctivo</span>
-                  <span className="font-bold text-red-600">{formatCurrency(vehiculoAuditoria.mttoCorrectivo)} ({vehiculoAuditoria.corrCount} OTs)</span>
-                </div>
-                <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Margen Neto</span>
-                  <span className={cn("font-bold", vehiculoAuditoria.margenNeto >= 0 ? "text-emerald-600" : "text-red-600")}>
-                    {formatCurrency(vehiculoAuditoria.margenNeto)}
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
+
+            {/* TABLA DE ÓRDENES DE TRABAJO DE LA UNIDAD */}
+            {otsVehiculoSeleccionado.length > 0 && (
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-emerald-600" />
+                    <h5 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                      Historial Cronológico de Órdenes de Trabajo ({otsVehiculoSeleccionado.length} OTs registradas)
+                    </h5>
+                  </div>
+                  <button
+                    onClick={() => setShowOtsTable(!showOtsTable)}
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{showOtsTable ? 'Ocultar OTs' : 'Ver Detalle de OTs'}</span>
+                    {showOtsTable ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {showOtsTable && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase text-slate-500">
+                          <th className="py-2 px-3">Folio OT</th>
+                          <th className="py-2 px-3">Fecha</th>
+                          <th className="py-2 px-3">Mes</th>
+                          <th className="py-2 px-3">Tipo</th>
+                          <th className="py-2 px-3">Estado</th>
+                          <th className="py-2 px-3 text-right">Insumos</th>
+                          <th className="py-2 px-3 text-right">Mano de Obra</th>
+                          <th className="py-2 px-3 text-right">Costo Total</th>
+                          <th className="py-2 px-3">Diagnóstico / Tarea</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {otsVehiculoSeleccionado.map((ot) => (
+                          <tr key={ot.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors">
+                            <td className="py-2 px-3 font-mono font-bold text-slate-900 dark:text-slate-100">{ot.folio}</td>
+                            <td className="py-2 px-3 text-slate-600 dark:text-slate-400">{ot.fecha}</td>
+                            <td className="py-2 px-3 font-bold text-slate-700 dark:text-slate-300">{ot.mes}</td>
+                            <td className="py-2 px-3">
+                              <span className={cn(
+                                "text-[10px] font-black px-2 py-0.5 rounded-full",
+                                ot.tipo === 'PREVENTIVA'
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300"
+                              )}>
+                                {ot.tipo}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                                {ot.estado}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-700 dark:text-slate-300">{formatCurrency(ot.insumos)}</td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-700 dark:text-slate-300">{formatCurrency(ot.manoObra)}</td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">{formatCurrency(ot.costoTotal)}</td>
+                            <td className="py-2 px-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={ot.pauta}>
+                              {ot.pauta}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </div>
 
+      {/* MÓDULO CAUE: CURVA TCO DE CICLO DE VIDA (Diseño Limpio, Card Directa y Apertura Lateral) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm p-5 md:p-7 flex flex-col relative overflow-hidden">
+        
+        {/* Cabecera del Módulo CAUE */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base md:text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                <Compass className="w-5 h-5 text-emerald-600" />
+                {vehiculoAuditoria ? (
+                  <span>Curva TCO y Punto Óptimo de Reemplazo: <span className="text-emerald-600 dark:text-emerald-400">{vehiculoAuditoria.name}</span></span>
+                ) : (
+                  <span>Curva TCO de Ciclo de Vida y Punto Óptimo de Reemplazo (Modelo CAUE)</span>
+                )}
+              </h3>
+              <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
+                {vehiculoAuditoria ? `Unidad ${vehiculoAuditoria.modelo}` : 'Ingeniería Económica'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {vehiculoAuditoria ? (
+                `Curva calibrada para ${vehiculoAuditoria.name} (I₀ = ${formatCurrency(caueData.i0)}, ${caueData.kmActual.toLocaleString('es-CL')} km rodados, tasa correctiva ${(caueData.corrRatio * 100).toFixed(0)}%). Haz clic en la gráfica para ver el análisis a un costado.`
+              ) : (
+                'Optimización matemática de Costo Anual Uniforme Equivalente (CAUE). Cruce de Depreciación vs Curva de Mantenimiento y Downtime. Haz clic en la gráfica para abrir el diagnóstico lateral.'
+              )}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Selector de Eje X (Años vs Kilómetros) */}
+            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center gap-1 border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setCaueXAxisMode('anios')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                  caueXAxisMode === 'anios'
+                    ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                )}
+              >
+                Horizonte Años
+              </button>
+              <button
+                type="button"
+                onClick={() => setCaueXAxisMode('km')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                  caueXAxisMode === 'km'
+                    ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                )}
+              >
+                Kilometraje (Km)
+              </button>
+            </div>
+
+            {/* Botón para abrir el panel lateral */}
+            <button
+              onClick={() => setShowCaueSideDrawer(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition shadow-sm cursor-pointer"
+              title="Abrir panel lateral con diagnóstico detallado y regla marginal"
+            >
+              <Info className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Ver Diagnóstico Lateral</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Gráfico de la Curva en U del Modelo CAUE (Clickable para abrir el panel lateral) */}
+        <div 
+          className="w-full h-[430px] cursor-pointer group relative"
+          onClick={() => setShowCaueSideDrawer(true)}
+          title="Haz clic aquí para abrir el panel de auditoría y diagnóstico a un costado"
+        >
+          {/* Indicador de ayuda al pasar el mouse */}
+          <div className="absolute top-2 right-4 z-20 pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-slate-900/80 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg backdrop-blur-sm flex items-center gap-1.5 shadow-lg">
+            <Compass className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <span>Click en la gráfica para abrir panel lateral ⇄</span>
+          </div>
+
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart 
+              data={caueData.table} 
+              margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" opacity={0.15} />
+              
+              <XAxis 
+                dataKey={caueXAxisMode === 'anios' ? 'anio' : 'km'} 
+                axisLine={{ stroke: '#cbd5e1' }}
+                tickLine={false}
+                tick={{ fill: '#64748b', fontSize: 12, fontWeight: '700' }}
+                dy={8}
+              />
+              <YAxis 
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#64748b', fontSize: 11, fontWeight: '600' }}
+                tickFormatter={formatCompactNumber} 
+              />
+              <Tooltip content={<CaueTooltip />} />
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '15px', fontWeight: 'bold' }} iconType="circle" />
+
+              {/* Curva 1: Costo de Capital / Depreciación Anualizada (Descendente) */}
+              <Line 
+                type="monotone" 
+                dataKey="costoCapital" 
+                name="Costo de Capital / Depreciación Anualizada" 
+                stroke="#0284c7" 
+                strokeWidth={2.5}
+                strokeDasharray="4 4"
+                dot={{ r: 4, fill: '#0284c7' }}
+              />
+
+              {/* Curva 2: OPEX, Mantenimiento & Downtime Anualizado (Ascendente) */}
+              <Line 
+                type="monotone" 
+                dataKey="opexMtto" 
+                name="OPEX, Mantenimiento & Downtime Anualizado" 
+                stroke="#f59e0b" 
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: '#f59e0b' }}
+              />
+
+              {/* Curva 3: CAUE Total (Curva en U Característica) */}
+              <Line 
+                type="monotone" 
+                dataKey="caue" 
+                name="CAUE Total (Costo Anual Uniforme Equivalente)" 
+                stroke="#10b981" 
+                strokeWidth={4}
+                dot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                activeDot={{ r: 8 }}
+              />
+
+              {/* Línea de Referencia Vertical en el Punto Óptimo (n*) */}
+              <ReferenceLine 
+                x={caueXAxisMode === 'anios' ? caueData.optimalPoint?.anio : caueData.optimalPoint?.km} 
+                stroke="#6366f1" 
+                strokeWidth={2.5} 
+                strokeDasharray="6 4"
+                label={{ 
+                  value: `Punto Óptimo (${caueData.optimalPoint?.anio})`, 
+                  fill: '#6366f1', 
+                  fontSize: 11, 
+                  fontWeight: 'bold', 
+                  position: 'top' 
+                }} 
+              />
+
+              {/* Marcador de la Posición Actual de la Unidad Seleccionada */}
+              {caueData.currentPoint && (
+                <ReferenceLine 
+                  x={caueXAxisMode === 'anios' ? caueData.currentPoint?.anio : caueData.currentPoint?.km} 
+                  stroke={caueData.isPastOptimal ? "#ef4444" : "#3b82f6"} 
+                  strokeWidth={2.5} 
+                  strokeDasharray="3 3"
+                  label={{ 
+                    value: `Posición Actual (${caueData.isPastOptimal ? 'VENCIDO - ' : ''}${caueData.vehiculoNombre.split(' ')[0]})`, 
+                    fill: caueData.isPastOptimal ? "#ef4444" : "#3b82f6", 
+                    fontSize: 11, 
+                    fontWeight: 'bold', 
+                    position: 'insideTopLeft' 
+                  }} 
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Resumen Ejecutivo al Pie de la Curva CAUE */}
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shrink-0"></span>
+            <span>El valle más bajo de la curva en U ({caueData.optimalPoint?.anio} / {caueData.optimalPoint?.km}) determina la ventana de renovación con costo mínimo.</span>
+          </div>
+          <button 
+            onClick={() => setShowCaueSideDrawer(true)}
+            className="font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-500 transition cursor-pointer flex items-center gap-1.5"
+          >
+            <span>Ahorro proyectado por reemplazo oportuno: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm">{formatCurrency(caueData.ahorroDestruccionValor)}</strong></span>
+            <ChevronRight className="w-3.5 h-3.5 text-emerald-500" />
+          </button>
+        </div>
+
+      </div>
+
+      {/* PANEL LATERAL (DRAWER) DESLIZANTE A UN COSTADO PARA DIAGNÓSTICO TCO Y CAUE */}
+      <AnimatePresence>
+        {showCaueSideDrawer && (
+          <>
+            {/* Backdrop con blur */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCaueSideDrawer(false)}
+              className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 cursor-pointer"
+            />
+
+            {/* Panel Lateral deslizante */}
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              className="fixed top-0 right-0 h-full w-full max-w-lg md:max-w-xl bg-slate-900 border-l border-slate-800 shadow-2xl z-50 flex flex-col justify-between overflow-hidden text-slate-100"
+            >
+              {/* Header del Panel Lateral */}
+              <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-base font-black uppercase tracking-tight text-white">Auditoría TCO & Modelo CAUE</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 font-semibold">{caueData.vehiculoNombre}</p>
+                </div>
+                <button 
+                  onClick={() => setShowCaueSideDrawer(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  title="Cerrar panel lateral"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Contenido con Scroll */}
+              <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar flex-1">
+                
+                {/* 1. Diagnóstico del Activo */}
+                <div className={cn(
+                  "p-4 rounded-2xl border relative overflow-hidden",
+                  caueData.isPastOptimal 
+                    ? "bg-rose-950/30 border-rose-800/80" 
+                    : caueData.isAtOptimal
+                      ? "bg-amber-950/30 border-amber-800/80"
+                      : "bg-blue-950/30 border-blue-800/80"
+                )}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Diagnóstico Operacional</span>
+                    <span className={cn(
+                      "text-[10px] font-black px-2 py-0.5 rounded-full",
+                      caueData.isPastOptimal ? "bg-rose-900/80 text-rose-200" : caueData.isAtOptimal ? "bg-amber-900/80 text-amber-200" : "bg-blue-900/80 text-blue-200"
+                    )}>
+                      {caueData.isPastOptimal ? "DESTRUCCIÓN DE VALOR" : caueData.isAtOptimal ? "VENTANA DE REEMPLAZO" : "ZONA ÓPTIMA"}
+                    </span>
+                  </div>
+                  <h4 className={cn(
+                    "text-lg font-black tracking-tight",
+                    caueData.isPastOptimal ? "text-rose-400" : caueData.isAtOptimal ? "text-amber-400" : "text-blue-400"
+                  )}>
+                    {caueData.isPastOptimal ? "Unidad con Ciclo Vencido" : caueData.isAtOptimal ? "Ventana Exacta de Salida / Reventa" : "Unidad Operativa Rentable"}
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-1 font-medium leading-relaxed">
+                    Año {caueData.anioVehiculo} ({caueData.antiguedadAnios} años de antigüedad | {caueData.kmActual.toLocaleString('es-CL')} km rodados).
+                    {caueData.isPastOptimal 
+                      ? " El costo acumulado de fallas correctivas y tiempo detenido supera ampliamente el costo anual uniforme de adquirir una máquina nueva. Se aconseja reemplazo o reventa inmediata."
+                      : caueData.isAtOptimal
+                        ? " Unidad en el momento exacto para descarte con máxima recuperación de valor residual."
+                        : " Unidad rodando dentro del margen económico planificado. Mantener pautas preventivas."}
+                  </p>
+                </div>
+
+                {/* 2. Punto Óptimo de Reemplazo (n*) */}
+                <div className="p-4 rounded-2xl border border-emerald-500/40 bg-slate-800/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Punto Óptimo de Reemplazo (n*)</span>
+                    <span className="text-xs font-mono font-black text-emerald-400">{caueData.optimalPoint?.anio} ({caueData.optimalPoint?.km})</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">CAUE Mínimo:</span>
+                    <span className="font-mono font-bold text-white text-sm">{formatCurrency(caueData.optimalPoint?.caue || 0)} / año</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Costo por Km Óptimo:</span>
+                    <span className="font-mono font-bold text-emerald-300">${caueData.optimalPoint?.costoPorKm} / km</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-700/60">
+                    A partir de este hito, los costos de reparación y el lucro cesante crecen a mayor velocidad que el ahorro en depreciación.
+                  </p>
+                </div>
+
+                {/* 3. Regla Marginal de Reemplazo */}
+                <div className="p-4 rounded-2xl border border-slate-800 bg-slate-800/40 space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Regla Marginal de Reemplazo</span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Costo Marginal Período Actual:</span>
+                    <span className="font-mono font-bold text-rose-400 text-sm">{formatCurrency(caueData.currentPoint?.costoMarginal || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Umbral CAUE(n*) Máximo Aceptable:</span>
+                    <span className="font-mono font-bold text-emerald-400">{formatCurrency(caueData.optimalPoint?.caue || 0)}</span>
+                  </div>
+                  <div className={cn(
+                    "p-2.5 rounded-xl text-[11px] font-semibold mt-1",
+                    caueData.currentPoint && caueData.currentPoint.costoMarginal >= caueData.optimalPoint.caue 
+                      ? "bg-red-950/40 text-red-300 border border-red-800/60" 
+                      : "bg-emerald-950/40 text-emerald-300 border border-emerald-800/60"
+                  )}>
+                    {caueData.currentPoint && caueData.currentPoint.costoMarginal >= caueData.optimalPoint.caue 
+                      ? "⚠️ Condición matemática de reemplazo CUMPLIDA: Operar la unidad durante el año en curso destruye valor respecto al promedio de un vehículo nuevo."
+                      : "✅ Operación eficiente: El costo marginal del año actual aún es inferior al promedio histórico de una unidad nueva."}
+                  </div>
+                </div>
+
+                {/* 4. Valor Residual de Rescate S(n) */}
+                <div className="p-4 rounded-2xl border border-slate-800 bg-slate-800/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Valor Residual de Rescate S(n)</span>
+                    <span className="font-mono font-bold text-sky-400 text-sm">{formatCurrency(caueData.currentPoint?.valorResidual || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Base de Inversión Inicial (I₀):</span>
+                    <span className="font-mono font-bold text-slate-200">{formatCurrency(caueData.i0)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Estimación de rescate en el mercado secundario al vender el activo o entregarlo en parte de pago hoy.
+                  </p>
+                </div>
+
+                {/* 5. Formulación Matemática de Ingeniería Económica */}
+                <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/80 space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-400">
+                    <Activity className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase tracking-wider font-mono">Modelo Matemático CAUE / EAC</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 font-mono text-[11px] text-emerald-300 text-center overflow-x-auto">
+                    CAUE(n) = [ I₀ - S(n)(1+r)⁻ⁿ + ∑(t=1..n)[Oₜ+Mₜ](1+r)⁻ᵗ ] / [ ∑(1+r)⁻ᵗ ]
+                  </div>
+                  <ul className="text-[11px] text-slate-400 space-y-1 list-disc pl-4 pt-1">
+                    <li><strong className="text-slate-200">I₀:</strong> Inversión de adquisición ({formatCurrency(caueData.i0)}).</li>
+                    <li><strong className="text-slate-200">r:</strong> Costo de capital WACC fijado en 8.0% anual.</li>
+                    <li><strong className="text-slate-200">Oₜ + Mₜ:</strong> Operación directa + OTs preventivas, correctivas y lucro cesante por Downtime.</li>
+                  </ul>
+                </div>
+
+              </div>
+
+              {/* Footer con Botón de Cierre */}
+              <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+                <span className="text-xs text-slate-400">Ahorro proyectado: <strong className="text-emerald-400 font-mono">{formatCurrency(caueData.ahorroDestruccionValor)}</strong></span>
+                <button
+                  onClick={() => setShowCaueSideDrawer(false)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-lg transition cursor-pointer"
+                >
+                  Entendido, Cerrar
+                </button>
+              </div>
+
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* FILA INFERIOR: PROYECCIÓN VS PRESUPUESTO & MATRIZ DE COSTOS DIRECTOS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Gráfica Proyección vs Presupuesto (Alto contraste modo día y noche) */}
+        {/* Gráfica Proyección vs Presupuesto (Alto contraste, 100% reactiva a filtros y períodos) */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm p-5 md:p-6 flex flex-col lg:col-span-2">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
             <div>
@@ -895,11 +2042,11 @@ export default function PanelTco() {
                 Proyección vs Presupuesto Operacional
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Comparativa de gasto real ejecutado versus presupuesto asignado (contraste optimizado)
+                Comparativa de gasto real ejecutado versus presupuesto asignado por mes ({activeMonthsForPeriod.length} meses en período {filtroPeriodo})
               </p>
             </div>
             <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full border border-indigo-200 dark:border-indigo-800">
-              Control Presupuestario
+              Control Presupuestario Dinámico
             </span>
           </div>
 
@@ -923,7 +2070,7 @@ export default function PanelTco() {
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '15px', fontWeight: 'bold' }} iconType="circle" />
                 
-                {/* Barras de Presupuesto con alto contraste (gris visible con borde delimitador en noche y día) */}
+                {/* Barras de Presupuesto Asignado (Dinámico y Estacional) */}
                 <Bar 
                   dataKey="presupuesto" 
                   fill="#94a3b8" 
@@ -935,7 +2082,7 @@ export default function PanelTco() {
                   barSize={32} 
                 />
                 
-                {/* Línea de Gasto Real en violeta/índigo vibrante de alta visibilidad */}
+                {/* Línea de Gasto Real en índigo de alta visibilidad */}
                 <Line 
                   type="monotone" 
                   dataKey="real" 
@@ -949,7 +2096,7 @@ export default function PanelTco() {
           </div>
         </div>
 
-        {/* Desglose Estratégico de Costos OPEX */}
+        {/* Desglose Estratégico de Costos OPEX (100% COMPLETO CON LAS 6 VARIABLES CHILEAN STANDARD) */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm p-5 md:p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -957,20 +2104,20 @@ export default function PanelTco() {
                 <Layers className="w-4 h-4 text-emerald-600" />
                 Composición OPEX Flota
               </h3>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Chilean Standard</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Chilean Standard (6 Variables)</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
-              Participación directa en la estructura de costo operativo total
+              Participación directa en la estructura de costo operativo total ({rentabilidadVehiculoFiltrada.length} unidades consideradas)
             </p>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {distribucionCostos.map((c, idx) => {
                 const pct = kpis.costosTotales > 0 ? Math.round((c.value / kpis.costosTotales) * 100) : 0;
                 return (
                   <div key={idx} className="space-y-1">
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
                         {c.name}
                       </span>
                       <span className="font-mono font-bold text-slate-900 dark:text-white">
@@ -980,7 +2127,7 @@ export default function PanelTco() {
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
                       <div 
                         className="h-full rounded-full transition-all" 
-                        style={{ width: `${pct}%`, backgroundColor: c.color }} 
+                        style={{ width: `${Math.max(2, pct)}%`, backgroundColor: c.color }} 
                       />
                     </div>
                   </div>
@@ -990,8 +2137,8 @@ export default function PanelTco() {
           </div>
 
           <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
-            <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Costo Total Flota</span>
-            <span className="font-black text-slate-900 dark:text-white text-sm">
+            <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Costo Total Flota Filtrada</span>
+            <span className="font-black text-slate-900 dark:text-white text-sm font-mono">
               {formatCurrency(kpis.costosTotales)}
             </span>
           </div>

@@ -65,13 +65,28 @@ export default function Contratos() {
     if (!activeCompanyId) return;
 
     try {
-      // Cargar contratos
+      // Cargar vehículos primero para cruce seguro sin fallos de relación en PostgREST
+      let vehiculosQuery = supabase
+        .from('vehiculo')
+        .select('id, patente, tipo');
+        
+      if (activeCompanyId !== 'GLOBAL') {
+        vehiculosQuery = vehiculosQuery.eq('empresa_id', activeCompanyId);
+      } else if (profile?.rol?.nombre !== 'Súper Administrador' && profile?.empresa_id) {
+        vehiculosQuery = vehiculosQuery.eq('empresa_id', profile.empresa_id);
+      }
+      
+      const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery;
+      if (!vehiculosError && vehiculosData) {
+        setVehiculosDisponibles(vehiculosData);
+      }
+
+      const vehMap = new Map((vehiculosData || []).map((v: any) => [v.id, v.patente]));
+
+      // Cargar contratos directamente sin JOIN ambiguo
       let contratosQuery = supabase
         .from('operacion_contrato')
-        .select(`
-          *,
-          operacion_contrato_vehiculo( vehiculo_id, vehiculo( patente, tipo ) )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
         
       if (activeCompanyId !== 'GLOBAL') {
@@ -81,13 +96,22 @@ export default function Contratos() {
       }
 
       const { data: contratosData, error: contratosError } = await contratosQuery;
-
       if (contratosError) throw contratosError;
 
+      // Cargar asignaciones de vehículos
+      const { data: cvLinks } = await supabase
+        .from('operacion_contrato_vehiculo')
+        .select('contrato_id, vehiculo_id');
+
+      const cvMap: Record<string, string[]> = {};
+      (cvLinks || []).forEach((link: any) => {
+        if (!cvMap[link.contrato_id]) cvMap[link.contrato_id] = [];
+        const pat = vehMap.get(link.vehiculo_id);
+        if (pat) cvMap[link.contrato_id].push(pat);
+      });
+
       const formatContratos: Contrato[] = (contratosData || []).map(c => {
-        const vehiculos = c.operacion_contrato_vehiculo
-          ? c.operacion_contrato_vehiculo.map((v: any) => v.vehiculo?.patente).filter(Boolean)
-          : [];
+        const vehiculos = cvMap[c.id] || [];
         return {
           id: c.id,
           cliente: c.cliente_razon_social,
@@ -103,23 +127,6 @@ export default function Contratos() {
       });
 
       setContratos(formatContratos);
-
-      // Cargar vehículos
-      let vehiculosQuery = supabase
-        .from('vehiculo')
-        .select('id, patente, tipo');
-        
-      if (activeCompanyId !== 'GLOBAL') {
-        vehiculosQuery = vehiculosQuery.eq('empresa_id', activeCompanyId);
-      } else if (profile?.rol?.nombre !== 'Súper Administrador' && profile?.empresa_id) {
-        vehiculosQuery = vehiculosQuery.eq('empresa_id', profile.empresa_id);
-      }
-      
-      const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery;
-      
-      if (!vehiculosError && vehiculosData) {
-        setVehiculosDisponibles(vehiculosData);
-      }
 
       // Obtener lista de clientes únicos para autocompletar
       const uniqueClients = Array.from(new Set(formatContratos.map(c => c.cliente))).filter(Boolean);
