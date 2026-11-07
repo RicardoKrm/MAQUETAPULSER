@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { FileText, Plus, Search, Calendar, X, Briefcase, Download, Paperclip, ChevronRight, CheckCircle2, Truck, Wrench, Info, AlertCircle, FileCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '../../lib/supabase';
+import { supabase, logActividad } from '../../lib/supabase';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -254,6 +254,11 @@ export default function Contratos() {
       setEditingContratoId(null);
       loadData();
       showToast('Contrato guardado exitosamente.');
+      logActividad(
+        'Contratos Clientes',
+        'Simulación de Contrato',
+        `Guardó simulación para ${formData.alias || formData.cliente} con facturación mensual de ${formatCurrency(montoMensualNum)} y ${formData.vehiculosAsignados.length} unidades asignadas`
+      );
       setFormData({ ...emptyForm, empresa_id: finalCompanyId });
       
     } catch (error) {

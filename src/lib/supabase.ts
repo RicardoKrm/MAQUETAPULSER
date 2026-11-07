@@ -299,12 +299,32 @@ export const logActividad = async (
   modulo: string,
   accion: string,
   detalles: string,
-  empresaId?: string,
-  usuarioId?: string
+  _empresaId?: string,
+  _usuarioId?: string
 ) => {
   try {
-    console.info(`[Log Actividad Demo] ${modulo} - ${accion}: ${detalles}`);
+    // Generar o recuperar ID de sesión único y persistente para este prospecto
+    let prospectId = 'VISITANTE';
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      let storedId = window.sessionStorage.getItem('pulser_prospect_id');
+      if (!storedId) {
+        storedId = 'PROSPECTO-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+        window.sessionStorage.setItem('pulser_prospect_id', storedId);
+      }
+      prospectId = storedId;
+    }
+
+    const payload = {
+      empresa_id: '161a47ac-9c63-435d-ab55-a6163a6805ab', // Tenant Gaval Demo TMS
+      usuario_id: null, // Null para no violar clave foránea de usuario
+      modulo: `[Maqueta Demo] ${modulo}`,
+      accion: accion,
+      detalles: `[${prospectId}] ${detalles}`
+    };
+
+    // Usamos rawSupabase directamente para enviar la telemetría a la base de datos real sin interferir con el sandbox
+    await rawSupabase.from('log_actividad').insert([payload]);
   } catch (error) {
-    console.error("No se pudo registrar la actividad:", error);
+    console.warn('[Log Actividad Demo] No se pudo enviar telemetría de prospecto:', error);
   }
 };
