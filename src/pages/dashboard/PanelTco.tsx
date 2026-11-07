@@ -422,6 +422,7 @@ export default function PanelTco() {
   // Estado para el Modo de Visualización del Eje X en Curva TCO
   const [caueXAxisMode, setCaueXAxisMode] = useState<'anios' | 'km'>('anios');
   const [showCaueSideDrawer, setShowCaueSideDrawer] = useState(false);
+  const [selectedCurvaInfo, setSelectedCurvaInfo] = useState<'caue' | 'costoCapital' | 'opexMtto' | 'puntoOptimo' | 'posicionActual' | null>(null);
   const [showOtsTable, setShowOtsTable] = useState(true);
 
   // Datos de bases de datos
@@ -1736,116 +1737,425 @@ export default function PanelTco() {
 
             {/* Botón para abrir el panel lateral */}
             <button
-              onClick={() => setShowCaueSideDrawer(true)}
+              onClick={() => setSelectedCurvaInfo(selectedCurvaInfo ? null : 'caue')}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition shadow-sm cursor-pointer"
-              title="Abrir panel lateral con diagnóstico detallado y regla marginal"
+              title="Ver análisis detallado y explicación didáctica de las curvas"
             >
               <Info className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Ver Diagnóstico Lateral</span>
+              <span>{selectedCurvaInfo ? 'Ocultar Explicación' : 'Explicar Curvas'}</span>
             </button>
           </div>
         </div>
 
-        {/* Gráfico de la Curva en U del Modelo CAUE (Clickable para abrir el panel lateral) */}
-        <div 
-          className="w-full h-[430px] cursor-pointer group relative"
-          onClick={() => setShowCaueSideDrawer(true)}
-          title="Haz clic aquí para abrir el panel de auditoría y diagnóstico a un costado"
-        >
-          {/* Indicador de ayuda al pasar el mouse */}
-          <div className="absolute top-2 right-4 z-20 pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-slate-900/80 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg backdrop-blur-sm flex items-center gap-1.5 shadow-lg">
-            <Compass className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>Click en la gráfica para abrir panel lateral ⇄</span>
-          </div>
-
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart 
-              data={caueData.table} 
-              margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+        {/* Barra de Selección Rápida de Curvas (Para desplegar explicación a un costado sin ocultar la gráfica) */}
+        <div className="flex flex-wrap items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-800/60">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Explicación y Cálculo por Curva:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedCurvaInfo(selectedCurvaInfo === 'caue' ? null : 'caue')}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer",
+              selectedCurvaInfo === 'caue'
+                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>CAUE Total (En 'U')</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCurvaInfo(selectedCurvaInfo === 'costoCapital' ? null : 'costoCapital')}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer",
+              selectedCurvaInfo === 'costoCapital'
+                ? "bg-sky-600 text-white border-sky-600 shadow-sm"
+                : "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800 hover:bg-sky-100"
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+            <span>Costo Capital / Depreciación</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCurvaInfo(selectedCurvaInfo === 'opexMtto' ? null : 'opexMtto')}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer",
+              selectedCurvaInfo === 'opexMtto'
+                ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span>OPEX & Mantenimiento</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCurvaInfo(selectedCurvaInfo === 'puntoOptimo' ? null : 'puntoOptimo')}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer",
+              selectedCurvaInfo === 'puntoOptimo'
+                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100"
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+            <span>Punto Óptimo (n*)</span>
+          </button>
+          {caueData.currentPoint && (
+            <button
+              type="button"
+              onClick={() => setSelectedCurvaInfo(selectedCurvaInfo === 'posicionActual' ? null : 'posicionActual')}
+              className={cn(
+                "px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer",
+                selectedCurvaInfo === 'posicionActual'
+                  ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100"
+              )}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" opacity={0.15} />
-              
-              <XAxis 
-                dataKey={caueXAxisMode === 'anios' ? 'anio' : 'km'} 
-                axisLine={{ stroke: '#cbd5e1' }}
-                tickLine={false}
-                tick={{ fill: '#64748b', fontSize: 12, fontWeight: '700' }}
-                dy={8}
-              />
-              <YAxis 
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#64748b', fontSize: 11, fontWeight: '600' }}
-                tickFormatter={formatCompactNumber} 
-              />
-              <Tooltip content={<CaueTooltip />} />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '15px', fontWeight: 'bold' }} iconType="circle" />
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span>Posición Actual ({caueData.vehiculoNombre.split(' ')[0]})</span>
+            </button>
+          )}
+        </div>
 
-              {/* Curva 1: Costo de Capital / Depreciación Anualizada (Descendente) */}
-              <Line 
-                type="monotone" 
-                dataKey="costoCapital" 
-                name="Costo de Capital / Depreciación Anualizada" 
-                stroke="#0284c7" 
-                strokeWidth={2.5}
-                strokeDasharray="4 4"
-                dot={{ r: 4, fill: '#0284c7' }}
-              />
+        {/* Contenedor Adaptativo: Gráfica + Cuadro Lateral Explicativo (Side-by-side) */}
+        <div className="flex flex-col lg:flex-row gap-5 items-stretch transition-all duration-300">
+          
+          {/* Gráfico de la Curva en U del Modelo CAUE */}
+          <div 
+            className={cn(
+              "transition-all duration-300 min-w-0 h-[440px] relative",
+              selectedCurvaInfo ? "w-full lg:w-[60%]" : "w-full"
+            )}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart 
+                data={caueData.table} 
+                margin={{ top: 20, right: 25, left: 10, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" opacity={0.15} />
+                
+                <XAxis 
+                  dataKey={caueXAxisMode === 'anios' ? 'anio' : 'km'} 
+                  axisLine={{ stroke: '#cbd5e1' }}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12, fontWeight: '700' }}
+                  dy={8}
+                />
+                <YAxis 
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 11, fontWeight: '600' }}
+                  tickFormatter={formatCompactNumber} 
+                />
+                <Tooltip content={<CaueTooltip />} />
+                <Legend 
+                  wrapperStyle={{ fontSize: '11px', paddingTop: '15px', fontWeight: 'bold' }} 
+                  iconType="circle"
+                  onClick={(e: any) => {
+                    if (e.dataKey === 'costoCapital') setSelectedCurvaInfo('costoCapital');
+                    else if (e.dataKey === 'opexMtto') setSelectedCurvaInfo('opexMtto');
+                    else if (e.dataKey === 'caue') setSelectedCurvaInfo('caue');
+                  }}
+                />
 
-              {/* Curva 2: OPEX, Mantenimiento & Downtime Anualizado (Ascendente) */}
-              <Line 
-                type="monotone" 
-                dataKey="opexMtto" 
-                name="OPEX, Mantenimiento & Downtime Anualizado" 
-                stroke="#f59e0b" 
-                strokeWidth={2.5}
-                dot={{ r: 4, fill: '#f59e0b' }}
-              />
+                {/* Curva 1: Costo de Capital / Depreciación Anualizada (Descendente) */}
+                <Line 
+                  type="monotone" 
+                  dataKey="costoCapital" 
+                  name="Costo de Capital / Depreciación Anualizada" 
+                  stroke="#0284c7" 
+                  strokeWidth={selectedCurvaInfo === 'costoCapital' ? 4.5 : 2.5}
+                  strokeDasharray="4 4"
+                  dot={{ r: 4, fill: '#0284c7' }}
+                  onClick={() => setSelectedCurvaInfo('costoCapital')}
+                  className="cursor-pointer"
+                />
 
-              {/* Curva 3: CAUE Total (Curva en U Característica) */}
-              <Line 
-                type="monotone" 
-                dataKey="caue" 
-                name="CAUE Total (Costo Anual Uniforme Equivalente)" 
-                stroke="#10b981" 
-                strokeWidth={4}
-                dot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
-                activeDot={{ r: 8 }}
-              />
+                {/* Curva 2: OPEX, Mantenimiento & Downtime Anualizado (Ascendente) */}
+                <Line 
+                  type="monotone" 
+                  dataKey="opexMtto" 
+                  name="OPEX, Mantenimiento & Downtime Anualizado" 
+                  stroke="#f59e0b" 
+                  strokeWidth={selectedCurvaInfo === 'opexMtto' ? 4.5 : 2.5}
+                  dot={{ r: 4, fill: '#f59e0b' }}
+                  onClick={() => setSelectedCurvaInfo('opexMtto')}
+                  className="cursor-pointer"
+                />
 
-              {/* Línea de Referencia Vertical en el Punto Óptimo (n*) */}
-              <ReferenceLine 
-                x={caueXAxisMode === 'anios' ? caueData.optimalPoint?.anio : caueData.optimalPoint?.km} 
-                stroke="#6366f1" 
-                strokeWidth={2.5} 
-                strokeDasharray="6 4"
-                label={{ 
-                  value: `Punto Óptimo (${caueData.optimalPoint?.anio})`, 
-                  fill: '#6366f1', 
-                  fontSize: 11, 
-                  fontWeight: 'bold', 
-                  position: 'top' 
-                }} 
-              />
+                {/* Curva 3: CAUE Total (Curva en U Característica) */}
+                <Line 
+                  type="monotone" 
+                  dataKey="caue" 
+                  name="CAUE Total (Costo Anual Uniforme Equivalente)" 
+                  stroke="#10b981" 
+                  strokeWidth={selectedCurvaInfo === 'caue' ? 5.5 : 4}
+                  dot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 8 }}
+                  onClick={() => setSelectedCurvaInfo('caue')}
+                  className="cursor-pointer"
+                />
 
-              {/* Marcador de la Posición Actual de la Unidad Seleccionada */}
-              {caueData.currentPoint && (
+                {/* Línea de Referencia Vertical en el Punto Óptimo (n*) */}
                 <ReferenceLine 
-                  x={caueXAxisMode === 'anios' ? caueData.currentPoint?.anio : caueData.currentPoint?.km} 
-                  stroke={caueData.isPastOptimal ? "#ef4444" : "#3b82f6"} 
+                  x={caueXAxisMode === 'anios' ? caueData.optimalPoint?.anio : caueData.optimalPoint?.km} 
+                  stroke="#6366f1" 
                   strokeWidth={2.5} 
-                  strokeDasharray="3 3"
+                  strokeDasharray="6 4"
+                  onClick={() => setSelectedCurvaInfo('puntoOptimo')}
+                  className="cursor-pointer"
                   label={{ 
-                    value: `Posición Actual (${caueData.isPastOptimal ? 'VENCIDO - ' : ''}${caueData.vehiculoNombre.split(' ')[0]})`, 
-                    fill: caueData.isPastOptimal ? "#ef4444" : "#3b82f6", 
+                    value: `Punto Óptimo (${caueData.optimalPoint?.anio})`, 
+                    fill: '#6366f1', 
                     fontSize: 11, 
                     fontWeight: 'bold', 
-                    position: 'insideTopLeft' 
+                    position: 'top' 
                   }} 
                 />
-              )}
-            </ComposedChart>
-          </ResponsiveContainer>
+
+                {/* Marcador de la Posición Actual de la Unidad Seleccionada */}
+                {caueData.currentPoint && (
+                  <ReferenceLine 
+                    x={caueXAxisMode === 'anios' ? caueData.currentPoint?.anio : caueData.currentPoint?.km} 
+                    stroke={caueData.isPastOptimal ? "#ef4444" : "#3b82f6"} 
+                    strokeWidth={2.5} 
+                    strokeDasharray="3 3"
+                    onClick={() => setSelectedCurvaInfo('posicionActual')}
+                    className="cursor-pointer"
+                    label={{ 
+                      value: `Posición Actual (${caueData.isPastOptimal ? 'VENCIDO - ' : ''}${caueData.vehiculoNombre.split(' ')[0]})`, 
+                      fill: caueData.isPastOptimal ? "#ef4444" : "#3b82f6", 
+                      fontSize: 11, 
+                      fontWeight: 'bold', 
+                      position: 'insideTopLeft' 
+                    }} 
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Cuadro Lateral Explicativo Específico de la Curva Seleccionada (No pasa la gráfica a 2do plano) */}
+          {selectedCurvaInfo && (
+            <div className="w-full lg:w-[40%] bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 md:p-5 flex flex-col justify-between shadow-sm animate-in fade-in slide-in-from-right-4 duration-300 overflow-y-auto max-h-[440px]">
+              
+              {/* Cabecera del Cuadro Explicativo */}
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "w-3 h-3 rounded-full",
+                      selectedCurvaInfo === 'caue' ? "bg-emerald-500" :
+                      selectedCurvaInfo === 'costoCapital' ? "bg-sky-500" :
+                      selectedCurvaInfo === 'opexMtto' ? "bg-amber-500" :
+                      selectedCurvaInfo === 'puntoOptimo' ? "bg-indigo-500" : "bg-rose-500"
+                    )}></span>
+                    <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      {selectedCurvaInfo === 'caue' && "Curva CAUE Total (En 'U')"}
+                      {selectedCurvaInfo === 'costoCapital' && "Costo de Capital / Depreciación"}
+                      {selectedCurvaInfo === 'opexMtto' && "OPEX, Mantenimiento & Downtime"}
+                      {selectedCurvaInfo === 'puntoOptimo' && "Punto Óptimo de Reemplazo (n*)"}
+                      {selectedCurvaInfo === 'posicionActual' && "Diagnóstico de Posición del Activo"}
+                    </h4>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedCurvaInfo(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer text-xs font-bold"
+                    title="Cerrar cuadro explicativo y expandir gráfica al 100%"
+                  >
+                    ✕ Cerrar
+                  </button>
+                </div>
+
+                {/* Contenido Específico según la Curva */}
+                {selectedCurvaInfo === 'caue' && (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <p className="font-bold text-emerald-600 dark:text-emerald-400 mb-1">💡 Concepto:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Es el <strong>Costo Anual Uniforme Equivalente</strong>. Representa el costo anual promedio y constante de tener y operar el activo durante toda su vida.
+                        Al sumar la depreciación (que baja) con los gastos de taller (que suben), forma una <strong>curva en "U"</strong>.
+                      </p>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <p className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mb-1">📐 Cómo se calcula:</p>
+                      <p className="font-mono text-[10px] text-slate-700 dark:text-slate-300">
+                        CAUE(n) = Costo Capital Anualizado + OPEX y Mantenimiento Anualizado
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Aplica el factor de recuperación de capital financiero con tasa WACC del 8% anual sobre el ciclo acumulado.
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white mb-1">🚛 Ejemplo Simple:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Un camión nuevo de $92M pierde $26M de valor el primer año. Si lo vendes al Año 1 te costó $48M.
+                        Si lo mantienes 4 años, el costo anual promedio baja al mínimo de <strong>{formatCurrency(caueData.optimalPoint?.caue || 0)}/año</strong>. Pero si lo estiras al Año 8, las fallas y panas de motor elevan el costo a más de $50M/año.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-semibold text-[11px]">
+                      🎯 El valor nunca es negativo porque mide <strong>costos (egresos)</strong>. La meta económica es encontrar el punto más bajo del valle (mínimo costo por año).
+                    </div>
+                  </div>
+                )}
+
+                {selectedCurvaInfo === 'costoCapital' && (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <p className="font-bold text-sky-600 dark:text-sky-400 mb-1">💡 Concepto:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Mide la pérdida de valor comercial (depreciación) y el costo del capital financiero inmovilizado en la máquina por cada año de uso.
+                      </p>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <p className="font-mono text-[11px] font-bold text-sky-600 dark:text-sky-400 mb-1">📐 Cómo se calcula:</p>
+                      <p className="font-mono text-[10px] text-slate-700 dark:text-slate-300">
+                        Costo Capital = [ Inversión Inicial (I₀) - Valor Rescate S(n) ] / Factor Anualidad
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Base I₀ = {formatCurrency(caueData.i0)} con depreciación acelerada en los primeros 36 meses.
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white mb-1">📉 ¿Por qué desciende la curva?</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Porque el fuerte impacto de devaluación del vehículo nuevo se va "diluyendo" o amortizando año tras año entre más kilómetros y años de servicio útil.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 font-semibold text-[11px]">
+                      📊 Valor en Año 1: {formatCurrency(caueData.table[0]?.costoCapital || 0)} → Baja en Año 4 a {formatCurrency(caueData.optimalPoint?.costoCapital || 0)}.
+                    </div>
+                  </div>
+                )}
+
+                {selectedCurvaInfo === 'opexMtto' && (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <p className="font-bold text-amber-600 dark:text-amber-400 mb-1">💡 Concepto:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Suma todos los desembolsos de operación directa (combustible, neumáticos, sueldos) más las <strong>OTs preventivas, fallas correctivas y el lucro cesante</strong> cuando la máquina está parada en taller (Downtime).
+                      </p>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <p className="font-mono text-[11px] font-bold text-amber-600 dark:text-amber-400 mb-1">📐 Cómo se calcula:</p>
+                      <p className="font-mono text-[10px] text-slate-700 dark:text-slate-300">
+                        OPEX(t) = OPEX Base × [ 1 + (Año)^1.35 × 0.12 × Multiplicador Fatiga ]
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Calibrado con la tasa de fallas correctivas reales ({caueData.vehiculoNombre}).
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white mb-1">📈 ¿Por qué asciende la curva?</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Porque los fierros se desgastan: al inicio solo requiere mantención menor, pero a partir del 4to año comienzan los ajustes de motor, inyectores, suspensión pesada y tiempos muertos en taller.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-semibold text-[11px]">
+                      ⚠️ Sube de {formatCurrency(caueData.table[0]?.opexMtto || 0)} en Año 1 hasta superar {formatCurrency(caueData.table[7]?.opexMtto || 0)} en Año 8.
+                    </div>
+                  </div>
+                )}
+
+                {selectedCurvaInfo === 'puntoOptimo' && (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <p className="font-bold text-indigo-600 dark:text-indigo-400 mb-1">💡 Concepto:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Es el punto más bajo del valle de la curva CAUE. Corresponde al <strong>momento matemático exacto</strong> donde el costo por kilómetro y por año de la unidad es el mínimo posible de toda su existencia.
+                      </p>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <p className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400 mb-1">📐 Regla de Decisión:</p>
+                      <p className="text-slate-700 dark:text-slate-300">
+                        Si Costo Marginal del año siguiente &gt; CAUE(n*), <strong>conviene renovar</strong>. Mantener la unidad en faena destruirá valor financiero.
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white mb-1">🎯 Hito de Renovación:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Para tu perfil de flota actual, el punto óptimo se ubica en el <strong>{caueData.optimalPoint?.anio} ({caueData.optimalPoint?.km})</strong> con un costo anualizado de <strong>{formatCurrency(caueData.optimalPoint?.caue || 0)}</strong>.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 font-semibold text-[11px]">
+                      💰 Ahorro estimado por renovar en ventana óptima: <strong>{formatCurrency(caueData.ahorroDestruccionValor)}</strong>.
+                    </div>
+                  </div>
+                )}
+
+                {selectedCurvaInfo === 'posicionActual' && (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <p className="font-bold text-rose-600 dark:text-rose-400 mb-1">💡 Posición en la Curva:</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Compara la edad y kilometraje real de <strong>{caueData.vehiculoNombre}</strong> contra la ventana óptima de reemplazo.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Antigüedad Actual:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{caueData.currentPoint?.anio} ({caueData.kmActual.toLocaleString('es-CL')} km)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Punto Óptimo:</span>
+                        <span className="font-bold text-emerald-600">{caueData.optimalPoint?.anio} ({caueData.optimalPoint?.km})</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Diagnóstico:</span>
+                        <span className={cn("font-black", caueData.isPastOptimal ? "text-red-600" : "text-emerald-600")}>
+                          {caueData.isPastOptimal ? "VENTANA VENCIDA (Destruyendo Valor)" : "ZONA ÓPTIMA DE RETENCIÓN"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={cn(
+                      "p-2.5 rounded-xl text-[11px] font-semibold border",
+                      caueData.isPastOptimal 
+                        ? "bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800" 
+                        : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                    )}>
+                      {caueData.isPastOptimal 
+                        ? "⚠️ La unidad está en la pendiente ascendente de la curva. Cada mes adicional en operación gasta más en correctivos de lo que cuesta la cuota de leasing de un camión nuevo."
+                        : "✅ La unidad se encuentra en su fase más rentable de amortización. Mantener pautas preventivas estrictas."}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Botón de Cierre al pie del cuadro */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between mt-2">
+                <span className="text-[11px] text-slate-500">
+                  {selectedCurvaInfo ? "Gráfica visible al 100%" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCurvaInfo(null)}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Cerrar Explicación
+                </button>
+              </div>
+
+            </div>
+          )}
+
         </div>
 
         {/* Resumen Ejecutivo al Pie de la Curva CAUE */}
@@ -1855,7 +2165,7 @@ export default function PanelTco() {
             <span>El valle más bajo de la curva en U ({caueData.optimalPoint?.anio} / {caueData.optimalPoint?.km}) determina la ventana de renovación con costo mínimo.</span>
           </div>
           <button 
-            onClick={() => setShowCaueSideDrawer(true)}
+            onClick={() => setSelectedCurvaInfo(selectedCurvaInfo === 'caue' ? null : 'caue')}
             className="font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-500 transition cursor-pointer flex items-center gap-1.5"
           >
             <span>Ahorro proyectado por reemplazo oportuno: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm">{formatCurrency(caueData.ahorroDestruccionValor)}</strong></span>
